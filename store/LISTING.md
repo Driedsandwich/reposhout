@@ -94,8 +94,15 @@ GitHub, Inc.
 **Primary category**
 
 ```
-Social & Communication
+仕事効率化 ＞ デベロッパー ツール
+（英語UIなら Productivity ＞ Developer Tools）
 ```
+
+同種の [RepoCast](https://chromewebstore.google.com/detail/lpkhpmjlkjgdlnajljaipakcnhgdodfe) も Developer Tools に入っていることを実測で確認（2026-08-01）。投稿先はXだが、使うのはGitHubで作業している開発者なので、「ソーシャル ネットワーク」（消費者向けSNSツールの棚）ではなくここが正しい。
+
+> 2026-08-01時点の実際の選択肢は次のとおり。古い資料にある「Social & Communication」は**存在しない**。
+> **仕事効率化**: コミュニケーション / ツール / デベロッパー ツール / ワークフローと計画 / 教育
+> **ライフスタイル**: アート＆デザイン / エンタテイメント / ゲーム / ショッピング / ソーシャル ネットワーク / ニュース＆天気
 
 **Language**
 
