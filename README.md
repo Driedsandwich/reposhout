@@ -40,6 +40,10 @@ Tracking parameters that GitHub appends (such as `?tab=readme-ov-file`) are remo
 
 ## Install
 
+### From the Chrome Web Store
+
+**Submitted for review on 2026-08-01. Not published yet.** A link will replace this paragraph once the review completes. Until then, use the unpacked install below — it is the same code as the submitted package.
+
 ### From source (unpacked)
 
 1. Download or clone this repository
