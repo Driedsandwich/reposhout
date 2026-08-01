@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# エディタ
+.vscode/
+.idea/
+*.swp
+
+# 配布物
+*.zip
+*.crx
+*.pem

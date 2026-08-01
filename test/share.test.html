@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>share.js テスト</title>
+<style>
+ body{font-family:-apple-system,"Hiragino Sans",sans-serif;padding:20px;line-height:1.6;}
+ table{border-collapse:collapse;width:100%;font-size:13px;}
+ th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;vertical-align:top;}
+ th{background:#f0f3f5;}
+ .pass{color:#2c6e49;font-weight:700;}
+ .fail{color:#b3541e;font-weight:700;}
+ tr.fail-row{background:#fdf1e8;}
+ code{background:#eef0f2;padding:1px 4px;border-radius:3px;font-size:12px;word-break:break-all;}
+ #summary{font-size:18px;font-weight:700;margin:16px 0;}
+</style>
+</head>
+<body>
+<h1>share.js テスト</h1>
+<p>実ファイル <code>../src/share.js</code> をそのまま読み込んで検証します。</p>
+<div id="summary">実行中...</div>
+<table id="results">
+  <thead><tr><th>#</th><th>ケース</th><th>期待</th><th>実際</th><th>判定</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<script src="../src/share.js"></script>
+<script>
+(function () {
+  'use strict';
+  var cases = [];
+  function t(name, url, title, expect) { cases.push({name:name, url:url, title:title, expect:expect}); }
+
+  // --- 基本の4種別 ---
+  t('リポジトリトップ（日本語説明・ダッシュ含む）',
+    'https://github.com/octocat/Hello-World',
+    'GitHub - octocat/Hello-World: Intent Compiler — 曖昧な一文を、実行可能な指示書へ。 · GitHub',
+    { kind:'repo',
+      text:'octocat/Hello-World: Intent Compiler — 曖昧な一文を、実行可能な指示書へ。',
+      url:'https://github.com/octocat/Hello-World' });
+
+  t('Issue',
+    'https://github.com/anthropics/claude-code/issues/82809',
+    '[BUG] /ide says "No available IDEs detected" · Issue #82809 · anthropics/claude-code',
+    { kind:'issue',
+      text:'[BUG] /ide says "No available IDEs detected" (Issue #82809 · anthropics/claude-code)',
+      url:'https://github.com/anthropics/claude-code/issues/82809' });
+
+  t('PR（著者名を除去）',
+    'https://github.com/anthropics/claude-code/pull/69226',
+    'Update frontend-design skill by williamqian12 · Pull Request #69226 · anthropics/claude-code',
+    { kind:'pr',
+      text:'Update frontend-design skill (PR #69226 · anthropics/claude-code)',
+      url:'https://github.com/anthropics/claude-code/pull/69226' });
+
+  t('Discussion',
+    'https://github.com/foo/bar/discussions/42',
+    'How do I use this? · Discussion #42 · foo/bar',
+    { kind:'discussion',
+      text:'How do I use this? (Discussion #42 · foo/bar)',
+      url:'https://github.com/foo/bar/discussions/42' });
+
+  // --- URLの正規化 ---
+  t('リポジトリのクエリを除去（GitHubが付ける ?tab=）',
+    'https://github.com/foo/bar?tab=readme-ov-file',
+    'GitHub - foo/bar: desc · GitHub',
+    { kind:'repo', url:'https://github.com/foo/bar' });
+
+  t('リポジトリの末尾スラッシュを除去',
+    'https://github.com/foo/bar/',
+    'GitHub - foo/bar: desc · GitHub',
+    { kind:'repo', url:'https://github.com/foo/bar' });
+
+  t('ファイルの行指定ハッシュは残す',
+    'https://github.com/foo/bar/blob/main/src/x.js#L10-L20',
+    'bar/x.js at main · foo/bar · GitHub',
+    { kind:'repo-sub', url:'https://github.com/foo/bar/blob/main/src/x.js#L10-L20' });
+
+  t('Issueのコメントアンカーは残す',
+    'https://github.com/foo/bar/issues/7#issuecomment-999',
+    'Title · Issue #7 · foo/bar',
+    { kind:'issue', url:'https://github.com/foo/bar/issues/7#issuecomment-999' });
+
+  t('クエリは落としハッシュは残す',
+    'https://github.com/foo/bar/blob/main/a.js?plain=1#L3',
+    'bar/a.js at main · foo/bar · GitHub',
+    { kind:'repo-sub', url:'https://github.com/foo/bar/blob/main/a.js#L3' });
+
+  // --- 対象外 ---
+  t('github.com 以外はnull', 'https://example.com/foo', 'Example', { isNull:true });
+  t('httpは拒否（httpsのみ）', 'http://github.com/foo/bar', 'x', { isNull:true });
+  t('gist.github.com は対象外', 'https://gist.github.com/foo/abc', 'x', { isNull:true });
+  t('壊れたURLはnull', 'not a url', 'x', { isNull:true });
+
+  // --- 端のケース ---
+  t('github.comのトップは other', 'https://github.com/', 'GitHub', { kind:'other' });
+  t('ユーザーページは other', 'https://github.com/octocat', 'octocat · GitHub', { kind:'other' });
+  t('releases は release', 'https://github.com/foo/bar/releases/tag/v1.0',
+    'Release v1.0 · foo/bar · GitHub', { kind:'release' });
+
+  t('タイトル自体に " · Issue #" を含んでも切れない',
+    'https://github.com/foo/bar/issues/5',
+    'Fix the " · Issue #" parser bug · Issue #5 · foo/bar',
+    { kind:'issue', text:'Fix the " · Issue #" parser bug (Issue #5 · foo/bar)' });
+
+  t('タイトルが空ならrepo名で代替',
+    'https://github.com/foo/bar', '',
+    { kind:'repo', text:'foo/bar' });
+
+  t('長文は切り詰めて…を付ける',
+    'https://github.com/foo/bar',
+    'GitHub - foo/bar: ' + 'a'.repeat(400) + ' · GitHub',
+    { kind:'repo', weightMax:250, endsWith:'…' });
+
+  t('PR番号が数字でなければ repo-sub 扱い',
+    'https://github.com/foo/bar/pull/abc', 'x · GitHub', { kind:'repo-sub' });
+
+  // --- 以下、敵対的レビュー（2026-07-31）で確定した3件の修正に対する回帰テスト ---
+
+  // [major] サロゲートペア分断 → encodeURIComponent が URIError を投げて全経路が無反応になっていた
+  for (var pos = 190; pos <= 260; pos++) {
+    (function (p) {
+      t('絵文字が切断位置(' + p + ')に来ても例外を出さない',
+        'https://github.com/foo/bar',
+        'GitHub - foo/bar: ' + 'a'.repeat(p) + '🚀'.repeat(40) + ' · GitHub',
+        { noThrow:true, weightMax:250, validEncoding:true });
+    })(pos);
+  }
+
+  t('絵文字だけの長文でも壊れない',
+    'https://github.com/foo/bar',
+    'GitHub - foo/bar: ' + '😀'.repeat(300) + ' · GitHub',
+    { noThrow:true, weightMax:250, validEncoding:true });
+
+  // [minor] Xは日本語を1文字=2で数える。文字数200上限では日本語120字程度で投稿不能だった
+  t('日本語400字でもXの280以内に収まる',
+    'https://github.com/foo/bar',
+    'GitHub - foo/bar: ' + 'あ'.repeat(400) + ' · GitHub',
+    { kind:'repo', weightMax:250, xTotalMax:280, endsWith:'…' });
+
+  t('日本語129字（旧実装が破綻していた長さ）でも収まる',
+    'https://github.com/foo/bar',
+    'GitHub - foo/bar: ' + 'あ'.repeat(129) + ' · GitHub',
+    { kind:'repo', xTotalMax:280 });
+
+  t('日本語と漢字の混在でも収まる',
+    'https://github.com/anthropics/claude-code/issues/1',
+    '曖昧な一文を実行可能な意図の指示書へ変換する仕組みについて'.repeat(12) + ' · Issue #1 · anthropics/claude-code',
+    { kind:'issue', xTotalMax:280 });
+
+  t('重み計算: 英数字は1、日本語は2',
+    'https://github.com/foo/bar', 'GitHub - foo/bar: x · GitHub',
+    { weightFn:[['abc',3],['あいう',6],['a あ',4],['🚀',2],['ａ',2]] });
+
+  // [minor] /orgs/... 等のGitHub機能ページをリポジトリと誤判定していた
+  t('組織Discussionをリポジトリと誤判定しない',
+    'https://github.com/orgs/community/discussions/12345',
+    'Feedback wanted · Discussion #12345 · community',
+    { kind:'other', notContains:'orgs/community' });
+
+  t('/topics/... はリポジトリではない',
+    'https://github.com/topics/machine-learning', 'machine-learning · GitHub Topics',
+    { kind:'other' });
+
+  t('/issues/assigned はリポジトリではない',
+    'https://github.com/issues/assigned', 'Assigned to me',
+    { kind:'other' });
+
+  t('/settings/profile はリポジトリではない',
+    'https://github.com/settings/profile', 'Your Profile', { kind:'other' });
+
+  t('/marketplace/actions/checkout はリポジトリではない',
+    'https://github.com/marketplace/actions/checkout', 'Checkout · Actions · GitHub Marketplace',
+    { kind:'other' });
+
+  t('予約語と同名でも大文字小文字を問わず弾く',
+    'https://github.com/ORGS/community/discussions/1', 'x', { kind:'other' });
+
+  t('普通のユーザー名は誤って弾かない',
+    'https://github.com/octocat/Hello-World',
+    'GitHub - octocat/Hello-World: desc · GitHub',
+    { kind:'repo', repo:'octocat/Hello-World' });
+
+  // --- intentURL の形 ---
+  t('intentURLがX形式でパラメータを正しく持つ',
+    'https://github.com/foo/bar', 'GitHub - foo/bar: hi · GitHub',
+    { intentCheck:true });
+
+  // 実行
+  var tbody = document.querySelector('#results tbody');
+  var pass = 0, fail = 0;
+
+  cases.forEach(function (c, i) {
+    var errors = [];
+    var e = c.expect;
+    var got = null, thrown = null;
+
+    try {
+      got = window.GXS.buildShare(c.url, c.title);
+    } catch (err) {
+      thrown = err.name + ': ' + err.message;
+    }
+
+    if (thrown) errors.push('例外が投げられた → ' + thrown);
+
+    if (!thrown && e.isNull) {
+      if (got !== null) errors.push('nullであるべきだが値が返った');
+    } else if (!thrown) {
+      if (!got) {
+        errors.push('nullが返った');
+      } else {
+        if (e.kind && got.kind !== e.kind) errors.push('kind: ' + got.kind + ' ≠ ' + e.kind);
+        if (e.repo && got.repo !== e.repo) errors.push('repo: ' + got.repo + ' ≠ ' + e.repo);
+        if (e.text && got.text !== e.text) errors.push('text不一致');
+        if (e.url && got.url !== e.url) errors.push('url: ' + got.url + ' ≠ ' + e.url);
+        if (e.endsWith && got.text.slice(-1) !== e.endsWith) errors.push('末尾が' + e.endsWith + 'でない');
+        if (e.notContains && got.text.indexOf(e.notContains) !== -1) errors.push('本文に "' + e.notContains + '" が混入');
+
+        // Xの重み付き文字数（日本語=2）で上限を守れているか
+        if (e.weightMax) {
+          var w = window.GXS.weightedLength(got.text);
+          if (w > e.weightMax) errors.push('本文の重み ' + w + ' > ' + e.weightMax);
+        }
+        // 本文 + 空白1 + URL(t.co=23) が280以内か
+        if (e.xTotalMax) {
+          var total = window.GXS.weightedLength(got.text) + 1 + 23;
+          if (total > e.xTotalMax) errors.push('X換算の合計 ' + total + ' > ' + e.xTotalMax);
+        }
+        // 孤立サロゲートが残っていないか（残っていると encodeURIComponent が落ちる）
+        if (e.validEncoding) {
+          try {
+            encodeURIComponent(got.text);
+            if (/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(got.text)) {
+              errors.push('孤立サロゲートが残っている');
+            }
+          } catch (err2) {
+            errors.push('encodeURIComponentが失敗: ' + err2.message);
+          }
+        }
+        if (e.intentCheck) {
+          var u = new URL(got.intentUrl);
+          if (u.origin + u.pathname !== 'https://x.com/intent/post') errors.push('intentのエンドポイントが違う: ' + u.origin + u.pathname);
+          if (u.searchParams.get('text') !== got.text) errors.push('textパラメータが本文と一致しない');
+          if (u.searchParams.get('url') !== got.url) errors.push('urlパラメータがURLと一致しない');
+        }
+      }
+    }
+
+    // 重み計算そのものの検証
+    if (e.weightFn) {
+      e.weightFn.forEach(function (pair) {
+        var actual = window.GXS.weightedLength(pair[0]);
+        if (actual !== pair[1]) errors.push('重み("' + pair[0] + '"): ' + actual + ' ≠ ' + pair[1]);
+      });
+    }
+
+    var ok = errors.length === 0;
+    ok ? pass++ : fail++;
+    var tr = document.createElement('tr');
+    if (!ok) tr.className = 'fail-row';
+    tr.innerHTML =
+      '<td>' + (i + 1) + '</td>' +
+      '<td>' + c.name + '</td>' +
+      '<td><code>' + (e.isNull ? 'null' : (e.kind || '') + (e.text ? ' / ' + esc(e.text.slice(0, 60)) : '')) + '</code></td>' +
+      '<td><code>' + (got ? esc(got.kind + ' / ' + got.text.slice(0, 60)) : 'null') + '</code></td>' +
+      '<td class="' + (ok ? 'pass' : 'fail') + '">' + (ok ? 'PASS' : 'FAIL: ' + esc(errors.join('; '))) + '</td>';
+    tbody.appendChild(tr);
+  });
+
+  function esc(s) { return String(s).replace(/[&<>]/g, function (m) { return {'&':'&amp;','<':'&lt;','>':'&gt;'}[m]; }); }
+
+  document.getElementById('summary').textContent =
+    'PASS ' + pass + ' / FAIL ' + fail + '（全 ' + cases.length + ' ケース）';
+  document.getElementById('summary').className = fail === 0 ? 'pass' : 'fail';
+  window.__TEST_RESULT__ = { pass: pass, fail: fail, total: cases.length };
+})();
+</script>
+</body>
+</html>
