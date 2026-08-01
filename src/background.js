@@ -16,6 +16,17 @@ importScripts('/src/share.js');
 var POPUP_WIDTH = 560;
 var POPUP_HEIGHT = 640;
 
+/*
+ * ツールバー / ショートカット経由で開いた共有用ウィンドウのIDを覚えておく。
+ * x.com 側の esc-close.js が「このウィンドウは閉じてよいか」を照合するために使う。
+ *
+ * service worker が停止すると失われるが、それで壊れるのは
+ * 「Esc が効かない」だけで、誤って他のウィンドウを閉じる方向には倒れない。
+ * content script から window.open で開いた経路は window.name で判定できるため、
+ * この記録に依存しない。
+ */
+var shareWindowIds = new Set();
+
 async function shareActiveTab() {
   var tabs;
   try {
@@ -44,12 +55,14 @@ async function shareActiveTab() {
   }
 
   try {
-    await chrome.windows.create({
+    var win = await chrome.windows.create({
       url: share.intentUrl,
       type: 'popup',
       width: POPUP_WIDTH,
       height: POPUP_HEIGHT
     });
+    // Esc で閉じてよいウィンドウとして記録する（esc-close.js からの照合用）
+    if (win && typeof win.id === 'number') shareWindowIds.add(win.id);
   } catch (e) {
     // ポップアップが作れない環境では通常のタブで開く
     try {
@@ -67,4 +80,35 @@ chrome.action.onClicked.addListener(function () {
 
 chrome.commands.onCommand.addListener(function (command) {
   if (command === 'share-to-x') shareActiveTab();
+});
+
+/*
+ * x.com 上の esc-close.js からの照会に答える。
+ * 「そのウィンドウを自分が共有用に開いたか」だけを返し、
+ * 覚えのないウィンドウには常に false を返す（利用者の通常のXタブを守る）。
+ */
+chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
+  if (!msg || !sender || !sender.tab) return false;
+  var windowId = sender.tab.windowId;
+
+  if (msg.type === 'gxs:is-share-window') {
+    sendResponse({ isShareWindow: shareWindowIds.has(windowId) });
+    return false;
+  }
+
+  if (msg.type === 'gxs:close-share-window') {
+    // window.close() が拒否された場合のフォールバック。
+    // ここでも記録に無いウィンドウは閉じない。
+    if (shareWindowIds.has(windowId)) {
+      chrome.windows.remove(windowId).catch(function () {});
+    }
+    return false;
+  }
+
+  return false;
+});
+
+// 閉じられたウィンドウのIDを捨てる（IDは再利用されうるため放置しない）
+chrome.windows.onRemoved.addListener(function (windowId) {
+  shareWindowIds.delete(windowId);
 });

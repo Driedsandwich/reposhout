@@ -48,12 +48,17 @@ Edit it however you like, then press Post yourself. RepoShout never posts for yo
 • Correct character counting for Japanese, Chinese and Korean text, which X counts
   as two characters each
 • Light and dark mode follow GitHub's own theme automatically
+• Press Escape in the share window to dismiss it if you change your mind
 
 ── Privacy ──
 
-RepoShout requests one permission: activeTab. It reads the current tab's URL and
-title only at the moment you invoke it, purely to build the post text. It makes
-no network requests of its own, stores nothing, and sends nothing anywhere.
+RepoShout requests one API permission: activeTab. It reads the current tab's URL
+and title only at the moment you invoke it, purely to build the post text. It
+makes no network requests of its own, stores nothing, and sends nothing anywhere.
+
+It runs a script on x.com for one reason only: to listen for the Escape key so
+you can dismiss the share window. That script reads nothing from X, and it will
+only close a window this extension itself opened -- never a tab you opened.
 
 Full policy: https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md
 
@@ -98,10 +103,30 @@ stored, logged, or transmitted anywhere by the extension.
 
 ```
 The in-page Share button is injected into GitHub's repository header so that
-sharing takes one click from where the user already is. The content script is
-limited to github.com, reads the page only to locate the button row, and adds a
-single <li> element. It never modifies or removes any existing GitHub element,
-and does nothing at all if the expected container is not found.
+sharing takes one click from where the user already is. The content script
+reads the page only to locate the button row, and adds a single <li> element.
+It never modifies or removes any existing GitHub element, and does nothing at
+all if the expected container is not found.
+```
+
+### content_scripts on https://x.com/*
+
+```
+This script has exactly one job: listen for the Escape key so the user can
+dismiss the share window the extension just opened, if they change their mind.
+
+It reads no page content from X. It stores nothing and transmits nothing.
+
+Before closing anything it verifies that the window is one this extension
+opened, by one of two means: the window name assigned at window.open time, or a
+windowId recorded by the service worker when it called chrome.windows.create.
+If neither matches -- which is the case for every X tab the user opened
+themselves -- the script does nothing. It cannot close the user's own X tabs.
+
+Narrowing the match pattern to https://x.com/intent/* was considered and
+rejected: Chrome rounds permission warnings to the host, so the narrower
+pattern shows the user the same warning while breaking the feature whenever X
+redirects the popup (for example to /i/flow/login when the user is signed out).
 ```
 
 ## Privacy practices（Privacyタブの回答）

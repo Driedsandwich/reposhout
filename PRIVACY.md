@@ -30,9 +30,16 @@ RepoShout stores nothing. It does not request the `storage` permission.
 
 ### Permissions
 
-RepoShout requests a single permission: **`activeTab`**.
+RepoShout requests a single API permission: **`activeTab`**. It is granted only at the moment you explicitly invoke the extension, and only for the tab you are on. It does not allow continuous monitoring of your browsing.
 
-This permission is granted only at the moment you explicitly invoke the extension, and only for the tab you are on. It does not allow continuous monitoring of your browsing. The content script runs only on `https://github.com/*`.
+RepoShout also runs content scripts on two sites:
+
+| Site | What the script does |
+|---|---|
+| `https://github.com/*` | Adds the Share button to repository pages. Reads the page only to locate the button row; adds a single `<li>` and modifies nothing else. |
+| `https://x.com/*` | **Listens for the Escape key, and nothing else.** It closes the share window this extension opened. It does not read, store, or transmit anything from X. |
+
+The X script is deliberately blind to page content. Before closing anything it confirms the window's identity in one of two ways: the window name this extension assigned when opening it, or a windowId the extension recorded. **If neither matches — which is the case for every X tab you opened yourself — it does nothing.** It cannot close your normal X tabs.
 
 ### Changes to this policy
 
@@ -69,9 +76,16 @@ RepoShout はデータを保存しません（`storage` 権限を要求してい
 
 ### 権限
 
-要求する権限は **`activeTab`** の1つだけです。
+要求するAPI権限は **`activeTab`** の1つだけです。利用者が拡張を明示的に操作した瞬間に、そのタブに対してのみ付与されます。閲覧の常時監視はできません。
 
-この権限は、利用者が拡張を明示的に操作した瞬間に、そのタブに対してのみ付与されます。閲覧の常時監視はできません。コンテンツスクリプトは `https://github.com/*` にのみ読み込まれます。
+あわせて、次の2つのサイトでコンテンツスクリプトが動きます。
+
+| サイト | スクリプトがすること |
+|---|---|
+| `https://github.com/*` | リポジトリページに Share ボタンを追加します。ページを読むのはボタン行の位置を探すためだけで、`<li>` を1つ足す以外は何も変更しません。 |
+| `https://x.com/*` | **Escキーの検知だけを行います。** 拡張が開いた共有用ウィンドウを閉じるためです。Xから何かを読み取ることも、保存することも、送信することもありません。 |
+
+X側のスクリプトは、意図的にページの中身を見ません。閉じる前に、次のどちらかでウィンドウの同一性を確認します——拡張が開くときに付けた名前か、拡張が記録したウィンドウID。**どちらとも一致しない場合（＝あなたが自分で開いたXのタブはすべてこれに当たります）、何もしません。** 通常のXのタブを閉じることはできません。
 
 ### 本ポリシーの変更
 

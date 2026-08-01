@@ -15,6 +15,8 @@ Share GitHub repos, issues and PRs to X with a pre-filled post.
 | Repository pages | The **Share** button, placed to the left of Pin / Watch / Fork / Star |
 | Issues, PRs, anywhere else on GitHub | Toolbar icon, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> (<kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> on macOS) |
 
+Changed your mind? Press <kbd>Esc</kbd> in the share window to dismiss it.
+
 The post text adapts to the page:
 
 | Page | Generated text |
@@ -73,11 +75,18 @@ Browser extensions that inject UI into GitHub have a habit of dying when GitHub 
 
 ## Permissions
 
-RepoShout requests one permission: **`activeTab`**.
+RepoShout requests one API permission: **`activeTab`**. Per Chrome's design this is granted only at the moment you explicitly invoke the extension (toolbar click or keyboard shortcut) and only for the current tab. It does not allow background monitoring of browsing.
 
-Per Chrome's `activeTab` design, this is granted only at the moment you explicitly invoke the extension (toolbar click or keyboard shortcut) and only for the current tab. It does not allow background monitoring of browsing.
+Content scripts run on two sites:
 
-The content script is limited to `https://github.com/*`. The extension makes no network requests of its own and stores nothing. See [PRIVACY.md](PRIVACY.md).
+| Site | Purpose |
+|---|---|
+| `github.com` | Add the Share button. Reads the page only to find the button row; adds one `<li>`, changes nothing else. |
+| `x.com` | **Listen for the Escape key, nothing else** — so you can dismiss a share window you didn't want. |
+
+The X script never reads page content. Before closing a window it verifies identity two ways: the window name assigned at open time, or a windowId the service worker recorded. If neither matches — true for every X tab you opened yourself — it does nothing. **It cannot close your own X tabs.**
+
+The extension makes no network requests of its own and stores nothing. See [PRIVACY.md](PRIVACY.md).
 
 ## Layout
 
@@ -92,9 +101,17 @@ icons/                 Icons
 
 ## Tests
 
-Open `test/share.test.html` in a browser. **104 cases, all passing** as of 2026-08-01.
+**Text generation** — open `test/share.test.html` in a browser. **104 cases, all passing** as of 2026-08-01. Coverage includes 71 cases that sweep an emoji across every possible truncation boundary, weighted character counting for CJK text, and GitHub's reserved namespaces.
 
-Coverage includes 71 cases that sweep an emoji across every possible truncation boundary, weighted character counting for CJK text, and GitHub's reserved namespaces.
+**Escape-to-close safety** — `node test/esc-close.test.js` (needs Node 22+ and Chrome). Launches headless Chrome, injects the real `src/esc-close.js`, and asserts three properties:
+
+| Case | Expected |
+|---|---|
+| A window this extension opened, plain Esc | closes |
+| **A window it did not open, plain Esc** | **does not close** |
+| A window it opened, Shift+Esc | does not close |
+
+All three pass. Case B is the one that matters: it is why the script identifies windows rather than guessing from the URL.
 
 ## Verification status
 

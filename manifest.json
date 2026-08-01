@@ -29,6 +29,12 @@
       "matches": ["https://github.com/*"],
       "js": ["src/share.js", "src/content.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://x.com/*"],
+      "js": ["src/esc-close.js"],
+      "run_at": "document_start",
+      "all_frames": false
     }
   ],
   "commands": {
