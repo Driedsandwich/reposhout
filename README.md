@@ -6,6 +6,8 @@ Share GitHub repos, issues and PRs to X with a pre-filled post.
 
 日本語版: [README.ja.md](README.ja.md)
 
+![The Share button sitting to the left of Notifications, Fork and Star on a GitHub repository page](store/screenshot-1-repo.png)
+
 ---
 
 ## What it does

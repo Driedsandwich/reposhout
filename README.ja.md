@@ -6,6 +6,8 @@ GitHubのリポジトリ・Issue・PRを、文面が入ったXの投稿画面で
 
 English: [README.md](README.md)
 
+![GitHubのリポジトリページで、Notifications / Fork / Star の左に Share ボタンが並んでいる様子](store/screenshot-1-repo.png)
+
 ---
 
 ## できること
