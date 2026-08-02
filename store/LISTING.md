@@ -55,8 +55,9 @@ Changed your mind? Press Escape in the share window to dismiss it.
 ── What you get ──
 
 • A Share button on repository pages, placed to the left of Pin / Watch / Fork / Star
+• A Share button on issues and pull requests, placed to the left of New issue / Code
 • A toolbar icon and a keyboard shortcut (Alt+Shift+X, or Option+Shift+X on macOS)
-  that work on issues, pull requests, and anywhere else on GitHub
+  that work on every other GitHub page too
 • Post text tailored to the page:
     Repository   →  owner/repo: description
     Issue        →  Title (Issue #123 · owner/repo)

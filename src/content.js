@@ -1,10 +1,10 @@
 /*
- * content.js — GitHubのリポジトリページのボタン群の左端に共有ボタンを足す
+ * content.js — GitHubのボタン群の左端に共有ボタンを足す
  *
  * 設計方針（壊れにくさを最優先）:
- *  1. 依存する目印は2つだけ。見つからなければ「黙って何もしない」
+ *  1. 依存する目印は3つだけ。見つからなければ「黙って何もしない」
  *  2. GitHubの既存DOMは読むだけ。書き換え・削除は一切しない
- *  3. 追加するのは <li> 1個。失敗しても影響がそこで閉じる
+ *  3. 追加する要素は1個。失敗しても影響がそこで閉じる
  *  4. ボタンの個数・種類（Pin/Watch/Notifications等）は一切見ない。
  *     見ないことでログイン/ログアウトの差と将来の増減を吸収する
  */
@@ -16,17 +16,21 @@
   var STYLE_ID = 'gxs-share-style';
 
   /*
-   * 挿入先の候補。実測（2026-07-31）に基づく。
-   *  - ログイン時 : React新UI。data-testid はGitHubの自動テスト用の名前で、
-   *                 見た目のクラス名（prc-Button-ButtonBase-9n-Xk 等のハッシュ）と違い
-   *                 ビルドごとに変わらない
-   *  - ログアウト時: 旧UI。pagehead-actions はPrimer由来の長寿クラス
-   * ログイン時のIssue/PRページには、そもそもこのボタン行が存在しない。
-   * その場合はツールバーアイコン / ショートカットから使う（background.js）。
+   * 挿入先の候補。実測（2026-07-31、2026-08-02にIssue/PRを追加）に基づく。
+   *  - リポジトリ・ログイン時 : React新UI。data-testid はGitHubの自動テスト用の名前で、
+   *                             見た目のクラス名（prc-Button-ButtonBase-9n-Xk 等のハッシュ）と違い
+   *                             ビルドごとに変わらない
+   *  - リポジトリ・ログアウト時: 旧UI。pagehead-actions はPrimer由来の長寿クラス
+   *  - Issue / PR             : Primer PageHeader のアクション枠。data-component も
+   *                             ハッシュ化されない安定した名前
+   * 実測ではこの3つはページ種別ごとに排他で、同時に存在しない。
+   * PH_Actions が出るのは /issues、/issues/N、/pull/N のみで、
+   * リポジトリ直下・Actions・ファイル表示・通知・設定には存在しない（2026-08-02実測）。
    */
-  var CONTAINER_SELECTORS = [
-    'ul[data-testid="repo-header-actions"]',
-    'ul.pagehead-actions'
+  var CONTAINERS = [
+    { sel: 'ul[data-testid="repo-header-actions"]', drillIn: false },
+    { sel: 'ul.pagehead-actions', drillIn: false },
+    { sel: '[data-component="PH_Actions"]', drillIn: true }
   ];
 
   // X のロゴ（24x24）
@@ -35,10 +39,30 @@
     '<path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path>' +
     '</svg>';
 
+  /*
+   * Issue/PRの PH_Actions は横幅いっぱいの外枠で、実際のボタンは
+   * 内側の右寄せ行（justify-content:flex-end）に入っている。外枠へ足すと
+   * ボタン群ではなくタイトルの隣に浮いてしまうため、内側の行を使う。
+   * 構造が変わって条件に合わなければ外枠のまま扱う（何もしないよりは安全側）。
+   * この掘り下げは PH_Actions だけに適用する。ul 側で同じことをすると、
+   * ボタンが1個しかないリポジトリでその <li> の中に潜り込んでしまうため。
+   */
+  function drillIntoActionRow(el) {
+    try {
+      if (el.children.length !== 1) return el;
+      var inner = el.children[0];
+      if (!inner || inner.tagName !== 'DIV' || inner.children.length === 0) return el;
+      if (window.getComputedStyle(inner).display.indexOf('flex') === -1) return el;
+      return inner;
+    } catch (e) {
+      return el;
+    }
+  }
+
   function findContainer() {
-    for (var i = 0; i < CONTAINER_SELECTORS.length; i++) {
-      var el = document.querySelector(CONTAINER_SELECTORS[i]);
-      if (el) return el;
+    for (var i = 0; i < CONTAINERS.length; i++) {
+      var el = document.querySelector(CONTAINERS[i].sel);
+      if (el) return CONTAINERS[i].drillIn ? drillIntoActionRow(el) : el;
     }
     return null;
   }
@@ -167,8 +191,19 @@
 
     try {
       ensureStyle();
-      var li = document.createElement('li');
+      /*
+       * 器のタグはコンテナに合わせる。リポジトリ側は <ul> なので <li>、
+       * Issue/PR側は <div> の flex 行なので <div>。<ul> 以外に <li> を置くのは
+       * 不正なHTMLで、ブラウザによって扱いが変わりうるため合わせている。
+       */
+      var isList = container.tagName === 'UL' || container.tagName === 'OL';
+      var li = document.createElement(isList ? 'li' : 'div');
       li.id = LI_ID;
+      if (!isList) {
+        // flex行の中で、隣のボタンと縦位置を揃える
+        li.style.display = 'flex';
+        li.style.alignItems = 'center';
+      }
       li.appendChild(buildButton());
       matchSiblingLayout(li, container);
       container.prepend(li);                           // prepend＝ボタン群の左端

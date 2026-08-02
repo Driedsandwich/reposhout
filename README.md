@@ -17,8 +17,11 @@ Share GitHub repos, issues and PRs to X with a pre-filled post.
 
 | Where | How to trigger |
 |---|---|
-| Repository pages | The **Share** button, placed to the left of Pin / Watch / Fork / Star |
-| Issues, PRs, anywhere else on GitHub | Toolbar icon, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> (<kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> on macOS) |
+| Repository pages | The **Share** button, to the left of Pin / Watch / Fork / Star |
+| Issues and pull requests | The **Share** button, to the left of New issue / Code |
+| Anywhere else on GitHub | Toolbar icon, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> (<kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> on macOS) |
+
+The toolbar icon and the shortcut work on every GitHub page, including the ones that already show a button.
 
 Changed your mind? Press <kbd>Esc</kbd> in the share window to dismiss it.
 
@@ -70,7 +73,7 @@ This is not the first attempt at the idea, and it is worth being straight about 
 
 RepoShout is narrower than RepoCast on purpose (one destination, no side panel, no cards) and differs in three ways that came out of measurement rather than preference:
 
-- **It handles signed-in and signed-out GitHub, which are different implementations.** Signed-out pages use the legacy `ul.pagehead-actions`; signed-in repository pages use a React header keyed on `data-testid="repo-header-actions"`. Signed-in Issue and PR pages have no button row at all — which is precisely why the toolbar icon and keyboard shortcut exist rather than being an afterthought.
+- **It handles signed-in and signed-out GitHub, which are different implementations.** Signed-out pages use the legacy `ul.pagehead-actions`; signed-in repository pages use a React header keyed on `data-testid="repo-header-actions"`; signed-in issues and pull requests use a third one again, the Primer PageHeader action slot (`data-component="PH_Actions"`). All three anchors are attributes GitHub keeps stable for its own tooling, not hashed CSS-module class names.
 - **104 automated tests cover the text generation**, including 71 that sweep an emoji across every possible truncation boundary (a bug that otherwise makes every entry point silently do nothing) and weighted character counting for CJK text.
 - **Open / Merged / Closed state is deliberately absent from the post text.** The value read for the same pull request differed between signed-in and signed-out pages during testing, so it is omitted rather than risk publishing something false.
 
@@ -126,12 +129,14 @@ All three pass. Case B is the one that matters: it is why the script identifies 
 
 ## Verification status
 
-Measured 2026-07-31 – 2026-08-01, against live GitHub in both signed-in and signed-out states.
+Measured 2026-07-31 – 2026-08-02, against live GitHub in both signed-in and signed-out states.
 
 | Check | Result |
 |---|---|
 | Button placement, signed out | Leftmost, height matches neighbours exactly, tops aligned |
 | Button placement, signed in | Same |
+| Button placement, signed-in issues and PRs | Immediately left of New issue / Code; height 31.997px against a 31.997px neighbour, top offset 0.000px |
+| Anchor exclusivity | The three containers never co-occur. `PH_Actions` is present only on `/issues`, `/issues/N` and `/pull/N` — not on repository roots, Actions, file views, notifications or settings |
 | Dark mode | Background, text and border resolve to the same values as GitHub's own buttons |
 | Client-side navigation | Button survives; post text is recomputed at click time |
 | Navigation across repositories | Button reappears correctly on the new repository, with the new repository's text |
@@ -151,8 +156,8 @@ The code was reviewed along four axes (Manifest V3 validity, security, DOM resil
 
 ## Known limitations
 
-- **On signed-in Issue and PR pages there is no in-page button.** As of 2026-07-31, GitHub's newer signed-in UI for those pages has no Fork/Star button row to attach to. Use the toolbar icon or the shortcut. Signed-out pages still show the button.
 - **Narrow windows hide the button**, because GitHub hides its own Fork/Star row at those widths. This is deliberate — fighting GitHub's layout is how extensions break.
+- **Pages other than repositories, issues and pull requests have no in-page button** when signed in — Actions runs, file views, notifications and settings have no action row the button belongs in. The toolbar icon and shortcut cover them.
 - **Open / Merged / Closed state is not included in the post text.** The value read for the same pull request differed between signed-in and signed-out pages during testing, so it is omitted rather than risk publishing something false.
 - `github.com` only. GitHub Enterprise and Gist are out of scope.
 - Behaviour after any future GitHub redesign cannot be verified in advance.
