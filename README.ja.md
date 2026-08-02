@@ -1,5 +1,8 @@
 # RepoShout
 
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/joaipdjaiefbenoijcekdnjagiadikkd)](https://chromewebstore.google.com/detail/joaipdjaiefbenoijcekdnjagiadikkd)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 GitHubのリポジトリ・Issue・PRを、文面が入ったXの投稿画面でワンクリック共有するChrome拡張。
 
 **投稿ボタンはX側で押します。** この拡張が代わりに投稿することはありません。文面とリンクが入力済みのX投稿画面を開くだけです。
@@ -42,9 +45,11 @@ GitHubが付ける追跡用パラメータ（`?tab=readme-ov-file` など）は�
 
 ### Chrome ウェブストアから
 
-**2026-08-01に審査へ提出しました。まだ公開されていません。** 審査が通り次第、この段落をストアへのリンクに差し替えます。それまでは下の「ソースから読み込む」を使ってください。提出したパッケージと同じコードです。
+**[RepoShout をインストール](https://chromewebstore.google.com/detail/joaipdjaiefbenoijcekdnjagiadikkd)** — バージョン1.0.0・2026-08-02公開。自動で更新されるので、通常はこちらを使ってください。
 
 ### ソースから読み込む
+
+コードを改造して使いたい場合や、Chrome ウェブストアを使えないChromium系ブラウザで使う場合はこちら。
 
 1. このリポジトリをダウンロードまたはクローンする
 2. `chrome://extensions` を開く（Arcは `arc://extensions`、Braveは `brave://extensions`、Edgeは `edge://extensions`）

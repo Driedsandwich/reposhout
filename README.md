@@ -1,5 +1,8 @@
 # RepoShout
 
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/joaipdjaiefbenoijcekdnjagiadikkd)](https://chromewebstore.google.com/detail/joaipdjaiefbenoijcekdnjagiadikkd)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 Share GitHub repos, issues and PRs to X with a pre-filled post.
 
 **You press Post on X.** RepoShout never posts on your behalf — it only opens X's composer with the text and link already filled in.
@@ -42,9 +45,11 @@ Tracking parameters that GitHub appends (such as `?tab=readme-ov-file`) are remo
 
 ### From the Chrome Web Store
 
-**Submitted for review on 2026-08-01. Not published yet.** A link will replace this paragraph once the review completes. Until then, use the unpacked install below — it is the same code as the submitted package.
+**[Install RepoShout](https://chromewebstore.google.com/detail/joaipdjaiefbenoijcekdnjagiadikkd)** — version 1.0.0, published 2026-08-02. This is the recommended route: it updates automatically.
 
 ### From source (unpacked)
+
+Use this to run modified code, or in a Chromium browser without Chrome Web Store access.
 
 1. Download or clone this repository
 2. Open `chrome://extensions` (`arc://extensions`, `brave://extensions`, `edge://extensions`)
