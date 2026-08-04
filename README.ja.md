@@ -48,7 +48,7 @@ GitHubが付ける追跡用パラメータ（`?tab=readme-ov-file` など）は�
 
 ### Chrome ウェブストアから
 
-**[RepoShout をインストール](https://chromewebstore.google.com/detail/joaipdjaiefbenoijcekdnjagiadikkd)** — バージョン1.0.0・2026-08-02公開。自動で更新されるので、通常はこちらを使ってください。
+**[RepoShout をインストール](https://chromewebstore.google.com/detail/joaipdjaiefbenoijcekdnjagiadikkd)** — 自動で更新されるので、通常はこちらを使ってください。公開中のバージョンは上のバッジに出ます。
 
 ### ソースから読み込む
 

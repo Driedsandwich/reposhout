@@ -48,7 +48,7 @@ Tracking parameters that GitHub appends (such as `?tab=readme-ov-file`) are remo
 
 ### From the Chrome Web Store
 
-**[Install RepoShout](https://chromewebstore.google.com/detail/joaipdjaiefbenoijcekdnjagiadikkd)** — version 1.0.0, published 2026-08-02. This is the recommended route: it updates automatically.
+**[Install RepoShout](https://chromewebstore.google.com/detail/joaipdjaiefbenoijcekdnjagiadikkd)** — the recommended route: it updates automatically. The badge above shows the published version.
 
 ### From source (unpacked)
 
