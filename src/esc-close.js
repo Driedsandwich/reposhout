@@ -5,32 +5,36 @@
  * **利用者が普通に開いている X のタブを絶対に閉じないこと**。
  *
  * そのため「たぶん共有用だろう」という推測（URLの形・ウィンドウの大きさ・
- * 履歴の長さ）は一切使わない。次の2つの同一性の確認だけを根拠にする。
+ * 履歴の長さ・ウィンドウの名前）は一切使わない。根拠は1つだけにする。
  *
- *  1. window.name が拡張の付けた名前と一致する
- *     （content script から window.open で開いた経路。
- *      noopener を付けていても name は残ることを実測確認済み）
- *  2. service worker が「このウィンドウは自分が共有用に開いたものだ」と答える
- *     （ツールバー / ショートカット経路。windowId で照合する）
+ *   拡張の service worker が chrome.windows.create() で開いたときに
+ *   記録した windowId と、いまこのタブが属する windowId が一致すること。
  *
- * どちらも満たさなければ何もしない。
+ * v1.0.1 までは window.name が 'gxs-share-window' であることも根拠にしていた。
+ * これは公開リポジトリに書かれた固定文字列で、どのページからでも
+ * window.open(url, 'gxs-share-window') で同じ名前のウィンドウを作れるため、
+ * 所有権の証明にならない（2026-08-04の監査で指摘・修正）。
+ *
+ * windowId は拡張の内部にしか無く、ページ側からは観測も詐称もできない。
  */
 (function () {
   'use strict';
 
-  var WINDOW_NAME = 'gxs-share-window';
-
-  /* このウィンドウが拡張の開いた共有用ポップアップかを判定する */
+  /* このウィンドウが拡張の開いた共有用ポップアップかを service worker に照会する */
   function isOurShareWindow(callback) {
-    // 経路1: 名前が一致すれば、それだけで確定する
-    if (window.name === WINDOW_NAME) {
-      callback(true);
-      return;
-    }
-    // 経路2: service worker に windowId で照合してもらう
     try {
+      if (!chrome || !chrome.runtime || !chrome.runtime.sendMessage) {
+        callback(false);
+        return;
+      }
+      /*
+       * MV3 の service worker は停止していることがあるが、
+       * このメッセージ自体が起動のきっかけになり、
+       * 起動後は chrome.storage.session から記録を読み直して答える。
+       * （メモリ上の記録だけに頼っていた版では、ここで答えが失われていた）
+       */
       chrome.runtime.sendMessage({ type: 'gxs:is-share-window' }, function (res) {
-        // 応答が無い（service worker が停止していた等）場合は false 扱い。
+        // 応答が無い（拡張が更新された等）場合は false 扱い。
         // 判断がつかないときは「閉じない」側に倒す。
         if (chrome.runtime.lastError) {
           callback(false);
