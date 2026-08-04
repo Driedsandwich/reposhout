@@ -1,13 +1,13 @@
 # Chrome ウェブストア 提出手順書
 
-更新: 2026-08-04 / 対象: RepoShout（**公開中は 1.0.1**・2026-08-03通過）
+更新: 2026-08-05 / 対象: RepoShout **1.1.0**（未提出。ストアで公開中なのは 1.0.1・2026-08-03通過）
 **この文書は原稿と手順です。提出（Submit for review）はあなたが実行します。**
 初回提出と更新提出の両方でこの文書を使います。更新のときは §1 のアップロードと、変えた機能に関わる §2 の掲載文だけを直せば足ります。
 
 デベロッパーダッシュボードの画面順に並べてあります。上から順に進めてください。
 各欄はコードブロックをそのままコピペできます。
 
-- 提出用ZIP: `~/dev/reposhout-<版>.zip`（最新は `reposhout-1.0.1.zip` / 13ファイル / 30,309 bytes）
+- 提出用ZIP: リポジトリで `npm run package` を実行すると `dist/reposhout-<版>.zip` ができます（9ファイル・allowlist方式）。同じ内容なら何度作っても同じZIPになるので、`dist/*.zip.sha256` の値で手元と提出物の一致を確かめられます
 - 公開リポジトリ: https://github.com/Driedsandwich/reposhout
 - ダッシュボード: https://chrome.google.com/webstore/devconsole
 
@@ -25,7 +25,7 @@
 **「新しいアイテムを追加」→ ZIPをドラッグ**
 
 ```
-~/dev/reposhout-1.0.1.zip
+dist/reposhout-1.1.0.zip
 ```
 
 同梱物は13ファイル。`store/` と `test/` は動作に不要なので除外済みです。
@@ -34,7 +34,7 @@
 | 自動で入る値 | 内容 |
 |---|---|
 | Name | `RepoShout — Share GitHub repos, issues & PRs to X`（49文字 / 上限75） |
-| Version | `1.0.1`（manifest の値。前回より大きくないと弾かれます） |
+| Version | `1.1.0`（manifest の値。前回より大きくないと弾かれます） |
 | Short description | 下の §2 と同一（manifest の `description`・117文字 / 上限132） |
 
 ---
@@ -63,17 +63,21 @@ Changed your mind? Press Escape in the share window to dismiss it.
     Repository   →  owner/repo: description
     Issue        →  Title (Issue #123 · owner/repo)
     Pull request →  Title (PR #123 · owner/repo)
-• Tracking parameters GitHub appends are stripped; line and comment anchors are kept
-• Correct character counting for Japanese, Chinese and Korean text, which X counts
-  as two characters each
+• Query strings are handled per page type: filters on issue lists, ?plain=1 on a
+  Markdown file and a prepared pull request's title and body are kept, while
+  tracking parameters are dropped. Line and comment anchors are kept
+• Character counting follows X's published rules, including Japanese, Chinese and
+  Korean text and emoji, so a long title is trimmed to something X will accept
 • Light and dark mode follow GitHub's own theme automatically
 • Press Escape in the share window to dismiss it if you change your mind
 
 ── Privacy ──
 
-RepoShout requests one API permission: activeTab. It reads the current tab's URL
-and title only at the moment you invoke it, purely to build the post text. It
-makes no network requests of its own, stores nothing, and sends nothing anywhere.
+RepoShout requests two API permissions: activeTab and storage. activeTab lets it
+read the current tab's URL and title, only at the moment you invoke it, purely to
+build the post text. storage holds one thing: the identifiers of the windows the
+extension itself opened, kept in memory and cleared when you quit the browser.
+The extension makes no network requests of its own and sends nothing anywhere.
 
 It runs a script on x.com for one reason only: to listen for the Escape key so
 you can dismiss the share window. That script reads nothing from X, and it will
@@ -170,6 +174,26 @@ The URL and title are used solely to construct the share URL. They are not
 stored, logged, or transmitted anywhere by the extension.
 ```
 
+**storage**
+
+```
+RepoShout opens the X composer in a window it creates itself, and lets the user
+dismiss that window with the Escape key. To do that safely it has to know which
+window it opened, so that Escape can never close a window the user opened.
+
+The only thing written to storage is the window identifier returned by
+chrome.windows.create(), together with the time it was opened. No URLs, no page
+content, no browsing history, nothing about the user.
+
+It is written to chrome.storage.session, which is held in memory, is cleared when
+the browser closes, is never written to disk, and is not readable by content
+scripts. Entries are removed as soon as the window closes, and expire after 12
+hours in any case.
+
+This replaces the previous approach of identifying the window by a fixed name,
+which any web page could copy.
+```
+
 **Host permission: github.com**（content script の欄がある場合）
 
 ```
@@ -186,14 +210,19 @@ expected container is not found.
 This script has exactly one job: listen for the Escape key so the user can
 dismiss the share window the extension just opened, if they change their mind.
 
-It reads no page content from X. It stores nothing and transmits nothing.
+It reads no page content from X. This script itself stores nothing and transmits
+nothing; the extension's storage permission is used only by its service worker,
+to remember the identifiers of windows it opened.
 
-Before closing anything it verifies that the window is one this extension
-opened, by one of two means: the window name assigned at window.open time, or a
-windowId recorded by the service worker when it called chrome.windows.create.
-If neither matches -- which is the case for every X tab the user opened
-themselves -- the script does nothing. It cannot close the user's own X tabs.
-This is covered by an automated test in the repository (test/esc-close.test.js).
+Before closing anything it asks the extension's service worker whether this
+window is one the extension opened itself. The only evidence accepted is the
+window identifier returned by chrome.windows.create. A web page cannot read or
+forge that identifier. If it does not match -- which is the case for every X tab
+the user opened themselves -- the script does nothing. It cannot close the
+user's own X tabs. This is covered by end-to-end tests in the repository that
+load the extension into a real browser (test/extension.e2e.mjs), including one
+that opens a window imitating the previous version's fixed window name and
+asserts that Escape leaves it alone.
 
 Narrowing the match pattern to https://x.com/intent/* was considered and
 rejected: Chrome rounds permission warnings to the host, so the narrower pattern
@@ -258,7 +287,9 @@ https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md
 
 審査は通常数日です。差し戻された場合は理由が記載されたメールが届くので、その文面を共有していただければ原因を特定して直します。
 
-**実績**: 1.0.0 は 2026-08-01提出 → 08-02通過。1.0.1 は 08-02提出 → 08-03通過。いずれも1日で、差し戻しはありません。権限を増やさない更新は短く済む傾向がここでも見えています。
+**実績**: 1.0.0 は 2026-08-01提出 → 08-02通過。1.0.1 は 08-02提出 → 08-03通過。いずれも1日で、差し戻しはありません。
+
+**1.1.0 は権限を1つ増やします**（`storage`）。Chromeの画面上で新しい警告は出ない種類の権限ですが、権限が増える更新は審査が長くなることがあります。上の「storage」の正当化文をそのまま貼ってください。
 
 ---
 
@@ -282,7 +313,7 @@ https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md
 RepoShout は宛先をXに絞り、サイドパネルもカード生成も持ちません。差別化は次の3点です（いずれも実測に基づく事実で、README にも記載済み）。
 
 1. ログイン状態とログアウト状態の**両方**に対応（GitHubはこの2つで実装が別物。ログイン時のIssue/PRにはボタン行自体が無いため、ツールバー/ショートカットで補っている）
-2. 文面生成に**104件の自動テスト**（うち71件は絵文字の切り詰め境界の網羅、CJKの重み付き文字数を含む）＋ Esc の安全性テスト3件
+2. 文字数の数え方を**twitter-text v3 の定義どおりに実装**（近似ではない。半角カタカナや絵文字を含む）。単体・適合テスト35件と、実際のChromeへ拡張を読み込む**E2E 10件**で検査している（2026-08-05 実測・いずれも全PASS）
 3. Open / Merged / Closed の状態を**意図的に出さない**（ログイン状態で読み取り値が食い違う事象を実測したため）
 
 それ以前の同種拡張（2015 / 2018 / 2021）はいずれも更新停止かつManifest V2世代で、現在は動作しません。
