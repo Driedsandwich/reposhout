@@ -10,3 +10,8 @@
 *.zip
 *.crx
 *.pem
+
+# テスト・ビルド生成物
+dist/
+node_modules/
+IMPLEMENTATION_REPORT.html

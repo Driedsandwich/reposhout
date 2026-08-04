@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # ubuntu-latest のランナーには Google Chrome が入っている。
+      # 入っていなければE2Eは失敗させる（黙って飛ばすと「通った」に見えてしまう）。
+      - name: Chrome の場所を確認する
+        run: |
+          which google-chrome || which google-chrome-stable || which chromium || {
+            echo "Chrome が見つかりません。E2Eが実行できないので失敗させます。" >&2
+            exit 1
+          }
+          google-chrome --version || true
+          openssl version
+
+      - run: npm ci
+
+      - name: 単体テスト・適合テスト・manifest検査
+        run: npm run test:unit
+
+      - name: 実拡張E2E
+        run: npm run test:e2e
+
+      - name: 配布物の生成と収録内容の表示
+        run: npm run package
+
+      - name: 同じ内容から同じZIPができることを確かめる
+        run: |
+          FIRST=$(cat dist/*.zip.sha256 | cut -d' ' -f1)
+          npm run package --silent > /dev/null
+          SECOND=$(cat dist/*.zip.sha256 | cut -d' ' -f1)
+          echo "1回目: $FIRST"
+          echo "2回目: $SECOND"
+          test "$FIRST" = "$SECOND" || {
+            echo "同じ入力から違うZIPができました。決定論が壊れています。" >&2
+            exit 1
+          }
+
+      - name: 生成物を残す
+        uses: actions/upload-artifact@v4
+        with:
+          name: reposhout-package
+          path: dist/
+          retention-days: 14
