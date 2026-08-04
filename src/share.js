@@ -59,6 +59,69 @@
     'pulls', 'discussions', 'security', 'events', 'sessions', 'organizations'
   ];
 
+  /*
+   * 認証・アカウント系。ここのURLはクエリもハッシュも共有しない。
+   * 例: /login/oauth/authorize?client_id=...&state=...
+   *     /settings/tokens?token=...
+   * 「共有される可能性がある形」で残さないことを優先する。
+   */
+  var SENSITIVE_FIRST_SEGMENTS = [
+    'login', 'logout', 'session', 'sessions', 'settings', 'account', 'user',
+    'signup', 'join', 'password_reset', 'auth', 'oauth', 'authorize', 'devices',
+    'sudo', 'two_factor', 'verify', 'billing'
+  ];
+
+  /*
+   * 値の中身に関わらず、名前だけで落とすパラメータ（多重防御）。
+   * allowlistに載っていない名前はどのみち落ちるので、ここは保険。
+   *
+   * code / state はOAuthで使われるが、GitHubのIssue一覧の state=open のように
+   * 普通の意味でも使う名前なので入れない。認証系URLは route='sensitive' 側で
+   * クエリごと落としており、そちらが本線。
+   */
+  var SENSITIVE_PARAM_RE =
+    /(^|[-_])(token|secret|password|passwd|pwd|session|signature|sig|apikey|key|credential|auth|otp|jwt|nonce|client_id|client_secret)([-_]|$)/i;
+
+  /* 追跡・通知由来のノイズ。allowlistに載っていないので実際は保険 */
+  var TRACKING_PARAMS = [
+    'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+    'gclid', 'fbclid', 'mc_cid', 'mc_eid', '_gl',
+    'ref', 'ref_src', 'ref_url', 'referrer',
+    'notification_referrer_id', 'email_source', 'email_token', 'tab'
+  ];
+
+  /*
+   * ページ種別ごとに「意味を持つので残すクエリ」。
+   * ここに無い名前はすべて落とす（unknown は落とす、が方針）。
+   * null は「クエリもハッシュも落とす」を意味する。
+   */
+  var QUERY_ALLOW = {
+    'sensitive': null,
+    'root': [],
+    'user': ['tab'],
+    'search': ['q', 'type', 's', 'o', 'l', 'p'],
+    'repo': [],
+    'issue-list': ['q', 'page', 'sort', 'direction', 'state', 'labels', 'milestone', 'assignee', 'author', 'type'],
+    'pr-list': ['q', 'page', 'sort', 'direction', 'state', 'labels', 'milestone', 'assignee', 'author'],
+    'discussion-list': ['discussions_q', 'category', 'q', 'page'],
+    'issue': [],
+    'pr': ['diff', 'w'],
+    'discussion': [],
+    'blob': ['plain'],
+    'tree': [],
+    'compare': ['quick_pull', 'title', 'body', 'labels', 'milestone', 'assignees', 'projects', 'template', 'expand', 'diff', 'w'],
+    'commits': ['author', 'since', 'until', 'path', 'branch'],
+    'commit': ['diff', 'w'],
+    'actions': ['query', 'page'],
+    'releases': ['page'],
+    'wiki': [],
+    'repo-sub': [],
+    'other': []
+  };
+
+  /* ハッシュ自体が資格情報を運ぶ形（implicit OAuth 等）なら捨てる */
+  var SENSITIVE_HASH_RE = /(^|[#&])(access_token|id_token|token|code|state)=/i;
+
   function inWeightOneRange(cp) {
     for (var i = 0; i < WEIGHT_ONE_RANGES.length; i++) {
       if (cp >= WEIGHT_ONE_RANGES[i][0] && cp <= WEIGHT_ONE_RANGES[i][1]) return true;
@@ -256,23 +319,117 @@
   }
 
   /*
+   * クエリの扱いを決めるためのルート判定。
+   * parseLocation（投稿文面のための種別）とは目的が違うので分けている。
+   * 例: /o/r/issues は文面上は repo-sub だが、クエリ方針では issue-list。
+   */
+  function routeOf(u) {
+    var seg = u.pathname.split('/').filter(Boolean);
+    if (!seg.length) return 'root';
+
+    var s0 = seg[0].toLowerCase();
+    if (SENSITIVE_FIRST_SEGMENTS.indexOf(s0) !== -1) return 'sensitive';
+    if (s0 === 'search') return 'search';
+    if (seg.length === 1) return RESERVED_OWNERS.indexOf(s0) !== -1 ? 'other' : 'user';
+    if (RESERVED_OWNERS.indexOf(s0) !== -1) return 'other';
+    if (seg.length === 2) return 'repo';
+
+    var s2 = seg[2].toLowerCase();
+    var n3 = seg[3] || '';
+    if (s2 === 'settings') return 'sensitive';
+    if (s2 === 'issues') return /^\d+$/.test(n3) ? 'issue' : 'issue-list';
+    if (s2 === 'pull') return 'pr';
+    if (s2 === 'pulls') return 'pr-list';
+    if (s2 === 'discussions') return /^\d+$/.test(n3) ? 'discussion' : 'discussion-list';
+    if (s2 === 'labels' || s2 === 'milestones' || s2 === 'projects') return 'issue-list';
+    if (s2 === 'blob') return 'blob';
+    if (s2 === 'tree') return 'tree';
+    if (s2 === 'compare') return 'compare';
+    if (s2 === 'commits') return 'commits';
+    if (s2 === 'commit') return 'commit';
+    if (s2 === 'actions') return 'actions';
+    if (s2 === 'releases' || s2 === 'tags') return 'releases';
+    if (s2 === 'wiki') return 'wiki';
+    return 'repo-sub';
+  }
+
+  function keepParam(route, name) {
+    var allow = QUERY_ALLOW[route];
+    if (!allow) return false;                                   // null（機微）と未定義は全落とし
+    if (SENSITIVE_PARAM_RE.test(name)) return false;            // 多重防御
+    if (TRACKING_PARAMS.indexOf(name.toLowerCase()) !== -1 && route !== 'user') return false;
+    return allow.indexOf(name) !== -1;
+  }
+
+  /*
    * 共有するURLを整える。
-   * - リポジトリトップ: クエリもハッシュも落として正規形にする
-   *   （GitHubが付ける ?tab=readme-ov-file 等のノイズを除去）
-   * - それ以外: クエリだけ落としてハッシュは残す
-   *   （#L10 の行指定や #issuecomment-123 は共有したい情報そのものなので消さない）
+   *
+   * 方針（QUERY_ALLOW が正本）:
+   *  - 各ページ種別で「意味を持つクエリ」だけ残す。知らないクエリは落とす
+   *  - 認証・設定系はクエリもハッシュも落とす
+   *  - リポジトリトップはクエリ・ハッシュとも落として正規形にする
+   *  - #L10-L20 や #issuecomment-123 は共有したい情報そのものなので残す
+   *  - 資格情報の形をしたハッシュは落とす
+   *
+   * 第2引数 info は後方互換のために受け取るが、判定には使わない
+   * （フォールバック経路が別実装にならないよう、入口を1つに保つため）。
    */
   function canonicalUrl(rawUrl, info) {
     var u;
     try {
       u = new URL(rawUrl);
     } catch (e) {
-      return rawUrl;
+      // 解析できないものは、クエリ・ハッシュを機械的に落とすだけに留める
+      return String(rawUrl).split('#')[0].split('?')[0];
     }
-    if (info && info.kind === 'repo') {
-      return u.origin + u.pathname.replace(/\/$/, '');
+
+    // github.com 以外（http、他ホスト）は素の形だけ返す
+    if (u.protocol !== 'https:' || u.hostname !== 'github.com') {
+      return u.origin + u.pathname;
     }
-    return u.origin + u.pathname + (u.hash || '');
+
+    var route = routeOf(u);
+    var path = u.pathname;
+    if (route === 'repo' || route === 'root') path = path.replace(/\/$/, '');
+
+    var kept = [];
+    if (QUERY_ALLOW[route]) {
+      u.searchParams.forEach(function (value, name) {
+        if (keepParam(route, name)) kept.push([name, value]);
+      });
+    }
+
+    var qs = '';
+    if (kept.length) {
+      var sp = new URLSearchParams();
+      kept.forEach(function (kv) { sp.append(kv[0], kv[1]); });
+      qs = '?' + sp.toString();
+    }
+
+    var hash = u.hash || '';
+    if (route === 'repo' || route === 'root' || route === 'sensitive') hash = '';
+    if (hash && SENSITIVE_HASH_RE.test(hash)) hash = '';
+
+    return u.origin + path + qs + hash;
+  }
+
+  /*
+   * 文面の組み立てが失敗したときに使う、URLだけの共有先。
+   * content script と service worker の両方がこれを呼ぶ。
+   * ここで split('?')[0] のような独自処理を書くと方針が二重化するので書かない。
+   */
+  function fallbackUrl(rawUrl) {
+    try {
+      return canonicalUrl(rawUrl, null);
+    } catch (e) {
+      return String(rawUrl).split('#')[0].split('?')[0];
+    }
+  }
+
+  function intentUrlFor(text, url) {
+    var base = 'https://x.com/intent/post?';
+    if (!text) return base + 'url=' + encodeURIComponent(url);
+    return base + 'text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url);
   }
 
   /* ============================================================
@@ -358,8 +515,7 @@
       number: info.number,
       text: text,
       url: url,
-      intentUrl: 'https://x.com/intent/post?text=' + encodeURIComponent(text) +
-                 '&url=' + encodeURIComponent(url)
+      intentUrl: intentUrlFor(text, url)
     };
   }
 
@@ -368,6 +524,9 @@
     parseLocation: parseLocation,
     cleanTitle: cleanTitle,
     canonicalUrl: canonicalUrl,
+    fallbackUrl: fallbackUrl,
+    intentUrlFor: intentUrlFor,
+    routeOf: routeOf,
     weightedLength: weightedLength,
     truncate: truncate,
     MAX_WEIGHT: MAX_WEIGHT,
