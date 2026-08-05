@@ -82,7 +82,9 @@ test('サフィックスだけで上限を超える異常時も壊れない', ()
   const out = GXS.truncateWithSuffix('タイトル', long);
   assert.ok(GXS.weightedLength(out) <= GXS.MAX_WEIGHT, `重み超過: ${GXS.weightedLength(out)}`);
   assert.doesNotThrow(() => encodeURIComponent(out));
-});test('スキーム無しドメインを少なく数えない（RA-001の回帰）', () => {
+});
+
+test('スキーム無しドメインを少なく数えない（RA-001の回帰）', () => {
   assert.equal(GXS.weightedLength('example.com'), 23);
   assert.equal(GXS.weightedLength('a.co'), 23);
   const many = Array(50).fill('a.co').join(' ');
