@@ -159,18 +159,44 @@
     }
     // 対象外ページ（buildShareがnullを返した）なら何もしない
     if (!share && !threw) return;
-    // 例外が出た場合だけ、URLだけの共有にフォールバックする
+    // 例外が出た場合だけ、URLだけの共有にフォールバックする（URL方針は本体と同じものを使う）
     if (!share) {
-      var bare = location.origin + location.pathname;
+      var bare = window.GXS ? window.GXS.fallbackUrl(location.href) : location.origin + location.pathname;
       share = { intentUrl: 'https://x.com/intent/post?url=' + encodeURIComponent(bare) };
     }
 
-    // Xの共有ポップアップ相当のサイズ。投稿ボタンはX側で本人が押す。
-    window.open(
-      share.intentUrl,
-      'gxs-share-window',
-      'width=560,height=640,noopener,noreferrer,scrollbars=yes,resizable=yes'
-    );
+    openShareWindow(share.intentUrl);
+  }
+
+  /*
+   * 共有ウィンドウは service worker に開いてもらう。
+   *
+   * ここで window.open すると、開いたウィンドウを拡張が識別する手段が
+   * window.name（＝どのページからでも詐称できる固定文字列）しか無くなる。
+   * service worker 経由なら chrome.windows.create が返す windowId を
+   * 所有権の根拠にでき、Esc の判定が推測でなくなる。
+   *
+   * 依頼が届かない場合（拡張の更新直後など）は素の window.open で開く。
+   * その窓は記録されないので Esc では閉じない＝安全側に倒れる。
+   */
+  function openShareWindow(intentUrl) {
+    var fellBack = false;
+    function fallback() {
+      if (fellBack) return;
+      fellBack = true;
+      window.open(intentUrl, '_blank', 'width=560,height=640,noopener,noreferrer,scrollbars=yes,resizable=yes');
+    }
+    try {
+      if (!chrome || !chrome.runtime || !chrome.runtime.sendMessage) {
+        fallback();
+        return;
+      }
+      chrome.runtime.sendMessage({ type: 'gxs:open-share', url: intentUrl }, function (res) {
+        if (chrome.runtime.lastError || !res || !res.ok) fallback();
+      });
+    } catch (e) {
+      fallback();
+    }
   }
 
   function buildButton() {
