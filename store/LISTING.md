@@ -1,7 +1,11 @@
 # Chrome ウェブストア 提出手順書
 
-更新: 2026-08-05 / 対象: RepoShout **1.1.1**（未提出。ストアで公開中なのは 1.0.1・2026-08-03通過。1.1.0 はタグのみで提出していない）
+更新: 2026-08-05 / 対象: RepoShout **1.1.2**（未提出。ストアで公開中なのは 1.0.1・2026-08-03通過。1.1.0 と 1.1.1 はタグのみで提出していない）
 **この文書は原稿と手順です。提出（Submit for review）はあなたが実行します。**
+
+> **提出の前提（2026-08-05 決定）**: 外部監査（ChatGPT の GPT-5.6 Sol Pro）に**合格してから**提出する。
+> 現時点の最新監査は第3回で、判定は `CONDITIONAL_PASS`／`NOT_READY_FOR_CHROME_WEB_STORE_SUBMISSION`。
+> 次の監査で合格が出るまで、この手順は実行しない。
 初回提出と更新提出の両方でこの文書を使います。更新のときは §1 のアップロードと、変えた機能に関わる §2 の掲載文だけを直せば足ります。
 
 デベロッパーダッシュボードの画面順に並べてあります。上から順に進めてください。
@@ -25,7 +29,7 @@
 **「新しいアイテムを追加」→ ZIPをドラッグ**
 
 ```
-dist/reposhout-1.1.1.zip
+dist/reposhout-1.1.2.zip
 ```
 
 同梱物は9ファイル（`npm run package` の出力に一覧が出ます）。`store/` `test/` `scripts/` `.github/` と文書は動作に不要なので、収録一覧（allowlist）に入れていません。
@@ -34,7 +38,7 @@ dist/reposhout-1.1.1.zip
 | 自動で入る値 | 内容 |
 |---|---|
 | Name | `RepoShout — Share GitHub repos, issues & PRs to X`（49文字 / 上限75） |
-| Version | `1.1.1`（manifest の値。前回より大きくないと弾かれます） |
+| Version | `1.1.2`（manifest の値。前回より大きくないと弾かれます） |
 | Short description | 下の §2 と同一（manifest の `description`・117文字 / 上限132） |
 
 ---
@@ -177,8 +181,10 @@ extension -- by clicking the toolbar icon or pressing the keyboard shortcut --
 and only for that one tab. It cannot be used to observe browsing in the
 background.
 
-The URL and title are used solely to construct the share URL. They are not
-stored, logged, or transmitted anywhere by the extension.
+The URL and title are used solely to construct the share URL. The extension does
+not store them, does not log them, and does not send them to the developer or to
+any server the developer operates. They are placed in X's own Web Intent link, so
+they reach X when the composer opens -- that is the function the user asked for.
 ```
 
 **storage**
@@ -239,17 +245,19 @@ the popup (for example to /i/flow/login when the user is signed out).
 
 ### Data usage
 
-| 質問 | 回答 |
-|---|---|
-| Personally identifiable information | **No** |
-| Health information | No |
-| Financial and payment information | No |
-| Authentication information | No |
-| Personal communications | No |
-| Location | No |
-| Web history | **No** |
-| User activity | No |
-| Website content | **No** |
+**この欄の判断材料は [STORE_DASHBOARD_CHANGES.md](STORE_DASHBOARD_CHANGES.md) §2 が正本です。** ここには結論だけ置きます。
+
+| 質問 | 推奨する回答 | 理由 |
+|---|---|---|
+| Web history | **Yes** | 利用者が見ているページのURLが、第三者であるXへ渡るため |
+| Website content | **Yes** | ページのタイトルが、同じくXへ渡るため |
+| Personally identifiable information | No | 扱わない |
+| Health information | No | 扱わない |
+| Financial and payment information | No | 扱わない |
+| Authentication information | No | 扱わない |
+| Personal communications | No | 扱わない |
+| Location | No | 扱わない |
+| User activity | No | 扱わない |
 
 3つの証明にすべてチェック（該当なし・遵守）:
 
@@ -257,13 +265,13 @@ the popup (for example to /i/flow/login when the user is signed out).
 - [ ] 収集データを第三者に販売しない
 - [ ] 信用力判断・融資目的に使用・転送しない
 
-> **【実績】この回答のまま 1.0.0（2026-08-02）と 1.0.1（2026-08-03）の2回とも審査を通過しました。**
-> 以下は当初の懸念の記録で、対応は不要です。差し戻された場合にだけ読んでください。
+> **1.0.0 と 1.0.1 は Web history / Website content を No で申告して審査を通っています。**
+> しかしその根拠として書いていた「何も送信しないから」は**事実ではありませんでした**。
+> Shareを押すと、タイトルとURLは投稿画面が開いた時点でXへ渡ります。
+> **通ったという実績は、回答が正確だったことの証明にはなりません。**
 >
-> **ここだけ判断が割れます。** 本拡張はURLとタイトルを**ユーザー操作の瞬間にのみ**読み、保存はしません。ただし**Xへは渡ります**（投稿画面を開くのが機能そのものなので）。
-> ただし審査側が「Web history」「Website content」をより広く解釈する可能性があります。
-> **No で弾かれたら Yes に変え、「ユーザー操作時のみ・端末内処理のみ・保存も送信もなし」と補足して再提出**してください。
-> プライバシーポリシーは用意済みなので、どちらの回答でも要件は満たせます。
+> 最終的な回答は、ダッシュボードの現行の設問文を読んだうえで本人が決めてください。
+> どちらを選ぶにせよ、プライバシーポリシーは用意済みなので要件は満たせます。
 
 ### Privacy policy URL
 

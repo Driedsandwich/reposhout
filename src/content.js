@@ -205,13 +205,31 @@
     }
   }
 
+  /*
+   * 表示する文字は言語ファイル（_locales）から取る。
+   * ツールチップが日本語で固定されていたため、英語圏の利用者には
+   * 意味の分からない文字列が出ていた（アナリティクスで米国・Windowsからの
+   * 利用を確認したのがきっかけ・2026-08-05）。
+   * 取得できない場合に備えて英語を既定にしておく。
+   */
+  function t(key, fallback) {
+    try {
+      var s = chrome && chrome.i18n && chrome.i18n.getMessage ? chrome.i18n.getMessage(key) : '';
+      return s || fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+
   function buildButton() {
     var btn = document.createElement('button');
     btn.id = BTN_ID;
     btn.type = 'button';
-    btn.title = 'このページをXに投稿する';
-    btn.setAttribute('aria-label', 'Share on X');
-    btn.innerHTML = X_ICON + '<span>Share</span>';
+    btn.title = t('shareButtonTooltip', 'Post this page to X');
+    btn.setAttribute('aria-label', t('shareButtonAria', 'Share on X'));
+    btn.innerHTML = X_ICON + '<span></span>';
+    // 文字は textContent で入れる（言語ファイルの中身をHTMLとして解釈させない）
+    btn.querySelector('span').textContent = t('shareButtonLabel', 'Share');
     btn.addEventListener('click', onClick);
     return btn;
   }

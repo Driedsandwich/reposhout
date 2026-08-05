@@ -46,23 +46,29 @@
     ['キーキャップ', '1\uFE0F\u20E3', 2],
     ['異体字セレクタつき記号', '\u2764\uFE0F', 2],
     ['ASCII+絵文字', 'a\u{1F44D}', 3],
-    ['短いURL（23固定）', 'https://t.co/a', 23],
-    ['長いURL（23固定）', 'https://github.com/octocat/Hello-World/blob/main/very/long/path/file.md', 23],
-    ['本文にURLが混ざる（4+23+4）', 'see https://github.com/a/b now', 31],
-    ['www始まりもURL', 'www.example.com', 23],
     ['日本語200文字（全部重み2）', '日'.repeat(200), 400],
-    ['スキーム無しドメインもURL（23）', 'example.com', 23],
-    ['短いドメインも23', 'a.co', 23],
-    ['多階層TLDも23', 'foo.co.jp', 23],
-    ['README.md もURL扱い（.md は実在のccTLD）', 'README.md', 23],
-    ['index.js は公式なら8だが、少なく数えないため23', 'index.js', 23],
     ['バージョン番号はURLではない', 'Ver.1.2.3', 9],
     ['「e.g.」はURLではない', 'e.g.', 4],
     ['「1.5倍」はURLではない', '1.5倍', 5],
-    ['メール形式も多めに数える（安全側）', 'a@example.com', 23],
     ['BMPベース＋肌色修飾子', '\u270A\u{1F3FD}', 2],
     ['同上・別のベース', '\u261D\u{1F3FD}', 2],
-    ['a.co を50個（23×50 + 空白49）', Array(50).fill('a.co').join(' '), 1199]
+  ];
+
+  /* ---- URLを含む文面 ----
+   * URLの重みは「Xがどこをリンクと見なすか」に依存して確定できないので、
+   * 厳密値ではなく「最低これだけは数える」で押さえる。
+   * 公式実装との突き合わせ（少なく数えない）は test/oracle.test.mjs が行う。
+   */
+  var WEIGHT_MIN = [
+    ['スキーム付きURLは最低23', 'https://t.co/a', 23],
+    ['スキーム無しドメインも最低23', 'example.com', 23],
+    ['短いドメインも最低23', 'a.co', 23],
+    ['多階層TLDも最低23', 'foo.co.jp', 23],
+    ['Unicode TLD も最低23', 'foobar.みんな/', 23],
+    ['URLの前に文字が付く場合は前の文字ぶんも数える', 'text:http://example.com', 28],
+    ['無効なドメインは素の長さぶん数える', 'http://foo_bar.com/abcdefghijklmnopqrstuvwxyz', 45],
+    ['1つの並びにURLが2つあれば両方数える', 'example.comてすとですtwitter.みんなです', 60],
+    ['a.co を50個なら 23×50 + 空白49', Array(50).fill('a.co').join(' '), 50 * 23 + 49]
   ];
 
   /* ---- URL正規化 ---- */
@@ -73,7 +79,15 @@
     ['リポジトリトップのREADME節アンカーは残す', 'https://github.com/octocat/Hello-World#readme', 'https://github.com/octocat/Hello-World#readme'],
     ['日本語見出しのアンカーも残す', 'https://github.com/o/r#%E6%97%A5%E6%9C%AC%E8%AA%9E', 'https://github.com/o/r#%E6%97%A5%E6%9C%AC%E8%AA%9E'],
     ['リポジトリトップでも資格情報の形のハッシュは落とす', 'https://github.com/o/r#access_token=abc', 'https://github.com/o/r'],
-    ['長すぎるハッシュは落とす', 'https://github.com/o/r#' + 'a'.repeat(80), 'https://github.com/o/r'],
+    ['長い見出しアンカーは残す', 'https://github.com/o/r#' + 'a'.repeat(80), 'https://github.com/o/r#' + 'a'.repeat(80)],
+    ['上限（512文字）を超えるハッシュは落とす', 'https://github.com/o/r#' + 'a'.repeat(600), 'https://github.com/o/r'],
+    ['日本語見出しのアンカーはリポジトリトップでも残す', 'https://github.com/o/r#' + encodeURIComponent('インストールと初期設定'), 'https://github.com/o/r#' + encodeURIComponent('インストールと初期設定')],
+    ['資格情報らしきハッシュは名前を問わず落とす', 'https://github.com/o/r/issues/12#client_secret=abc', 'https://github.com/o/r/issues/12'],
+    ['同上・password', 'https://github.com/o/r/issues/12#password=abc', 'https://github.com/o/r/issues/12'],
+    ['同上・api_key', 'https://github.com/o/r/issues/12#api_key=abc', 'https://github.com/o/r/issues/12'],
+    ['同上・refresh_token', 'https://github.com/o/r/issues/12#refresh_token=abc', 'https://github.com/o/r/issues/12'],
+    ['エンコードされた = も落とす', 'https://github.com/o/r/issues/12#a%3Db', 'https://github.com/o/r/issues/12'],
+    ['壊れたパーセントエンコードは落とす', 'https://github.com/o/r/issues/12#%E4%B8%8D%E5', 'https://github.com/o/r/issues/12'],
     ['tab= は落としつつアンカーは残す', 'https://github.com/o/r?tab=readme-ov-file#readme', 'https://github.com/o/r#readme'],
     ['Issue一覧のフィルタは残す', 'https://github.com/o/r/issues?q=is%3Aopen+label%3Abug', 'https://github.com/o/r/issues?q=is%3Aopen+label%3Abug'],
     ['Issue一覧の state も残す', 'https://github.com/o/r/issues?state=open', 'https://github.com/o/r/issues?state=open'],
@@ -175,6 +189,9 @@
     ['OAuth認可画面は共有しない', 'https://github.com/login/oauth/authorize?client_id=a&state=b', 'Authorize application', { isNull: true }],
     ['リポジトリのSecretsは共有しない', 'https://github.com/o/r/settings/secrets/actions', 'Actions secrets', { isNull: true }],
     ['組織の管理画面は共有しない', 'https://github.com/orgs/acme/settings/profile', 'Organization settings', { isNull: true }],
+    ['エンコードされた設定ページも共有しない', 'https://github.com/%73ettings/tokens', 'Personal access tokens', { isNull: true }],
+    ['エンコードされたリポジトリ設定も共有しない', 'https://github.com/o/r/%73ettings/secrets', 'Actions secrets', { isNull: true }],
+    ['区切り文字をエンコードしたパスは共有しない', 'https://github.com/o/r/settings%2Ftokens', 'x', { isNull: true }],
     ['Enterpriseの管理画面は共有しない', 'https://github.com/enterprises/e/settings/profile', 'Enterprise settings', { isNull: true }],
     ['組織のDiscussionは機微ではない（共有対象・ただしrepo扱いしない）',
       'https://github.com/orgs/community/discussions/12345', 'Title · GitHub', { kind: 'other' }],
@@ -210,5 +227,5 @@
       { kind: 'repo', weightMax: 250, xTotalMax: 280 }]
   ];
 
-  root.GXS_FIXTURES = { WEIGHT: WEIGHT, URLS: URLS, TITLES: TITLES, LOCATIONS: LOCATIONS, BUILD: BUILD };
+  root.GXS_FIXTURES = { WEIGHT: WEIGHT, WEIGHT_MIN: WEIGHT_MIN, URLS: URLS, TITLES: TITLES, LOCATIONS: LOCATIONS, BUILD: BUILD };
 })(typeof globalThis !== 'undefined' ? globalThis : self);

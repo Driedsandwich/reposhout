@@ -126,15 +126,68 @@
     'other': []
   };
 
-  /* ハッシュ自体が資格情報を運ぶ形（implicit OAuth 等）なら捨てる */
-  var SENSITIVE_HASH_RE = /(^|[#&])(access_token|id_token|token|code|state)=/i;
+  /*
+   * ハッシュ（fragment）の安全化。
+   *
+   * 以前は `access_token=` など決め打ちの名前だけを見ていたため、
+   * `#client_secret=` `#password=` `#api_key=` `#session_token=`
+   * `#oauth_token=` `#refresh_token=` が素通りしていた
+   * （2026-08-05の第3回監査で再現）。fragment は通常のHTTP要求では
+   * サーバーへ送られないが、この拡張はURL全体をXの投稿画面へ渡すので、
+   * 残せばそのまま第三者へ送られる。
+   *
+   * 名前を数え上げる代わりに、**`=` を含むfragmentを名前によらず捨てる**。
+   * GitHubが作る見出し・行番号・コメントのアンカー（#readme、#L10-L20、
+   * #issuecomment-123、日本語見出しのパーセントエンコード）に `=` は出てこない。
+   * クエリ側の資格情報判定より広く、取りこぼしが原理的に出ない。
+   *
+   * 長さの上限は、実用的なURL長（ブラウザ実装で概ね2000文字前後が下限）に対して
+   * 十分に余裕を見た値。日本語の見出しはパーセントエンコードで1文字9バイト相当に
+   * なるため、旧実装の64文字では「インストールと初期設定」（100文字）すら
+   * 落ちていた。
+   */
+  var FRAGMENT_MAX = 512;
+
+  function sanitizeFragment(hash) {
+    if (!hash) return '';
+    var raw = hash.charAt(0) === '#' ? hash.slice(1) : hash;
+    if (!raw) return '';
+    if (raw.length > FRAGMENT_MAX) return '';
+    if (/[\u0000-\u001F\u007F\s]/.test(raw)) return '';
+    var decoded;
+    try {
+      decoded = decodeURIComponent(raw);
+    } catch (e) {
+      return '';                                  // 壊れたエンコードは判定できない＝載せない
+    }
+    if (/[\u0000-\u001F\u007F]/.test(decoded)) return '';
+    if (raw.indexOf('=') !== -1 || decoded.indexOf('=') !== -1) return '';
+    return '#' + raw;
+  }
 
   /*
-   * リポジトリトップで残してよいハッシュ。READMEの見出しアンカー（#readme、
-   * #installation、日本語見出しのパーセントエンコード）を想定する。
-   * key=value の形や極端に長いものは残さない。
+   * パスのセグメントを、判定に使える形へ直す。
+   *
+   * ルート判定を生の文字列比較でやっていたため、`/%73ettings/tokens` が
+   * 設定ページと見なされず共有できてしまっていた（同監査で再現）。
+   * デコードしてから判定する。デコードできない・区切り文字や制御文字が
+   * 出てくる場合は判定不能として null を返し、呼び出し側で共有しない側へ倒す。
    */
-  var SAFE_SECTION_HASH_RE = /^#[A-Za-z0-9%][A-Za-z0-9._%-]{0,63}$/;
+  function pathSegments(u) {
+    var raw = u.pathname.split('/').filter(Boolean);
+    var out = [];
+    for (var i = 0; i < raw.length; i++) {
+      var d;
+      try {
+        d = decodeURIComponent(raw[i]);
+      } catch (e) {
+        return null;
+      }
+      if (/[\u0000-\u001F\u007F\/\\]/.test(d)) return null;
+      out.push(d);
+    }
+    return out;
+  }
 
   function inWeightOneRange(cp) {
     for (var i = 0; i < WEIGHT_ONE_RANGES.length; i++) {
@@ -218,62 +271,107 @@
   }
 
   /*
-   * 本文中の「URLとして数えるべきトークン」を切り出す。
-   * Xは長さによらずURLを23として数えるので、ここも23で数える。
+   * URLらしき最短の並び。ラベルとTLDだけを見て、パスやクエリは含めない。
    *
-   * ⚠️ スキームの無いドメインもXはリンクとして扱う。
-   * 旧実装は http(s):// と www. だけを見ていたため、`a.co` を50個並べた文面を
-   * 249と数えて切り詰めず、X側では1199相当になって投稿できなかった
-   * （2026-08-05の再監査で再現）。
-   *
-   * 有効なTLDの一覧は持たない。「ドットを含み、最後がアルファベット2文字以上」なら
-   * すべてURLとして数える。公式より**多めに数えることはあっても、少なく数えない**。
-   * 少なく数える方向だけが「Xに弾かれる文面を作る」事故につながるため。
-   * 例: `index.js` は公式なら8だがここでは23。切り詰めが少し早まるだけで害はない。
+   * TLDを「2文字以上のUnicode文字」の最短一致にしているのは、
+   * **短く見積もるほど安全**だから。Xは認識したURLを23として数えるので、
+   * URLだと見なす範囲を短く取れば、残りを素の文字として数えるぶん
+   * 合計は増える。公式より多く数える方向にしか外れない。
    */
-  var URL_TOKEN_RE = /^(?:https?:\/\/)?[^\s.@][^\s]*\.[A-Za-z]{2,}(?:[:\/?#][^\s]*)?$/;
-  var LEADING_PUNCT_RE = /^[([<「（【“"'‘]*/;
-  var TRAILING_PUNCT_RE = /[)\]>」）】”"'’.,;:!?、。…]+$/;
+  var URL_CANDIDATE_RE = /(?:https?:\/\/)?[^\s\/?#@:.]+\.\p{L}{2,}?/gu;
 
-  function splitUrls(text) {
-    var parts = [];
-    var last = 0;
-    var re = /\S+/g;
-    var m;
-    while ((m = re.exec(text)) !== null) {
-      var raw = m[0];
-      var lead = raw.match(LEADING_PUNCT_RE)[0].length;
-      var core = raw.slice(lead).replace(TRAILING_PUNCT_RE, '');
-      if (!core || !URL_TOKEN_RE.test(core)) continue;
-      var start = m.index + lead;
-      if (start > last) parts.push({ type: 'text', value: text.slice(last, start) });
-      parts.push({ type: 'url', value: core });
-      last = start + core.length;
-    }
-    if (last < text.length) parts.push({ type: 'text', value: text.slice(last) });
-    return parts;
-  }
-
-  /* 公式準拠の重み付き文字数 */
-  function weightedLength(text) {
-    var s = normalizeNFC(text);
-    var parts = splitUrls(s);
+  /* 素の文字として数える（URLの扱いを一切しない） */
+  function literalWeight(text) {
+    var gs = graphemes(text);
     var w = 0;
-    for (var i = 0; i < parts.length; i++) {
-      if (parts[i].type === 'url') {
-        w += URL_WEIGHT;
+    for (var g = 0; g < gs.length; g++) {
+      if (isEmojiCluster(gs[g])) {
+        w += DEFAULT_WEIGHT;
         continue;
       }
-      var gs = graphemes(parts[i].value);
-      for (var g = 0; g < gs.length; g++) {
-        if (isEmojiCluster(gs[g])) {
-          w += DEFAULT_WEIGHT;
-          continue;
-        }
-        for (var ch of gs[g]) w += codePointWeight(ch.codePointAt(0));
-      }
+      for (var ch of gs[g]) w += codePointWeight(ch.codePointAt(0));
     }
     return w;
+  }
+
+  /*
+   * Xの重み付き文字数。
+   *
+   * Xがどこをリンクと見なすかは、こちらからは確定できない。
+   * そこで「URL候補の取りうる区切り方すべて」の中から、合計が最大になる
+   * 解釈を選ぶ。公式がどの解釈を採っても、こちらがそれを下回らない。
+   *
+   *  - 公式がURLと見なす区間 → その区間は23。こちらも同じ区間を23で数えられる
+   *  - 公式が素の文字と見なす → こちらは素で数える選択肢も持っている
+   *  - 1つの並びにURLが2つ   → 区間を分けて両方数えられる
+   *  - 候補が周囲の文字を巻き込む → より短い候補を選ぶ道も残してある
+   *
+   * 以前は「ドットを含むトークンは丸ごと23」としていたため、
+   * `http://foo_bar.com/abcdefghijklmnopqrstuvwxyz`（公式45）を23、
+   * `text:http://example.com`（公式28）を23、
+   * `foobar.みんな/`（公式23）を14と数えていた。
+   * どれも少なく見積もる方向で、Xに弾かれる文面を作りうる
+   * （2026-08-05の第3回監査で再現）。
+   *
+   * 「公式より少なく数えない」ことは test/oracle.test.mjs が、
+   * 公式実装 twitter-text と突き合わせて機械的に検査する。
+   */
+  function weightedLength(text) {
+    var s = normalizeNFC(text);
+    if (!s) return 0;
+
+    var gs = graphemes(s);
+    var n = gs.length;
+
+    // 各書記素の重みと、その開始位置（UTF-16）
+    var w = new Array(n);
+    var start = new Array(n + 1);
+    var offsetToIndex = {};
+    var off = 0;
+    for (var i = 0; i < n; i++) {
+      start[i] = off;
+      offsetToIndex[off] = i;
+      w[i] = isEmojiCluster(gs[i]) ? DEFAULT_WEIGHT : 0;
+      if (!w[i]) for (var ch of gs[i]) w[i] += codePointWeight(ch.codePointAt(0));
+      off += gs[i].length;
+    }
+    start[n] = off;
+    offsetToIndex[off] = n;
+
+    // 各開始位置から伸びるURL候補（sticky で位置を固定して探す）
+    var sticky = new RegExp(URL_CANDIDATE_RE.source, 'uy');
+    var spans = [];
+    for (var a = 0; a < n; a++) {
+      sticky.lastIndex = start[a];
+      var m = sticky.exec(s);
+      if (!m || !m[0].length) continue;
+      var endIndex = offsetToIndex[start[a] + m[0].length];
+      if (typeof endIndex === 'number' && endIndex > a) spans.push([a, endIndex]);
+    }
+
+    // best[i] = 先頭から i 書記素までの、最大になる解釈
+    var best = new Array(n + 1);
+    best[0] = 0;
+    for (var i = 1; i <= n; i++) best[i] = best[i - 1] + w[i - 1];
+    for (var sp = 0; sp < spans.length; sp++) {
+      var from = spans[sp][0];
+      var to = spans[sp][1];
+      /*
+       * 素で数えた値との max は取らない。best[to] には既に
+       * 「素で数えていく経路」の値が入っており、そちらが下限になっている。
+       * max を書いても結果が1件も変わらないことを変異テストで確認したので置かない。
+       */
+      var v = best[from] + URL_WEIGHT;
+      // 候補の右側は、この時点の best を使って後段で伸びる
+      if (v > best[to]) {
+        best[to] = v;
+        for (var j = to + 1; j <= n; j++) {
+          var lit = best[j - 1] + w[j - 1];
+          if (lit > best[j]) best[j] = lit;
+        }
+      }
+    }
+    return best[n];
   }
 
   var ELLIPSIS = '…';
@@ -287,33 +385,24 @@
    * encodeURIComponent が URIError を投げて共有機能が丸ごと無反応になる
    * （v1.0.0 で実測した事故。ここは絶対に戻さない）。
    *
-   * URLは23として数えるので、途中で切らず「丸ごと入るか入らないか」で扱う。
+   * URLの扱いがトークン全体に依存するようになったので、
+   * 部分を足し上げるのではなく「先頭からn文字の重み」を二分探索する。
+   * 最後に必ず実測して、超えていたら1文字ずつ削る。
    */
   function takeToWeight(text, budget) {
-    var parts = splitUrls(text);
-    var acc = 0;
-    var out = '';
-
-    outer:
-    for (var i = 0; i < parts.length; i++) {
-      if (parts[i].type === 'url') {
-        if (acc + URL_WEIGHT > budget) break outer;
-        acc += URL_WEIGHT;
-        out += parts[i].value;
-        continue;
-      }
-      var gs = graphemes(parts[i].value);
-      for (var g = 0; g < gs.length; g++) {
-        var w = 0;
-        if (isEmojiCluster(gs[g])) {
-          w = DEFAULT_WEIGHT;
-        } else {
-          for (var ch of gs[g]) w += codePointWeight(ch.codePointAt(0));
-        }
-        if (acc + w > budget) break outer;
-        acc += w;
-        out += gs[g];
-      }
+    if (weightedLength(text) <= budget) return text;
+    var gs = graphemes(text);
+    var lo = 0;
+    var hi = gs.length;
+    while (lo < hi) {
+      var mid = Math.ceil((lo + hi) / 2);
+      if (weightedLength(gs.slice(0, mid).join('')) <= budget) lo = mid; else hi = mid - 1;
+    }
+    var out = gs.slice(0, lo).join('');
+    // 単調でない並びに備えた保険。二分探索の結果を必ず実測で確かめる。
+    while (lo > 0 && weightedLength(out) > budget) {
+      lo -= 1;
+      out = gs.slice(0, lo).join('');
     }
     return out;
   }
@@ -357,7 +446,8 @@
     }
     if (u.protocol !== 'https:' || u.hostname !== 'github.com') return null;
 
-    var seg = u.pathname.split('/').filter(Boolean);
+    var seg = pathSegments(u);
+    if (!seg) return null;                       // 判定できないURLは共有対象にしない
     if (seg.length < 2) return { kind: 'other', repo: null, number: null };
     if (RESERVED_OWNERS.indexOf(seg[0].toLowerCase()) !== -1) {
       return { kind: 'other', repo: null, number: null };
@@ -381,7 +471,8 @@
    * 例: /o/r/issues は文面上は repo-sub だが、クエリ方針では issue-list。
    */
   function routeOf(u) {
-    var seg = u.pathname.split('/').filter(Boolean);
+    var seg = pathSegments(u);
+    if (!seg) return 'sensitive';                // 判定できない＝共有しない側へ倒す
     if (!seg.length) return 'root';
 
     var s0 = seg[0].toLowerCase();
@@ -485,11 +576,7 @@
       qs = '?' + sp.toString();
     }
 
-    var hash = u.hash || '';
-    if (route === 'root' || route === 'sensitive') hash = '';
-    // リポジトリトップは、READMEの節を指すハッシュだけ残す（?tab= 等のクエリは落とす）
-    if (route === 'repo' && !SAFE_SECTION_HASH_RE.test(hash)) hash = '';
-    if (hash && (SENSITIVE_HASH_RE.test(hash) || /%3D/i.test(hash))) hash = '';
+    var hash = (route === 'root' || route === 'sensitive') ? '' : sanitizeFragment(u.hash);
 
     return u.origin + path + qs + hash;
   }
@@ -608,6 +695,7 @@
     canonicalUrl: canonicalUrl,
     fallbackUrl: fallbackUrl,
     isSensitiveUrl: isSensitiveUrl,
+    sanitizeFragment: sanitizeFragment,
     truncateWithSuffix: truncateWithSuffix,
     intentUrlFor: intentUrlFor,
     routeOf: routeOf,

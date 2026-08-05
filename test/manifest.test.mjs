@@ -27,10 +27,25 @@ test('package.json と manifest.json のバージョンが一致する', () => {
     `package.json=${pkg.version} / manifest.json=${manifest.version}`);
 });
 
-test('依存パッケージを持たない', () => {
+test('依存は許可した開発用パッケージだけ（配布物には入らない）', () => {
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  // 実行時の依存はゼロを維持する。拡張が読み込むのは src/ の自前コードだけ。
   assert.deepEqual(pkg.dependencies || {}, {});
-  assert.deepEqual(pkg.devDependencies || {}, {});
+  // 開発用は allowlist。増やすときはここも直すことになる。
+  assert.deepEqual(pkg.devDependencies || {}, { 'twitter-text': '3.1.0' });
+  // 版は範囲指定ではなく完全固定であること
+  for (const [name, range] of Object.entries(pkg.devDependencies || {})) {
+    assert.match(range, /^\d+\.\d+\.\d+$/, `${name} が完全固定でない: ${range}`);
+  }
+});
+
+test('開発用依存が配布物へ混ざらない', () => {
+  for (const f of PACKAGE_FILES) {
+    const body = readFileSync(join(ROOT, f));
+    if (!f.endsWith('.js')) continue;
+    assert.ok(!/require\(|from ['"]twitter-text/.test(body.toString('utf8')),
+      `配布物が外部パッケージを参照している: ${f}`);
+  }
 });
 
 test('権限は allowlist と完全一致する（増えたら落ちる）', () => {
@@ -77,6 +92,8 @@ test('外部コードを読み込む書き方が無い', () => {
 test('配布物の一覧が固定されている', () => {
   assert.deepEqual(PACKAGE_FILES, [
     'manifest.json',
+    '_locales/en/messages.json',
+    '_locales/ja/messages.json',
     'icons/icon16.png',
     'icons/icon32.png',
     'icons/icon48.png',
@@ -91,8 +108,47 @@ test('配布物の一覧が固定されている', () => {
   }
 });
 
+test('言語ファイルの鍵がそろっていて、manifest の参照が解決する', () => {
+  const manifest2 = JSON.parse(readFileSync(join(ROOT, 'manifest.json'), 'utf8'));
+  assert.equal(manifest2.default_locale, 'en');
+
+  const locales = ['en', 'ja'];
+  const tables = {};
+  for (const loc of locales) {
+    tables[loc] = JSON.parse(readFileSync(join(ROOT, `_locales/${loc}/messages.json`), 'utf8'));
+  }
+  const base = Object.keys(tables[manifest2.default_locale]).sort();
+  assert.ok(base.length >= 5, `鍵が少なすぎる: ${base.length}`);
+  for (const loc of locales) {
+    assert.deepEqual(Object.keys(tables[loc]).sort(), base, `${loc} の鍵が既定と違う`);
+    for (const [k, v] of Object.entries(tables[loc])) {
+      assert.ok(v.message && v.message.trim(), `${loc}/${k} が空`);
+    }
+  }
+
+  // manifest 内の __MSG_x__ が既定の言語で解決すること
+  const refs = [...readFileSync(join(ROOT, 'manifest.json'), 'utf8').matchAll(/__MSG_([A-Za-z0-9_]+)__/g)]
+    .map((m) => m[1]);
+  assert.ok(refs.length >= 2, `__MSG__ 参照が少なすぎる: ${refs.length}`);
+  for (const r of refs) {
+    assert.ok(base.includes(r), `既定の言語に ${r} が無い`);
+  }
+});
+
+test('利用者に見える文字列をコードへ直書きしていない', () => {
+  const content = readFileSync(join(ROOT, 'src/content.js'), 'utf8');
+  const code = content.replace(/\/\*[\s\S]*?\*\//g, '').split('\n')
+    .filter((l) => !/^\s*\/\//.test(l)).join('\n');
+  // ボタンの title / aria-label / 表示文字は _locales から取る
+  for (const re of [/\.title\s*=\s*'[^']*[ぁ-んァ-ヶ一-龠]/, /aria-label',\s*'[^']*[ぁ-んァ-ヶ一-龠]/]) {
+    assert.ok(!re.test(code), '日本語の文字列が直書きされている');
+  }
+  assert.ok(/chrome\.i18n\.getMessage/.test(code), 'i18n を使っていない');
+});
+
 test('CIワークフローが供給網の最低条件を満たす', () => {
-  const wf = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+  // 改行はLFへ揃えてから見る（Windowsのチェックアウトで CRLF になっても判定を変えない）
+  const wf = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8').replace(/\r\n/g, '\n');
   const uses = [...wf.matchAll(/uses:\s*([^\s#]+)/g)].map((m) => m[1]);
   assert.ok(uses.length >= 3, `uses が少なすぎる: ${uses.length}`);
   for (const u of uses) {
@@ -103,6 +159,19 @@ test('CIワークフローが供給網の最低条件を満たす', () => {
   assert.match(wf, /timeout-minutes:\s*\d+/, 'timeout-minutes が無い');
   assert.ok(!/pull_request_target/.test(wf), 'pull_request_target は使わない');
   assert.ok(!/\$\{\{\s*secrets\./.test(wf), 'secret を参照している');
+});
+
+test('配布するファイルに CRLF が混ざっていない', () => {
+  /*
+   * 改行が混ざると、同じコミットでもOSによってZIPの中身が変わり、
+   * SHA-256 が一致しなくなる。.gitattributes でLFへ固定しているが、
+   * 効いていることをここで実測する。
+   */
+  for (const f of PACKAGE_FILES) {
+    if (f.endsWith('.png')) continue;
+    const body = readFileSync(join(ROOT, f), 'utf8');
+    assert.ok(!body.includes('\r'), `CRLF が混ざっている: ${f}`);
+  }
 });
 
 test('配布物にテスト・ストア素材・文書を含めない', () => {

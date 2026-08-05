@@ -15,9 +15,16 @@ const { GXS, FIX } = loadShare();
 /* 孤立サロゲート（絵文字が割れた跡）が残っていないか */
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])([\uDC00-\uDFFF])/;
 
-test('重み付き文字数が twitter-text v3 の定義と一致する', () => {
+test('重み付き文字数（URLを含まない文面の厳密値）', () => {
   for (const [label, input, want] of FIX.WEIGHT) {
     assert.equal(GXS.weightedLength(input), want, `${label} / 入力=${JSON.stringify(input)}`);
+  }
+});
+
+test('URLを含む文面は、公式が数える値を下回らない', () => {
+  for (const [label, input, atLeast] of FIX.WEIGHT_MIN) {
+    const got = GXS.weightedLength(input);
+    assert.ok(got >= atLeast, `${label}: ${got} < ${atLeast}`);
   }
 });
 
@@ -85,12 +92,44 @@ test('サフィックスだけで上限を超える異常時も壊れない', ()
 });
 
 test('スキーム無しドメインを少なく数えない（RA-001の回帰）', () => {
-  assert.equal(GXS.weightedLength('example.com'), 23);
-  assert.equal(GXS.weightedLength('a.co'), 23);
+  assert.ok(GXS.weightedLength('example.com') >= 23);
+  assert.ok(GXS.weightedLength('a.co') >= 23);
   const many = Array(50).fill('a.co').join(' ');
-  assert.equal(GXS.weightedLength(many), 50 * 23 + 49);
+  assert.ok(GXS.weightedLength(many) >= 50 * 23 + 49);
   const out = GXS.truncate(many);
   assert.ok(GXS.weightedLength(out) <= GXS.MAX_WEIGHT, `切り詰められていない: ${GXS.weightedLength(out)}`);
+});
+
+test('資格情報らしきハッシュを名前によらず落とす（T3-003の回帰）', () => {
+  const keys = ['client_secret', 'password', 'api_key', 'api-key', 'session_token',
+                'oauth_token', 'refresh_token', 'ACCESS_TOKEN', 'Code', 'x'];
+  for (const k of keys) {
+    for (const url of ['https://github.com/o/r/issues/12', 'https://github.com/o/r', 'https://github.com/o/r/blob/main/a.js']) {
+      const out = GXS.canonicalUrl(`${url}#${k}=secretvalue`, null);
+      assert.ok(!out.includes('#'), `残った: ${out}`);
+      assert.ok(!out.includes('secretvalue'), `値が残った: ${out}`);
+    }
+  }
+  // 対照: 普通のアンカーは残る（全部落としているだけではないこと）
+  for (const h of ['#readme', '#L10-L20', '#issuecomment-99', '#' + encodeURIComponent('日本語の見出し')]) {
+    assert.ok(GXS.canonicalUrl('https://github.com/o/r/issues/12' + h, null).endsWith(h), h);
+  }
+});
+
+test('エンコードされた機微パスを共有しない（T3-003の回帰）', () => {
+  const blocked = [
+    'https://github.com/%73ettings/tokens',
+    'https://github.com/%53ettings/tokens',
+    'https://github.com/o/r/%73ettings/secrets',
+    'https://github.com/o/r/settings%2Ftokens',
+    'https://github.com/orgs/acme/%73ettings/profile',
+    'https://github.com/o/r/%ZZ'
+  ];
+  for (const url of blocked) {
+    assert.equal(GXS.buildShare(url, 'T'), null, `共有できてしまう: ${url}`);
+    assert.equal(GXS.fallbackUrl(url), null, `フォールバックで漏れる: ${url}`);
+  }
+  assert.ok(GXS.buildShare('https://github.com/o/r/settings-like', 'T · GitHub'), '対照が落ちている');
 });
 
 test('機微なルートではクエリもハッシュも共有しない', () => {

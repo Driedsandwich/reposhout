@@ -7,6 +7,8 @@
  */
 export const PACKAGE_FILES = [
   'manifest.json',
+  '_locales/en/messages.json',
+  '_locales/ja/messages.json',
   'icons/icon16.png',
   'icons/icon32.png',
   'icons/icon48.png',

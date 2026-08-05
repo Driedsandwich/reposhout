@@ -1,0 +1,22 @@
+{
+  "actionTitle": {
+    "message": "RepoShout — share this GitHub page to X",
+    "description": "Tooltip on the toolbar icon."
+  },
+  "commandShareToX": {
+    "message": "Share the current GitHub page to X",
+    "description": "Shown on chrome://extensions/shortcuts."
+  },
+  "shareButtonLabel": {
+    "message": "Share",
+    "description": "Text on the button added to GitHub pages. Keep it short; it sits next to Fork and Star."
+  },
+  "shareButtonTooltip": {
+    "message": "Post this page to X",
+    "description": "Tooltip on the in-page Share button."
+  },
+  "shareButtonAria": {
+    "message": "Share on X",
+    "description": "Accessible name of the in-page Share button."
+  }
+}

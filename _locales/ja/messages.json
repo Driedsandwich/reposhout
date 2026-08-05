@@ -1,0 +1,22 @@
+{
+  "actionTitle": {
+    "message": "RepoShout — このGitHubページをXで共有する",
+    "description": "ツールバーアイコンのツールチップ。"
+  },
+  "commandShareToX": {
+    "message": "いま見ているGitHubページをXで共有する",
+    "description": "chrome://extensions/shortcuts に出る説明。"
+  },
+  "shareButtonLabel": {
+    "message": "Share",
+    "description": "GitHubの画面に足すボタンの文字。Fork や Star の隣に並ぶので短くする。"
+  },
+  "shareButtonTooltip": {
+    "message": "このページをXに投稿する",
+    "description": "画面内Shareボタンのツールチップ。"
+  },
+  "shareButtonAria": {
+    "message": "Share on X",
+    "description": "画面内Shareボタンの読み上げ名。"
+  }
+}

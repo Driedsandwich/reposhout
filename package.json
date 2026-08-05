@@ -1,6 +1,6 @@
 {
   "name": "reposhout",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "description": "Share GitHub repos, issues and PRs to X with a pre-filled post. Chrome extension, MIT.",
   "license": "MIT",
@@ -10,11 +10,13 @@
   },
   "scripts": {
     "test": "npm run test:unit && npm run test:e2e",
-    "test:unit": "node --test test/share.test.mjs test/esc-close.test.mjs test/manifest.test.mjs",
+    "test:unit": "node --test test/share.test.mjs test/esc-close.test.mjs test/manifest.test.mjs test/oracle.test.mjs test/docs.test.mjs",
     "test:e2e": "node --test test/extension.e2e.mjs",
     "package": "node scripts/package.mjs",
     "package:dry": "node scripts/package.mjs --dry-run"
   },
   "dependencies": {},
-  "devDependencies": {}
+  "devDependencies": {
+    "twitter-text": "3.1.0"
+  }
 }

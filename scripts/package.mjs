@@ -16,6 +16,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateRawSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { PACKAGE_FILES } from './package-files.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -118,7 +119,36 @@ export function makePackage({ dryRun = false } = {}) {
   const sha = createHash('sha256').update(zip).digest('hex');
   const outName = `reposhout-${manifest.version}.zip`;
 
+  /*
+   * どのコミットから作ったZIPなのかを一緒に残す。
+   * ZIP自体はこの情報を含まないので、ハッシュの決定論は壊れない。
+   */
+  const git = (args) => {
+    try {
+      return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
+    } catch (e) {
+      return null;
+    }
+  };
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const provenance = {
+    version: manifest.version,
+    sourceCommit: git(['rev-parse', 'HEAD']),
+    dirty: git(['status', '--porcelain']) !== '',
+    node: process.version,
+    generatedFrom: 'scripts/package.mjs',
+    files: entries.map((e) => ({
+      name: e.name,
+      bytes: e.data.length,
+      sha256: createHash('sha256').update(e.data).digest('hex')
+    })),
+    zip: { name: outName, bytes: zip.length, sha256: sha },
+    runtimeDependencies: pkg.dependencies || {},
+    testOnlyDependencies: pkg.devDependencies || {}
+  };
+
   const report = {
+    provenance: provenance,
     version: manifest.version,
     file: join('dist', outName),
     files: entries.map((e) => ({ name: e.name, bytes: e.data.length })),
@@ -132,6 +162,7 @@ export function makePackage({ dryRun = false } = {}) {
     mkdirSync(DIST, { recursive: true });
     writeFileSync(join(DIST, outName), zip);
     writeFileSync(join(DIST, `${outName}.sha256`), `${sha}  ${outName}\n`);
+    writeFileSync(join(DIST, 'release-manifest.json'), JSON.stringify(provenance, null, 2) + '\n');
     report.written = true;
   }
   return report;
@@ -145,5 +176,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log(`  ---`);
   console.log(`  ZIP: ${r.zipBytes} B  ${r.written ? r.file : '(未書き込み)'}`);
   console.log(`  SHA-256: ${r.sha256}`);
+  console.log(`  コミット: ${r.provenance.sourceCommit || '(不明)'}${r.provenance.dirty ? ' (未コミットの変更あり)' : ''}`);
   console.log(`  除外: test/ store/ scripts/ 文書 dist/（allowlist方式）`);
 }
