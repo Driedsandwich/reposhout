@@ -69,6 +69,7 @@ Changed your mind? Press Escape in the share window to dismiss it.
   tracking parameters are dropped. Line and comment anchors are kept
 • Character counting follows X's published rules, including Japanese, Chinese and
   Korean text, emoji and links, so a long title is trimmed to something X accepts
+• Issue and pull request numbers stay in the post even when the title is trimmed
 • Light and dark mode follow GitHub's own theme automatically
 • Press Escape in the share window to dismiss it if you change your mind
 

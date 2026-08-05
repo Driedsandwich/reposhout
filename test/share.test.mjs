@@ -63,7 +63,26 @@ test('認証・設定・管理画面は共有しない（RA-003の回帰）', ()
   }
 });
 
-test('スキーム無しドメインを少なく数えない（RA-001の回帰）', () => {
+test('固定サフィックスは可変タイトルより優先して残す（RA-004の回帰）', () => {
+  const cases = [
+    ['https://github.com/owner/repo/issues/123', 'A'.repeat(400) + ' · Issue #123 · owner/repo', '(Issue #123 · owner/repo)'],
+    ['https://github.com/owner/repo/pull/45', 'あ'.repeat(400) + ' by x · Pull Request #45 · owner/repo', '(PR #45 · owner/repo)'],
+    ['https://github.com/o/r/discussions/7', '\u{1F600}'.repeat(300) + ' · Discussion #7 · o/r', '(Discussion #7 · o/r)']
+  ];
+  for (const [url, title, suffix] of cases) {
+    const s = GXS.buildShare(url, title);
+    assert.ok(s.text.endsWith(suffix), `末尾にサフィックスが無い: ${JSON.stringify(s.text.slice(-40))}`);
+    assert.ok(s.text.includes('…'), '切り詰めの印が無い');
+    assert.ok(GXS.weightedLength(s.text) <= GXS.MAX_WEIGHT, `重み超過: ${GXS.weightedLength(s.text)}`);
+  }
+});
+
+test('サフィックスだけで上限を超える異常時も壊れない', () => {
+  const long = ' (Issue #1 · ' + 'x'.repeat(400) + '/y)';
+  const out = GXS.truncateWithSuffix('タイトル', long);
+  assert.ok(GXS.weightedLength(out) <= GXS.MAX_WEIGHT, `重み超過: ${GXS.weightedLength(out)}`);
+  assert.doesNotThrow(() => encodeURIComponent(out));
+});test('スキーム無しドメインを少なく数えない（RA-001の回帰）', () => {
   assert.equal(GXS.weightedLength('example.com'), 23);
   assert.equal(GXS.weightedLength('a.co'), 23);
   const many = Array(50).fill('a.co').join(' ');

@@ -272,7 +272,7 @@
   var ELLIPSIS = '…';
 
   /*
-   * 重み MAX_WEIGHT に収まるよう切り詰める。
+   * 重み budget に収まるところまで取り出す（末尾の「…」は付けない）。
    *
    * 切る単位は書記素（grapheme cluster）。コードポイント単位で切ると
    * 肌色つき絵文字やZWJ連結の途中で割れて、見た目が壊れた文字が残る。
@@ -282,12 +282,8 @@
    *
    * URLは23として数えるので、途中で切らず「丸ごと入るか入らないか」で扱う。
    */
-  function truncate(text) {
-    var s = normalizeNFC(text);
-    if (weightedLength(s) <= MAX_WEIGHT) return s;
-
-    var budget = MAX_WEIGHT - weightedLength(ELLIPSIS);
-    var parts = splitUrls(s);
+  function takeToWeight(text, budget) {
+    var parts = splitUrls(text);
     var acc = 0;
     var out = '';
 
@@ -312,7 +308,32 @@
         out += gs[g];
       }
     }
-    return out.replace(/\s+$/, '') + ELLIPSIS;
+    return out;
+  }
+
+  function truncate(text) {
+    var s = normalizeNFC(text);
+    if (weightedLength(s) <= MAX_WEIGHT) return s;
+    return takeToWeight(s, MAX_WEIGHT - weightedLength(ELLIPSIS)).replace(/\s+$/, '') + ELLIPSIS;
+  }
+
+  /*
+   * 可変のタイトルと、固定のサフィックス「 (Issue #123 · owner/repo)」を分けて扱う。
+   *
+   * 旧実装は連結してから末尾を切っていたので、長いタイトルでは
+   * 識別に最も効くサフィックス（種別・番号・リポジトリ名）が真っ先に消えていた
+   * （2026-08-05の再監査で再現）。サフィックスぶんを先に確保してから、
+   * 可変のタイトル側だけを削る。
+   */
+  function truncateWithSuffix(title, suffix) {
+    var t = normalizeNFC(title);
+    var sfx = normalizeNFC(suffix || '');
+    var sw = weightedLength(sfx);
+    if (weightedLength(t) + sw <= MAX_WEIGHT) return t + sfx;
+    // サフィックス単独で上限に達する異常時は、サフィックス側を優先して切り詰める
+    if (sw + weightedLength(ELLIPSIS) >= MAX_WEIGHT) return truncate(sfx.replace(/^\s+/, ''));
+    var budget = MAX_WEIGHT - sw - weightedLength(ELLIPSIS);
+    return takeToWeight(t, budget).replace(/\s+$/, '') + ELLIPSIS + sfx;
   }
 
   /* ============================================================
@@ -546,21 +567,20 @@
 
     var url = canonicalUrl(rawUrl, info);
     var title = cleanTitle(info.kind, rawTitle);
-    var text;
+    var suffix = '';
 
     if (info.kind === 'issue') {
-      text = title + ' (Issue #' + info.number + ' · ' + info.repo + ')';
+      suffix = ' (Issue #' + info.number + ' · ' + info.repo + ')';
     } else if (info.kind === 'pr') {
-      text = title + ' (PR #' + info.number + ' · ' + info.repo + ')';
+      suffix = ' (PR #' + info.number + ' · ' + info.repo + ')';
     } else if (info.kind === 'discussion') {
-      text = title + ' (Discussion #' + info.number + ' · ' + info.repo + ')';
-    } else {
-      text = title;
+      suffix = ' (Discussion #' + info.number + ' · ' + info.repo + ')';
     }
 
     // タイトルが取れなかった場合は repo 名、それも無ければURLで代替する
-    if (!text.trim()) text = info.repo || url;
-    text = truncate(text.trim());
+    var base = title.trim();
+    if (!base && !suffix) base = info.repo || url;
+    var text = base ? truncateWithSuffix(base, suffix) : truncate(suffix.trim());
 
     return {
       kind: info.kind,
@@ -579,6 +599,7 @@
     canonicalUrl: canonicalUrl,
     fallbackUrl: fallbackUrl,
     isSensitiveUrl: isSensitiveUrl,
+    truncateWithSuffix: truncateWithSuffix,
     intentUrlFor: intentUrlFor,
     routeOf: routeOf,
     weightedLength: weightedLength,

@@ -191,6 +191,18 @@
       { kind: 'repo', xTotalMax: 280 }],
     ['絵文字だけの長文でも壊れない',
       'https://github.com/foo/bar', 'GitHub - foo/bar: ' + '\u{1F600}'.repeat(200) + ' · GitHub',
+      { kind: 'repo', weightMax: 250, xTotalMax: 280 }],
+    ['長いIssueでも (Issue #N · owner/repo) が残る',
+      'https://github.com/owner/repo/issues/123', 'A'.repeat(300) + ' · Issue #123 · owner/repo',
+      { kind: 'issue', contains: '(Issue #123 · owner/repo)', weightMax: 250, xTotalMax: 280 }],
+    ['長いPRでも (PR #N · owner/repo) が残る',
+      'https://github.com/owner/repo/pull/45', 'あ'.repeat(300) + ' by octocat · Pull Request #45 · owner/repo',
+      { kind: 'pr', contains: '(PR #45 · owner/repo)', weightMax: 250, xTotalMax: 280 }],
+    ['長いDiscussionでも (Discussion #N · owner/repo) が残る',
+      'https://github.com/o/r/discussions/7', '\u{1F600}'.repeat(200) + ' · Discussion #7 · o/r',
+      { kind: 'discussion', contains: '(Discussion #7 · o/r)', weightMax: 250, xTotalMax: 280 }],
+    ['スキーム無しドメインだらけのタイトルでも280に収まる',
+      'https://github.com/foo/bar', 'GitHub - foo/bar: ' + Array(50).fill('a.co').join(' ') + ' · GitHub',
       { kind: 'repo', weightMax: 250, xTotalMax: 280 }]
   ];
 
