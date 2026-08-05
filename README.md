@@ -69,6 +69,8 @@ Reload any open GitHub tab afterwards — content scripts are injected at page l
 
 `chrome://extensions/shortcuts`.
 
+On Windows, <kbd>Alt</kbd>+<kbd>Shift</kbd> on its own is what Windows uses to cycle keyboard layouts. If you have more than one input language installed and the shortcut feels unreliable, reassign it there — <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> is usually free.
+
 ### Language
 
 The button, its tooltip and the toolbar icon follow your browser's language. English and Japanese ship in `_locales/`; any other language falls back to English. Nothing in the interface is hard-coded to one language — a test fails if it is.
