@@ -126,15 +126,65 @@
     'other': []
   };
 
-  /* ハッシュ自体が資格情報を運ぶ形（implicit OAuth 等）なら捨てる */
-  var SENSITIVE_HASH_RE = /(^|[#&])(access_token|id_token|token|code|state)=/i;
+  /*
+   * ハッシュ（fragment）の安全化。
+   *
+   * 以前は `access_token=` など決め打ちの名前だけを見ていたため、
+   * `#client_secret=` `#password=` `#api_key=` `#session_token=`
+   * `#oauth_token=` `#refresh_token=` が素通りしていた
+   * （2026-08-05の第3回監査で再現）。fragment は通常のHTTP要求では
+   * サーバーへ送られないが、この拡張はURL全体をXの投稿画面へ渡すので、
+   * 残せばそのまま第三者へ送られる。
+   *
+   * 名前を数え上げる代わりに、**`=` を含むfragmentを名前によらず捨てる**。
+   * GitHubが作る見出し・行番号・コメントのアンカー（#readme、#L10-L20、
+   * #issuecomment-123、日本語見出しのパーセントエンコード）に `=` は出てこない。
+   * クエリ側の資格情報判定より広く、取りこぼしが原理的に出ない。
+   *
+   * 長さの上限は旧実装の値をそのまま引き継ぐ（この時点では変えない）。
+   */
+  var FRAGMENT_MAX = 64;
+
+  function sanitizeFragment(hash) {
+    if (!hash) return '';
+    var raw = hash.charAt(0) === '#' ? hash.slice(1) : hash;
+    if (!raw) return '';
+    if (raw.length > FRAGMENT_MAX) return '';
+    if (/[\u0000-\u001F\u007F\s]/.test(raw)) return '';
+    var decoded;
+    try {
+      decoded = decodeURIComponent(raw);
+    } catch (e) {
+      return '';                                  // 壊れたエンコードは判定できない＝載せない
+    }
+    if (/[\u0000-\u001F\u007F]/.test(decoded)) return '';
+    if (raw.indexOf('=') !== -1 || decoded.indexOf('=') !== -1) return '';
+    return '#' + raw;
+  }
 
   /*
-   * リポジトリトップで残してよいハッシュ。READMEの見出しアンカー（#readme、
-   * #installation、日本語見出しのパーセントエンコード）を想定する。
-   * key=value の形や極端に長いものは残さない。
+   * パスのセグメントを、判定に使える形へ直す。
+   *
+   * ルート判定を生の文字列比較でやっていたため、`/%73ettings/tokens` が
+   * 設定ページと見なされず共有できてしまっていた（同監査で再現）。
+   * デコードしてから判定する。デコードできない・区切り文字や制御文字が
+   * 出てくる場合は判定不能として null を返し、呼び出し側で共有しない側へ倒す。
    */
-  var SAFE_SECTION_HASH_RE = /^#[A-Za-z0-9%][A-Za-z0-9._%-]{0,63}$/;
+  function pathSegments(u) {
+    var raw = u.pathname.split('/').filter(Boolean);
+    var out = [];
+    for (var i = 0; i < raw.length; i++) {
+      var d;
+      try {
+        d = decodeURIComponent(raw[i]);
+      } catch (e) {
+        return null;
+      }
+      if (/[\u0000-\u001F\u007F\/\\]/.test(d)) return null;
+      out.push(d);
+    }
+    return out;
+  }
 
   function inWeightOneRange(cp) {
     for (var i = 0; i < WEIGHT_ONE_RANGES.length; i++) {
@@ -393,7 +443,8 @@
     }
     if (u.protocol !== 'https:' || u.hostname !== 'github.com') return null;
 
-    var seg = u.pathname.split('/').filter(Boolean);
+    var seg = pathSegments(u);
+    if (!seg) return null;                       // 判定できないURLは共有対象にしない
     if (seg.length < 2) return { kind: 'other', repo: null, number: null };
     if (RESERVED_OWNERS.indexOf(seg[0].toLowerCase()) !== -1) {
       return { kind: 'other', repo: null, number: null };
@@ -417,7 +468,8 @@
    * 例: /o/r/issues は文面上は repo-sub だが、クエリ方針では issue-list。
    */
   function routeOf(u) {
-    var seg = u.pathname.split('/').filter(Boolean);
+    var seg = pathSegments(u);
+    if (!seg) return 'sensitive';                // 判定できない＝共有しない側へ倒す
     if (!seg.length) return 'root';
 
     var s0 = seg[0].toLowerCase();
@@ -521,11 +573,7 @@
       qs = '?' + sp.toString();
     }
 
-    var hash = u.hash || '';
-    if (route === 'root' || route === 'sensitive') hash = '';
-    // リポジトリトップは、READMEの節を指すハッシュだけ残す（?tab= 等のクエリは落とす）
-    if (route === 'repo' && !SAFE_SECTION_HASH_RE.test(hash)) hash = '';
-    if (hash && (SENSITIVE_HASH_RE.test(hash) || /%3D/i.test(hash))) hash = '';
+    var hash = (route === 'root' || route === 'sensitive') ? '' : sanitizeFragment(u.hash);
 
     return u.origin + path + qs + hash;
   }
@@ -644,6 +692,7 @@
     canonicalUrl: canonicalUrl,
     fallbackUrl: fallbackUrl,
     isSensitiveUrl: isSensitiveUrl,
+    sanitizeFragment: sanitizeFragment,
     truncateWithSuffix: truncateWithSuffix,
     intentUrlFor: intentUrlFor,
     routeOf: routeOf,

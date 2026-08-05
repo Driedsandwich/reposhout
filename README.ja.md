@@ -42,9 +42,9 @@ octocat/Hello-World: My first repository on GitHub!
 https://github.com/octocat/Hello-World
 ```
 
-認証・アカウント・設定・組織管理の画面では、そもそも共有しません。ボタンもショートカットも何も起きません。「Personal access tokens」のようなページは、タイトルもパスも投稿の下書きに入るべきものではないからです。
+認証・アカウント・設定・組織管理の画面では、そもそも共有しません。ボタンもショートカットも何も起きません。「Personal access tokens」のようなページは、タイトルもパスも投稿の下書きに入るべきものではないからです。パスはデコードしてから判定するので、`/%73ettings/tokens` のような書き方も同じく拒否します。デコードできないURLは、推測せずに共有しません。
 
-共有する側のページでは、クエリはページの種類ごとに扱いを変えます。意味を持つものは残します——`/issues?q=…` の絞り込み、Markdownの `?plain=1`、下書き中のプルリクエストの `quick_pull`/`title`/`body`、差分表示の `?diff=split&w=1`、GitHub検索の `?q=…&type=…` などです。そのページの一覧に無いものはすべて落とすので、`?tab=readme-ov-file`・`notification_referrer_id`・`utm_*` は消えます。ログイン・アカウント・設定系のURLではクエリもハッシュも丸ごと落とすため、OAuthの `client_id`/`state` やURLに載ったトークンが投稿の下書きへ入ることはありません。行番号アンカー（`#L10-L20`）・コメントアンカー・READMEの節アンカー（`#readme`）は、共有したい位置そのものなので残します。`key=value` の形をしたものは残しません。
+共有する側のページでは、クエリはページの種類ごとに扱いを変えます。意味を持つものは残します——`/issues?q=…` の絞り込み、Markdownの `?plain=1`、下書き中のプルリクエストの `quick_pull`/`title`/`body`、差分表示の `?diff=split&w=1`、GitHub検索の `?q=…&type=…` などです。そのページの一覧に無いものはすべて落とすので、`?tab=readme-ov-file`・`notification_referrer_id`・`utm_*` は消えます。ログイン・アカウント・設定系のURLではクエリもハッシュも丸ごと落とすため、OAuthの `client_id`/`state` やURLに載ったトークンが投稿の下書きへ入ることはありません。行番号アンカー（`#L10-L20`）・コメントアンカー・READMEの節アンカーは、共有したい位置そのものなので残します。日本語の見出しはパーセントエンコードで100文字を超えますが、それも残します。一方、`=` を含むハッシュは名前によらず落とします——`#access_token=` も `#client_secret=` も `#api_key=` も、名前を数え上げずに一括で落ちます。壊れたエンコード・制御文字・512文字超も同様です。
 
 方針の正本は [`src/share.js`](src/share.js) の `QUERY_ALLOW` 表で、全項目を [`test/fixtures.js`](test/fixtures.js) で検査しています。
 
