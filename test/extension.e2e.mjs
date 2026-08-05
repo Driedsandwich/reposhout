@@ -13,7 +13,10 @@
  */
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { launchChrome, startTestServer, stageExtension, waitFor, sleep } from './helpers/chrome.mjs';
+import { ROOT } from './helpers/load.mjs';
 
 const INTENT = 'https://x.com/intent/post?text=hello&url=https%3A%2F%2Fgithub.com%2Fo%2Fr';
 
@@ -222,6 +225,31 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
         { expression: '!!document.getElementById("gxs-share-btn")', returnByValue: true }, sessionId);
       return r.result.value === true;
     });
+
+    /*
+     * 表示文字が、ブラウザの表示言語に対応する言語ファイルと一致すること。
+     *
+     * 「英語で出るか」を直接書くと、テストを走らせた端末の言語で結果が変わる
+     * （macOS では --lang=en-US を渡しても拡張の言語はシステム側が決めた・実測）。
+     * 言語を固定する代わりに「選ばれた言語の表と一致するか」を見る。
+     * ツールチップを日本語で直書きしていた状態は、英語環境で必ず落ちる。
+     */
+    const shownRes = await cdp.send('Runtime.evaluate', {
+      expression: `(() => { const b = document.getElementById('gxs-share-btn');
+        return JSON.stringify({ text: b.textContent.trim(), title: b.title,
+                                aria: b.getAttribute('aria-label') }); })()`,
+      returnByValue: true
+    }, sessionId);
+    const shown = JSON.parse(shownRes.result.value);
+    // chrome.i18n はページ側の世界に無いので、表示言語は service worker から取る
+    const ui = await evalInSw('chrome.i18n.getUILanguage()');
+    const locale = String(ui).toLowerCase().startsWith('ja') ? 'ja' : 'en';
+    const messages = JSON.parse(readFileSync(join(ROOT, `_locales/${locale}/messages.json`), 'utf8'));
+    assert.equal(shown.text, messages.shareButtonLabel.message, JSON.stringify(shown));
+    assert.equal(shown.title, messages.shareButtonTooltip.message, JSON.stringify(shown));
+    assert.equal(shown.aria, messages.shareButtonAria.message, JSON.stringify(shown));
+    // 表示言語が英語なら、英語の文字列で出ていることまで言える
+    if (locale === 'en') assert.equal(shown.title, 'Post this page to X');
 
     await cdp.send('Runtime.evaluate',
       { expression: 'document.getElementById("gxs-share-btn").click()', userGesture: true }, sessionId);

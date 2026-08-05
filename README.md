@@ -69,6 +69,10 @@ Reload any open GitHub tab afterwards — content scripts are injected at page l
 
 `chrome://extensions/shortcuts`.
 
+### Language
+
+The button, its tooltip and the toolbar icon follow your browser's language. English and Japanese ship in `_locales/`; any other language falls back to English. Nothing in the interface is hard-coded to one language — a test fails if it is.
+
 ## Related work
 
 This is not the first attempt at the idea, and it is worth being straight about that.

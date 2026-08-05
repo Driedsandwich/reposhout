@@ -161,6 +161,8 @@ export async function launchChrome({ port, extraArgs = [] } = {}) {
     '--no-default-browser-check',
     '--disable-popup-blocking',
     '--ignore-certificate-errors',
+    // 表示言語を固定する。実行環境の言語で結果が変わると、i18n の検査が意味を失う
+    '--lang=en-US',
     '--remote-debugging-pipe',
     '--enable-unsafe-extension-debugging',
     `--user-data-dir=${profile}`,
