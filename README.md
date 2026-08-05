@@ -145,7 +145,7 @@ Requirements: Node 22+, Chrome or Chromium (found via `CHROME_PATH` or the usual
 
 | Suite | Command | What it covers |
 |---|---|---|
-| Unit + conformance | `npm run test:unit` | 35 tests over 103 hand-written fixtures: character weight against the twitter-text v3 definition, the per-route URL policy, title parsing, truncation safety across 301 emoji positions |
+| Unit + conformance | `npm run test:unit` | 40 tests over 129 hand-written fixtures: character weight against X's rules, the per-route URL policy, refusal of sensitive routes, suffix preservation, title parsing, truncation safety across 301 emoji positions |
 | Manifest and package | included above | Manifest V3 validity, the permission list (the test fails if a permission is added), no remote-code patterns, the exact list of shipped files |
 | Real-extension E2E | `npm run test:e2e` | 10 tests. Loads the nine shipped files into real Chrome via `Extensions.loadUnpacked`, with `x.com` and `github.com` mapped to a local HTTPS server, and drives the real service worker |
 | Browser runner | open `test/share.test.html` | The same fixtures, rendered as a table — useful for reading the actual output |
@@ -161,7 +161,7 @@ The E2E is the one that matters for the Escape behaviour, because that behaviour
 | Shift+Esc | does not close |
 | After the window is closed, its ID is forgotten | not reusable |
 
-Measured 2026-08-05: unit 35 passed / 0 failed, E2E 10 passed / 0 failed, browser runner 195 checks / 0 failed. Both Escape cases were also run against the 1.0.1 implementations to confirm they fail there — a test that cannot fail proves nothing.
+Measured 2026-08-05: unit 40 passed / 0 failed, E2E 10 passed / 0 failed. Both Escape cases were also run against the 1.0.1 implementations to confirm they fail there — a test that cannot fail proves nothing.
 
 ## Verification status
 
@@ -207,6 +207,8 @@ A second review of the published 1.0.1 raised four findings. Each was reproduced
 - **Pages other than repositories, issues and pull requests have no in-page button** when signed in — Actions runs, file views, notifications and settings have no action row the button belongs in. The toolbar icon and shortcut cover them.
 - **Open / Merged / Closed state is not included in the post text.** The value read for the same pull request differed between signed-in and signed-out pages during testing, so it is omitted rather than risk publishing something false.
 - `github.com` only. GitHub Enterprise and Gist are out of scope.
+- **The extension cannot tell a private repository from a public one by its URL.** It refuses GitHub's authentication and settings pages, but on an ordinary repository page it is your call whether the title and URL should reach X.
+- Character counting is not the official `twitter-text` parser. See the note under *Related work*.
 - Behaviour after any future GitHub redesign cannot be verified in advance.
 
 ## License

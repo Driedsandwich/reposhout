@@ -1,6 +1,6 @@
 # Chrome ウェブストア 提出手順書
 
-更新: 2026-08-05 / 対象: RepoShout **1.1.0**（未提出。ストアで公開中なのは 1.0.1・2026-08-03通過）
+更新: 2026-08-05 / 対象: RepoShout **1.1.1**（未提出。ストアで公開中なのは 1.0.1・2026-08-03通過。1.1.0 はタグのみで提出していない）
 **この文書は原稿と手順です。提出（Submit for review）はあなたが実行します。**
 初回提出と更新提出の両方でこの文書を使います。更新のときは §1 のアップロードと、変えた機能に関わる §2 の掲載文だけを直せば足ります。
 
@@ -25,16 +25,16 @@
 **「新しいアイテムを追加」→ ZIPをドラッグ**
 
 ```
-dist/reposhout-1.1.0.zip
+dist/reposhout-1.1.1.zip
 ```
 
-同梱物は13ファイル。`store/` と `test/` は動作に不要なので除外済みです。
+同梱物は9ファイル（`npm run package` の出力に一覧が出ます）。`store/` `test/` `scripts/` `.github/` と文書は動作に不要なので、収録一覧（allowlist）に入れていません。
 アップロード後、名前は `manifest.json` から自動で入ります（入力欄はありません）。
 
 | 自動で入る値 | 内容 |
 |---|---|
 | Name | `RepoShout — Share GitHub repos, issues & PRs to X`（49文字 / 上限75） |
-| Version | `1.1.0`（manifest の値。前回より大きくないと弾かれます） |
+| Version | `1.1.1`（manifest の値。前回より大きくないと弾かれます） |
 | Short description | 下の §2 と同一（manifest の `description`・117文字 / 上限132） |
 
 ---
@@ -66,7 +66,7 @@ Changed your mind? Press Escape in the share window to dismiss it.
 • Authentication, account, settings and organisation admin pages are never shared
 • Query strings are handled per page type: filters on issue lists, ?plain=1 on a
   Markdown file and a prepared pull request's title and body are kept, while
-  tracking parameters are dropped. Line and comment anchors are kept
+  tracking parameters are dropped. Line, comment and README section anchors are kept
 • Character counting follows X's published rules, including Japanese, Chinese and
   Korean text, emoji and links, so a long title is trimmed to something X accepts
 • Issue and pull request numbers stay in the post even when the title is trimmed
