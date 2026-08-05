@@ -29,7 +29,37 @@ test('URLの正規化がページ種別ごとの方針どおり', () => {
 
 test('フォールバック経路も同じURL方針を使う', () => {
   for (const [label, input, want] of FIX.URLS) {
-    assert.equal(GXS.fallbackUrl(input), want, `フォールバック: ${label}`);
+    // 機微ルートは共有そのものをしないので null になる
+    const expected = GXS.isSensitiveUrl(input) ? null : want;
+    assert.equal(GXS.fallbackUrl(input), expected, `フォールバック: ${label}`);
+  }
+});
+
+test('認証・設定・管理画面は共有しない（RA-003の回帰）', () => {
+  const blocked = [
+    'https://github.com/settings/tokens?token=ghp_x',
+    'https://github.com/settings/profile',
+    'https://github.com/login/oauth/authorize?client_id=a&state=b',
+    'https://github.com/sessions/two-factor',
+    'https://github.com/o/r/settings/secrets/actions',
+    'https://github.com/o/r/settings/keys',
+    'https://github.com/orgs/acme/settings/profile',
+    'https://github.com/orgs/acme/billing',
+    'https://github.com/orgs/acme/people',
+    'https://github.com/enterprises/e/settings/profile',
+    'https://github.com/organizations/acme/settings/profile',
+    'https://github.com/account/billing'
+  ];
+  for (const url of blocked) {
+    assert.equal(GXS.isSensitiveUrl(url), true, `機微と判定されない: ${url}`);
+    assert.equal(GXS.buildShare(url, 'Personal access tokens'), null, `共有されてしまう: ${url}`);
+    assert.equal(GXS.fallbackUrl(url), null, `フォールバックで漏れる: ${url}`);
+  }
+  // 対照: 通常のページは共有できる（検査が全部nullを返しているだけではないこと）
+  for (const url of ['https://github.com/o/r', 'https://github.com/o/r/issues/1', 'https://github.com/o/r/settings-like']) {
+    assert.equal(GXS.isSensitiveUrl(url), false, url);
+    assert.ok(GXS.buildShare(url, 'T · GitHub'), url);
+    assert.ok(GXS.fallbackUrl(url), url);
   }
 });
 

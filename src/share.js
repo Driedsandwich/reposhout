@@ -68,7 +68,14 @@
   var SENSITIVE_FIRST_SEGMENTS = [
     'login', 'logout', 'session', 'sessions', 'settings', 'account', 'user',
     'signup', 'join', 'password_reset', 'auth', 'oauth', 'authorize', 'devices',
-    'sudo', 'two_factor', 'verify', 'billing'
+    'sudo', 'two_factor', 'verify', 'billing', 'organizations', 'enterprises',
+    'invitations', 'account_verifications', 'password', 'security'
+  ];
+
+  /* /orgs/<org>/... のうち管理系。組織トップやDiscussionは対象外 */
+  var SENSITIVE_ORG_SECTIONS = [
+    'settings', 'billing', 'security', 'people', 'teams', 'sso', 'saml',
+    'audit-log', 'secrets', 'security-analysis', 'oauth_application_policy'
   ];
 
   /*
@@ -351,6 +358,9 @@
 
     var s0 = seg[0].toLowerCase();
     if (SENSITIVE_FIRST_SEGMENTS.indexOf(s0) !== -1) return 'sensitive';
+    // /orgs/<org>/settings のような組織の管理画面
+    if (s0 === 'orgs' && seg.length >= 3 &&
+        SENSITIVE_ORG_SECTIONS.indexOf(seg[2].toLowerCase()) !== -1) return 'sensitive';
     if (s0 === 'search') return 'search';
     if (seg.length === 1) return RESERVED_OWNERS.indexOf(s0) !== -1 ? 'other' : 'user';
     if (RESERVED_OWNERS.indexOf(s0) !== -1) return 'other';
@@ -373,6 +383,25 @@
     if (s2 === 'releases' || s2 === 'tags') return 'releases';
     if (s2 === 'wiki') return 'wiki';
     return 'repo-sub';
+  }
+
+  /*
+   * 認証・設定・管理画面かどうか。
+   *
+   * これらのページはクエリを落としてもタイトルとパスが残り、
+   * 「Personal access tokens」「Actions secrets」といった文字列を
+   * Xの下書きへ送ることになる。共有機能の通常の目的から外れるので、
+   * 何も開かない（＝判断がつかないときは共有しない側へ倒す）。
+   */
+  function isSensitiveUrl(rawUrl) {
+    var u;
+    try {
+      u = new URL(rawUrl);
+    } catch (e) {
+      return false;
+    }
+    if (u.protocol !== 'https:' || u.hostname !== 'github.com') return false;
+    return routeOf(u) === 'sensitive';
   }
 
   function keepParam(route, name) {
@@ -441,6 +470,7 @@
    * ここで split('?')[0] のような独自処理を書くと方針が二重化するので書かない。
    */
   function fallbackUrl(rawUrl) {
+    if (isSensitiveUrl(rawUrl)) return null;   // 例外時の逃げ道から機微ページが漏れないようにする
     try {
       return canonicalUrl(rawUrl, null);
     } catch (e) {
@@ -512,6 +542,7 @@
   function buildShare(rawUrl, rawTitle) {
     var info = parseLocation(rawUrl);
     if (!info) return null;
+    if (isSensitiveUrl(rawUrl)) return null;   // 認証・設定・管理画面は共有しない
 
     var url = canonicalUrl(rawUrl, info);
     var title = cleanTitle(info.kind, rawTitle);
@@ -547,6 +578,7 @@
     cleanTitle: cleanTitle,
     canonicalUrl: canonicalUrl,
     fallbackUrl: fallbackUrl,
+    isSensitiveUrl: isSensitiveUrl,
     intentUrlFor: intentUrlFor,
     routeOf: routeOf,
     weightedLength: weightedLength,

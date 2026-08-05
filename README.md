@@ -42,7 +42,9 @@ octocat/Hello-World: My first repository on GitHub!
 https://github.com/octocat/Hello-World
 ```
 
-Query strings are handled per route, not stripped wholesale. Parameters that carry meaning are kept — the filter on `/issues?q=…`, `?plain=1` on a Markdown file, the `quick_pull`/`title`/`body` of a prepared pull request, `?diff=split&w=1` on a diff, `?q=…&type=…` on GitHub search. Anything not on that route's list is dropped, which covers `?tab=readme-ov-file`, `notification_referrer_id` and `utm_*`. On authentication, account and settings routes the query and the fragment are both dropped, so an OAuth `client_id`/`state` or a token in a URL can never reach a draft post. Line anchors (`#L10-L20`) and comment anchors are kept, because those are usually the point of sharing.
+Authentication, account, settings and organisation-administration pages are not shared at all — the button and the shortcut simply do nothing there, because a page like *Personal access tokens* has a title and a path that have no business in a draft post.
+
+Query strings on the pages that *are* shared are handled per route, not stripped wholesale. Parameters that carry meaning are kept — the filter on `/issues?q=…`, `?plain=1` on a Markdown file, the `quick_pull`/`title`/`body` of a prepared pull request, `?diff=split&w=1` on a diff, `?q=…&type=…` on GitHub search. Anything not on that route's list is dropped, which covers `?tab=readme-ov-file`, `notification_referrer_id` and `utm_*`. On authentication, account and settings routes the query and the fragment are both dropped, so an OAuth `client_id`/`state` or a token in a URL can never reach a draft post. Line anchors (`#L10-L20`) and comment anchors are kept, because those are usually the point of sharing.
 
 The full policy is the `QUERY_ALLOW` table in [`src/share.js`](src/share.js), and every row of it is covered by [`test/fixtures.js`](test/fixtures.js).
 

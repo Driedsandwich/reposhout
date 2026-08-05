@@ -63,6 +63,7 @@ Changed your mind? Press Escape in the share window to dismiss it.
     Repository   →  owner/repo: description
     Issue        →  Title (Issue #123 · owner/repo)
     Pull request →  Title (PR #123 · owner/repo)
+• Authentication, account, settings and organisation admin pages are never shared
 • Query strings are handled per page type: filters on issue lists, ?plain=1 on a
   Markdown file and a prepared pull request's title and body are kept, while
   tracking parameters are dropped. Line and comment anchors are kept

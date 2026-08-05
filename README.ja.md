@@ -42,7 +42,9 @@ octocat/Hello-World: My first repository on GitHub!
 https://github.com/octocat/Hello-World
 ```
 
-クエリはページの種類ごとに扱いを変えます。意味を持つものは残します——`/issues?q=…` の絞り込み、Markdownの `?plain=1`、下書き中のプルリクエストの `quick_pull`/`title`/`body`、差分表示の `?diff=split&w=1`、GitHub検索の `?q=…&type=…` などです。そのページの一覧に無いものはすべて落とすので、`?tab=readme-ov-file`・`notification_referrer_id`・`utm_*` は消えます。ログイン・アカウント・設定系のURLではクエリもハッシュも丸ごと落とすため、OAuthの `client_id`/`state` やURLに載ったトークンが投稿の下書きへ入ることはありません。行番号アンカー（`#L10-L20`）やコメントアンカーは、共有したい情報そのものなので残します。
+認証・アカウント・設定・組織管理の画面では、そもそも共有しません。ボタンもショートカットも何も起きません。「Personal access tokens」のようなページは、タイトルもパスも投稿の下書きに入るべきものではないからです。
+
+共有する側のページでは、クエリはページの種類ごとに扱いを変えます。意味を持つものは残します——`/issues?q=…` の絞り込み、Markdownの `?plain=1`、下書き中のプルリクエストの `quick_pull`/`title`/`body`、差分表示の `?diff=split&w=1`、GitHub検索の `?q=…&type=…` などです。そのページの一覧に無いものはすべて落とすので、`?tab=readme-ov-file`・`notification_referrer_id`・`utm_*` は消えます。ログイン・アカウント・設定系のURLではクエリもハッシュも丸ごと落とすため、OAuthの `client_id`/`state` やURLに載ったトークンが投稿の下書きへ入ることはありません。行番号アンカー（`#L10-L20`）やコメントアンカーは、共有したい情報そのものなので残します。
 
 方針の正本は [`src/share.js`](src/share.js) の `QUERY_ALLOW` 表で、全項目を [`test/fixtures.js`](test/fixtures.js) で検査しています。
 
