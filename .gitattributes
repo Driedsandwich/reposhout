@@ -1,0 +1,11 @@
+# 改行はどのOSでもLFで取り出す。
+#
+# Windows の既定（autocrlf）だとチェックアウト時にCRLFへ変換され、
+#  - YAML や文書を行単位で検査するテストが落ちる
+#  - **配布ZIPの中身が変わり、SHA-256が他OSと一致しなくなる**
+# 決定論的なパッケージを名乗る以上、ここは固定する。
+* text=auto eol=lf
+
+*.png binary
+*.zip binary
+*.crx binary

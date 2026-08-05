@@ -34,7 +34,8 @@ const FORBIDDEN = [
   'どこにも送信しません'
 ];
 
-const read = (f) => readFileSync(join(ROOT, f), 'utf8');
+/* 改行はLFへ揃えてから見る（Windowsのチェックアウトで CRLF になっても判定を変えない） */
+const read = (f) => readFileSync(join(ROOT, f), 'utf8').replace(/\r\n/g, '\n');
 
 test('利用者が読む文書に、実挙動と食い違う言い回しが残っていない', () => {
   for (const f of USER_FACING) {

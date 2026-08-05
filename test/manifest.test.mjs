@@ -147,7 +147,8 @@ test('利用者に見える文字列をコードへ直書きしていない', ()
 });
 
 test('CIワークフローが供給網の最低条件を満たす', () => {
-  const wf = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+  // 改行はLFへ揃えてから見る（Windowsのチェックアウトで CRLF になっても判定を変えない）
+  const wf = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8').replace(/\r\n/g, '\n');
   const uses = [...wf.matchAll(/uses:\s*([^\s#]+)/g)].map((m) => m[1]);
   assert.ok(uses.length >= 3, `uses が少なすぎる: ${uses.length}`);
   for (const u of uses) {
@@ -158,6 +159,19 @@ test('CIワークフローが供給網の最低条件を満たす', () => {
   assert.match(wf, /timeout-minutes:\s*\d+/, 'timeout-minutes が無い');
   assert.ok(!/pull_request_target/.test(wf), 'pull_request_target は使わない');
   assert.ok(!/\$\{\{\s*secrets\./.test(wf), 'secret を参照している');
+});
+
+test('配布するファイルに CRLF が混ざっていない', () => {
+  /*
+   * 改行が混ざると、同じコミットでもOSによってZIPの中身が変わり、
+   * SHA-256 が一致しなくなる。.gitattributes でLFへ固定しているが、
+   * 効いていることをここで実測する。
+   */
+  for (const f of PACKAGE_FILES) {
+    if (f.endsWith('.png')) continue;
+    const body = readFileSync(join(ROOT, f), 'utf8');
+    assert.ok(!body.includes('\r'), `CRLF が混ざっている: ${f}`);
+  }
 });
 
 test('配布物にテスト・ストア素材・文書を含めない', () => {
