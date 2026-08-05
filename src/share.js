@@ -129,6 +129,13 @@
   /* ハッシュ自体が資格情報を運ぶ形（implicit OAuth 等）なら捨てる */
   var SENSITIVE_HASH_RE = /(^|[#&])(access_token|id_token|token|code|state)=/i;
 
+  /*
+   * リポジトリトップで残してよいハッシュ。READMEの見出しアンカー（#readme、
+   * #installation、日本語見出しのパーセントエンコード）を想定する。
+   * key=value の形や極端に長いものは残さない。
+   */
+  var SAFE_SECTION_HASH_RE = /^#[A-Za-z0-9%][A-Za-z0-9._%-]{0,63}$/;
+
   function inWeightOneRange(cp) {
     for (var i = 0; i < WEIGHT_ONE_RANGES.length; i++) {
       if (cp >= WEIGHT_ONE_RANGES[i][0] && cp <= WEIGHT_ONE_RANGES[i][1]) return true;
@@ -479,8 +486,10 @@
     }
 
     var hash = u.hash || '';
-    if (route === 'repo' || route === 'root' || route === 'sensitive') hash = '';
-    if (hash && SENSITIVE_HASH_RE.test(hash)) hash = '';
+    if (route === 'root' || route === 'sensitive') hash = '';
+    // リポジトリトップは、READMEの節を指すハッシュだけ残す（?tab= 等のクエリは落とす）
+    if (route === 'repo' && !SAFE_SECTION_HASH_RE.test(hash)) hash = '';
+    if (hash && (SENSITIVE_HASH_RE.test(hash) || /%3D/i.test(hash))) hash = '';
 
     return u.origin + path + qs + hash;
   }
