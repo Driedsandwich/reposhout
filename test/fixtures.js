@@ -50,7 +50,19 @@
     ['長いURL（23固定）', 'https://github.com/octocat/Hello-World/blob/main/very/long/path/file.md', 23],
     ['本文にURLが混ざる（4+23+4）', 'see https://github.com/a/b now', 31],
     ['www始まりもURL', 'www.example.com', 23],
-    ['日本語200文字（全部重み2）', '日'.repeat(200), 400]
+    ['日本語200文字（全部重み2）', '日'.repeat(200), 400],
+    ['スキーム無しドメインもURL（23）', 'example.com', 23],
+    ['短いドメインも23', 'a.co', 23],
+    ['多階層TLDも23', 'foo.co.jp', 23],
+    ['README.md もURL扱い（.md は実在のccTLD）', 'README.md', 23],
+    ['index.js は公式なら8だが、少なく数えないため23', 'index.js', 23],
+    ['バージョン番号はURLではない', 'Ver.1.2.3', 9],
+    ['「e.g.」はURLではない', 'e.g.', 4],
+    ['「1.5倍」はURLではない', '1.5倍', 5],
+    ['メール形式も多めに数える（安全側）', 'a@example.com', 23],
+    ['BMPベース＋肌色修飾子', '\u270A\u{1F3FD}', 2],
+    ['同上・別のベース', '\u261D\u{1F3FD}', 2],
+    ['a.co を50個（23×50 + 空白49）', Array(50).fill('a.co').join(' '), 1199]
   ];
 
   /* ---- URL正規化 ---- */

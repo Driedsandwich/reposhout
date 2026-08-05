@@ -157,7 +157,21 @@
     if (cps.indexOf(KEYCAP) !== -1) return true;
     if (cps.length >= 2 && cps[0] >= RI_START && cps[0] <= RI_END) return true;
     for (var i = 0; i < cps.length; i++) {
-      if (cps[i] > 0xFFFF && EXTENDED_PICTOGRAPHIC.test(String.fromCodePoint(cps[i]))) return true;
+      var cp = cps[i];
+      /*
+       * BMP内の絵文字も見る。以前は `cp > 0xFFFF` を条件にしていたため、
+       * ✊🏽（U+270A + 肌色修飾子）や ☝🏽 を「絵文字ではない2文字」として
+       * 4と数えていた（2026-08-05の再監査で再現）。
+       *
+       * 肌色修飾子そのものを条件に足すことも考えたが、ベース側が
+       * Extended_Pictographic なので結果が変わらない（＝死にコードになる）。
+       * 変異テストで検出できなかったので置いていない。
+       */
+      if (EXTENDED_PICTOGRAPHIC.test(String.fromCodePoint(cp))) {
+        // © のように単独では文字として表示されるものは、重み1のまま
+        if (cps.length === 1 && inWeightOneRange(cp)) return false;
+        return true;
+      }
     }
     return false;
   }
@@ -190,29 +204,37 @@
   }
 
   /*
-   * 本文中のURLを取り出す。twitter-text はURLを t.co 長（23）に置き換えて数えるため、
-   * 長いURLでも短いURLでも一律23になる。
-   * GitHubのタイトル・説明が対象なので、スキーム付きと www. 始まりだけを見る。
+   * 本文中の「URLとして数えるべきトークン」を切り出す。
+   * Xは長さによらずURLを23として数えるので、ここも23で数える。
+   *
+   * ⚠️ スキームの無いドメインもXはリンクとして扱う。
+   * 旧実装は http(s):// と www. だけを見ていたため、`a.co` を50個並べた文面を
+   * 249と数えて切り詰めず、X側では1199相当になって投稿できなかった
+   * （2026-08-05の再監査で再現）。
+   *
+   * 有効なTLDの一覧は持たない。「ドットを含み、最後がアルファベット2文字以上」なら
+   * すべてURLとして数える。公式より**多めに数えることはあっても、少なく数えない**。
+   * 少なく数える方向だけが「Xに弾かれる文面を作る」事故につながるため。
+   * 例: `index.js` は公式なら8だがここでは23。切り詰めが少し早まるだけで害はない。
    */
-  var URL_IN_TEXT_RE = /(https?:\/\/[^\s<>"'）」]+)|((?:^|[\s(（])www\.[^\s<>"'）」]+)/gi;
+  var URL_TOKEN_RE = /^(?:https?:\/\/)?[^\s.@][^\s]*\.[A-Za-z]{2,}(?:[:\/?#][^\s]*)?$/;
+  var LEADING_PUNCT_RE = /^[([<「（【“"'‘]*/;
+  var TRAILING_PUNCT_RE = /[)\]>」）】”"'’.,;:!?、。…]+$/;
 
   function splitUrls(text) {
     var parts = [];
     var last = 0;
+    var re = /\S+/g;
     var m;
-    URL_IN_TEXT_RE.lastIndex = 0;
-    while ((m = URL_IN_TEXT_RE.exec(text)) !== null) {
+    while ((m = re.exec(text)) !== null) {
       var raw = m[0];
-      var offset = m.index;
-      // www. 側は直前の空白/括弧を含めて拾っているので、URL本体まで進める
-      var lead = raw.search(/https?:\/\/|www\./i);
-      if (lead > 0) {
-        offset += lead;
-        raw = raw.slice(lead);
-      }
-      if (offset > last) parts.push({ type: 'text', value: text.slice(last, offset) });
-      parts.push({ type: 'url', value: raw });
-      last = offset + raw.length;
+      var lead = raw.match(LEADING_PUNCT_RE)[0].length;
+      var core = raw.slice(lead).replace(TRAILING_PUNCT_RE, '');
+      if (!core || !URL_TOKEN_RE.test(core)) continue;
+      var start = m.index + lead;
+      if (start > last) parts.push({ type: 'text', value: text.slice(last, start) });
+      parts.push({ type: 'url', value: core });
+      last = start + core.length;
     }
     if (last < text.length) parts.push({ type: 'text', value: text.slice(last) });
     return parts;

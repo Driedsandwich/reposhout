@@ -33,6 +33,15 @@ test('フォールバック経路も同じURL方針を使う', () => {
   }
 });
 
+test('スキーム無しドメインを少なく数えない（RA-001の回帰）', () => {
+  assert.equal(GXS.weightedLength('example.com'), 23);
+  assert.equal(GXS.weightedLength('a.co'), 23);
+  const many = Array(50).fill('a.co').join(' ');
+  assert.equal(GXS.weightedLength(many), 50 * 23 + 49);
+  const out = GXS.truncate(many);
+  assert.ok(GXS.weightedLength(out) <= GXS.MAX_WEIGHT, `切り詰められていない: ${GXS.weightedLength(out)}`);
+});
+
 test('機微なルートではクエリもハッシュも共有しない', () => {
   const sensitive = [
     'https://github.com/settings/tokens?token=ghp_x#t=1',
