@@ -100,7 +100,7 @@ RepoShout requests two API permissions.
 | `activeTab` | Read the URL and title of the tab you are on. Per Chrome's design it is granted only at the moment you explicitly invoke the extension (toolbar click or keyboard shortcut) and only for that tab. It does not allow background monitoring of browsing. |
 | `storage` | Remember which window the extension itself opened, so Esc closes that window and nothing else. Written to `chrome.storage.session`, which lives in memory, is cleared when you quit the browser, is never written to disk, and is not readable by content scripts. |
 
-The `storage` permission was added in 1.1.0. What it holds is a list of window IDs and the time each was opened — no URLs, no page content, no history. Nothing is sent anywhere.
+The `storage` permission was added in 1.1.0. What it holds is a list of window IDs and the time each was opened — no URLs, no page content, no history. **That record** is never sent anywhere.
 
 Content scripts run on two sites:
 
@@ -113,7 +113,7 @@ The X script never reads page content. Before closing a window it asks the servi
 
 Until 1.0.1 the script also accepted a window whose `window.name` was a fixed string. That string is written in this public repository, and any page can open a window with the same name, so it was never proof of anything; 1.1.0 removes it. **It cannot close your own X tabs** — and that is now checked by an end-to-end test that opens a window with the old forged name and asserts Esc leaves it alone.
 
-The extension makes no network requests of its own. The only thing it stores is the list of window IDs described above, in memory, until you quit the browser. See [PRIVACY.md](PRIVACY.md).
+The extension makes no background network requests and contacts no server of its own. It does hand two values to X — the page title and the canonicalised URL travel to X inside the composer link, at the moment the composer opens, before you decide whether to post. That is the feature, not a side effect, but it is worth being explicit about: if a page is confidential, do not press Share on it. The only thing the extension itself stores is the list of window IDs described above, in memory, until you quit the browser. See [PRIVACY.md](PRIVACY.md).
 
 ## Layout
 

@@ -79,7 +79,12 @@ RepoShout requests two API permissions: activeTab and storage. activeTab lets it
 read the current tab's URL and title, only at the moment you invoke it, purely to
 build the post text. storage holds one thing: the identifiers of the windows the
 extension itself opened, kept in memory and cleared when you quit the browser.
-The extension makes no network requests of its own and sends nothing anywhere.
+
+Nothing is sent to the developer, and there is no analytics or tracking. The page
+title and URL are sent to X, because that is what the extension does: they are
+placed in X's own composer link and reach X when the composer opens, before you
+decide whether to post. Authentication, account, settings and organisation
+admin pages are refused outright and are never shared.
 
 It runs a script on x.com for one reason only: to listen for the Escape key so
 you can dismiss the share window. That script reads nothing from X, and it will
@@ -255,7 +260,7 @@ the popup (for example to /i/flow/login when the user is signed out).
 > **【実績】この回答のまま 1.0.0（2026-08-02）と 1.0.1（2026-08-03）の2回とも審査を通過しました。**
 > 以下は当初の懸念の記録で、対応は不要です。差し戻された場合にだけ読んでください。
 >
-> **ここだけ判断が割れます。** 本拡張はURLとタイトルを**ユーザー操作の瞬間にのみ**読み、保存も送信もしません。
+> **ここだけ判断が割れます。** 本拡張はURLとタイトルを**ユーザー操作の瞬間にのみ**読み、保存はしません。ただし**Xへは渡ります**（投稿画面を開くのが機能そのものなので）。
 > ただし審査側が「Web history」「Website content」をより広く解釈する可能性があります。
 > **No で弾かれたら Yes に変え、「ユーザー操作時のみ・端末内処理のみ・保存も送信もなし」と補足して再提出**してください。
 > プライバシーポリシーは用意済みなので、どちらの回答でも要件は満たせます。
