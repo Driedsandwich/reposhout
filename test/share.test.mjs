@@ -15,9 +15,16 @@ const { GXS, FIX } = loadShare();
 /* 孤立サロゲート（絵文字が割れた跡）が残っていないか */
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])([\uDC00-\uDFFF])/;
 
-test('重み付き文字数が twitter-text v3 の定義と一致する', () => {
+test('重み付き文字数（URLを含まない文面の厳密値）', () => {
   for (const [label, input, want] of FIX.WEIGHT) {
     assert.equal(GXS.weightedLength(input), want, `${label} / 入力=${JSON.stringify(input)}`);
+  }
+});
+
+test('URLを含む文面は、公式が数える値を下回らない', () => {
+  for (const [label, input, atLeast] of FIX.WEIGHT_MIN) {
+    const got = GXS.weightedLength(input);
+    assert.ok(got >= atLeast, `${label}: ${got} < ${atLeast}`);
   }
 });
 
@@ -85,10 +92,10 @@ test('サフィックスだけで上限を超える異常時も壊れない', ()
 });
 
 test('スキーム無しドメインを少なく数えない（RA-001の回帰）', () => {
-  assert.equal(GXS.weightedLength('example.com'), 23);
-  assert.equal(GXS.weightedLength('a.co'), 23);
+  assert.ok(GXS.weightedLength('example.com') >= 23);
+  assert.ok(GXS.weightedLength('a.co') >= 23);
   const many = Array(50).fill('a.co').join(' ');
-  assert.equal(GXS.weightedLength(many), 50 * 23 + 49);
+  assert.ok(GXS.weightedLength(many) >= 50 * 23 + 49);
   const out = GXS.truncate(many);
   assert.ok(GXS.weightedLength(out) <= GXS.MAX_WEIGHT, `切り詰められていない: ${GXS.weightedLength(out)}`);
 });

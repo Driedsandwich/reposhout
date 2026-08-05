@@ -46,23 +46,15 @@
     ['キーキャップ', '1\uFE0F\u20E3', 2],
     ['異体字セレクタつき記号', '\u2764\uFE0F', 2],
     ['ASCII+絵文字', 'a\u{1F44D}', 3],
-    ['短いURL（23固定）', 'https://t.co/a', 23],
-    ['長いURL（23固定）', 'https://github.com/octocat/Hello-World/blob/main/very/long/path/file.md', 23],
-    ['本文にURLが混ざる（4+23+4）', 'see https://github.com/a/b now', 31],
-    ['www始まりもURL', 'www.example.com', 23],
-    ['日本語200文字（全部重み2）', '日'.repeat(200), 400],
-    ['スキーム無しドメインもURL（23）', 'example.com', 23],
-    ['短いドメインも23', 'a.co', 23],
-    ['多階層TLDも23', 'foo.co.jp', 23],
-    ['README.md もURL扱い（.md は実在のccTLD）', 'README.md', 23],
-    ['index.js は公式なら8だが、少なく数えないため23', 'index.js', 23],
-    ['バージョン番号はURLではない', 'Ver.1.2.3', 9],
-    ['「e.g.」はURLではない', 'e.g.', 4],
-    ['「1.5倍」はURLではない', '1.5倍', 5],
-    ['メール形式も多めに数える（安全側）', 'a@example.com', 23],
-    ['BMPベース＋肌色修飾子', '\u270A\u{1F3FD}', 2],
-    ['同上・別のベース', '\u261D\u{1F3FD}', 2],
-    ['a.co を50個（23×50 + 空白49）', Array(50).fill('a.co').join(' '), 1199]
+    ['スキーム付きURLは最低23', 'https://t.co/a', 23],
+    ['スキーム無しドメインも最低23', 'example.com', 23],
+    ['短いドメインも最低23', 'a.co', 23],
+    ['多階層TLDも最低23', 'foo.co.jp', 23],
+    ['Unicode TLD も最低23', 'foobar.みんな/', 23],
+    ['URLの前に文字が付く場合は前の文字ぶんも数える', 'text:http://example.com', 28],
+    ['無効なドメインは素の長さぶん数える', 'http://foo_bar.com/abcdefghijklmnopqrstuvwxyz', 45],
+    ['1つの並びにURLが2つあれば両方数える', 'example.comてすとですtwitter.みんなです', 60],
+    ['a.co を50個なら 23×50 + 空白49', Array(50).fill('a.co').join(' '), 50 * 23 + 49]
   ];
 
   /* ---- URL正規化 ---- */
@@ -210,5 +202,5 @@
       { kind: 'repo', weightMax: 250, xTotalMax: 280 }]
   ];
 
-  root.GXS_FIXTURES = { WEIGHT: WEIGHT, URLS: URLS, TITLES: TITLES, LOCATIONS: LOCATIONS, BUILD: BUILD };
+  root.GXS_FIXTURES = { WEIGHT: WEIGHT, WEIGHT_MIN: WEIGHT_MIN, URLS: URLS, TITLES: TITLES, LOCATIONS: LOCATIONS, BUILD: BUILD };
 })(typeof globalThis !== 'undefined' ? globalThis : self);

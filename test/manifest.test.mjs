@@ -27,10 +27,25 @@ test('package.json と manifest.json のバージョンが一致する', () => {
     `package.json=${pkg.version} / manifest.json=${manifest.version}`);
 });
 
-test('依存パッケージを持たない', () => {
+test('依存は許可した開発用パッケージだけ（配布物には入らない）', () => {
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  // 実行時の依存はゼロを維持する。拡張が読み込むのは src/ の自前コードだけ。
   assert.deepEqual(pkg.dependencies || {}, {});
-  assert.deepEqual(pkg.devDependencies || {}, {});
+  // 開発用は allowlist。増やすときはここも直すことになる。
+  assert.deepEqual(pkg.devDependencies || {}, { 'twitter-text': '3.1.0' });
+  // 版は範囲指定ではなく完全固定であること
+  for (const [name, range] of Object.entries(pkg.devDependencies || {})) {
+    assert.match(range, /^\d+\.\d+\.\d+$/, `${name} が完全固定でない: ${range}`);
+  }
+});
+
+test('開発用依存が配布物へ混ざらない', () => {
+  for (const f of PACKAGE_FILES) {
+    const body = readFileSync(join(ROOT, f));
+    if (!f.endsWith('.js')) continue;
+    assert.ok(!/require\(|from ['"]twitter-text/.test(body.toString('utf8')),
+      `配布物が外部パッケージを参照している: ${f}`);
+  }
 });
 
 test('権限は allowlist と完全一致する（増えたら落ちる）', () => {
