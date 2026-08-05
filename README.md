@@ -86,7 +86,7 @@ RepoShout is narrower than RepoCast on purpose (one destination, no side panel, 
 Browser extensions that inject UI into GitHub have a habit of dying when GitHub redesigns — as the abandoned predecessors listed above show. RepoShout is built to limit *how* it breaks rather than to pretend it won't.
 
 - **If the anchor element isn't found, it does nothing.** No error, no fallback DOM surgery, no broken GitHub page.
-- **GitHub's existing DOM is read, never modified.** The extension adds exactly one element — an `<li>` inside the repository page's `<ul>`, a `<div>` inside the flex row on issues and pull requests — and removes nothing.
+- **GitHub's existing DOM is read, never modified.** The extension adds one wrapper holding one button — an `<li>` inside the repository page's `<ul>`, a `<div>` inside the flex row on issues and pull requests — plus a single `<style>` element in the document head. It removes and replaces nothing.
 - **It never inspects which buttons are present.** Signed-in and signed-out GitHub show different button sets; prepending to the container works identically for both, and for whatever GitHub adds next.
 - **The toolbar icon and keyboard shortcut don't touch the DOM at all.** They work from the tab's URL and title, so they keep working even if the in-page button stops appearing.
 - Colours are read from GitHub's own theme variables (`--button-default-*`), so light and dark mode follow automatically.
@@ -137,7 +137,7 @@ Everything runs from a clean checkout:
 
 ```bash
 npm ci
-npm test          # unit + conformance + real-extension E2E
+npm test          # unit + oracle + real-extension E2E
 npm run package   # dist/reposhout-<version>.zip and its SHA-256
 ```
 
@@ -145,7 +145,7 @@ Requirements: Node 22+, Chrome or Chromium (found via `CHROME_PATH` or the usual
 
 | Suite | Command | What it covers |
 |---|---|---|
-| Unit + conformance | `npm run test:unit` | 40 tests over 129 hand-written fixtures: character weight against X's rules, the per-route URL policy, refusal of sensitive routes, suffix preservation, title parsing, truncation safety across 301 emoji positions |
+| Unit + oracle | `npm run test:unit` | Hand-written fixtures for the per-route URL policy, refusal of sensitive routes, suffix preservation, title parsing and truncation safety; plus `twitter-text` as an oracle proving the counter never under-counts |
 | Manifest and package | included above | Manifest V3 validity, the permission list (the test fails if a permission is added), no remote-code patterns, the exact list of shipped files |
 | Real-extension E2E | `npm run test:e2e` | 10 tests. Loads the nine shipped files into real Chrome via `Extensions.loadUnpacked`, with `x.com` and `github.com` mapped to a local HTTPS server, and drives the real service worker |
 | Browser runner | open `test/share.test.html` | The same fixtures, rendered as a table — useful for reading the actual output |
@@ -161,7 +161,7 @@ The E2E is the one that matters for the Escape behaviour, because that behaviour
 | Shift+Esc | does not close |
 | After the window is closed, its ID is forgotten | not reusable |
 
-Measured 2026-08-05: unit 40 passed / 0 failed, E2E 10 passed / 0 failed. Both Escape cases were also run against the 1.0.1 implementations to confirm they fail there — a test that cannot fail proves nothing.
+Measured 2026-08-05 on 1.1.2: unit 54 passed / 0 failed, E2E 10 passed / 0 failed. The counts move; `npm test` prints the current ones. Both Escape cases were also run against the 1.0.1 implementations to confirm they fail there — a test that cannot fail proves nothing.
 
 ## Verification status
 
@@ -208,7 +208,7 @@ A second review of the published 1.0.1 raised four findings. Each was reproduced
 - **Open / Merged / Closed state is not included in the post text.** The value read for the same pull request differed between signed-in and signed-out pages during testing, so it is omitted rather than risk publishing something false.
 - `github.com` only. GitHub Enterprise and Gist are out of scope.
 - **The extension cannot tell a private repository from a public one by its URL.** It refuses GitHub's authentication and settings pages, but on an ordinary repository page it is your call whether the title and URL should reach X.
-- Character counting is not the official `twitter-text` parser. See the note under *Related work*.
+- Character counting is not the official `twitter-text` parser at runtime; it is verified against it in the tests. The official conformance corpus is not shipped in the npm package, so it is not run.
 - Behaviour after any future GitHub redesign cannot be verified in advance.
 
 ## License

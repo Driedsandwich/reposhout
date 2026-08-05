@@ -91,11 +91,22 @@ test('conformance の検査が効いているかの対照', () => {
     '対照が成立していない＝この検査は主張を捕まえられない');
 });
 
-test('バージョンが manifest / package.json / CHANGELOG で揃っている', () => {
+test('バージョンが manifest / package.json / CHANGELOG / ストア文書で揃っている', () => {
   const manifest = JSON.parse(read('manifest.json'));
   const pkg = JSON.parse(read('package.json'));
-  const changelog = read('CHANGELOG.md');
   assert.equal(pkg.version, manifest.version);
-  assert.ok(changelog.includes(`## [${manifest.version}]`),
+  assert.ok(read('CHANGELOG.md').includes(`## [${manifest.version}]`),
     `CHANGELOG に ${manifest.version} の節が無い`);
+
+  /*
+   * ストアへ貼る文書が古い版を指したまま残っていたことが実際にあった。
+   * 提出のとき人が読むのはこの2枚なので、版が揃っていることを機械で見る。
+   */
+  for (const f of ['store/LISTING.md', 'store/STORE_DASHBOARD_CHANGES.md']) {
+    const body = read(f);
+    assert.ok(body.includes(manifest.version), `${f} が ${manifest.version} を指していない`);
+    for (const m of body.matchAll(/reposhout-(\d+\.\d+\.\d+)\.zip/g)) {
+      assert.equal(m[1], manifest.version, `${f} が古いZIP名を指している: ${m[1]}`);
+    }
+  }
 });

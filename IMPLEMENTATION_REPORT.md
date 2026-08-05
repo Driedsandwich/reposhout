@@ -12,10 +12,16 @@
 
 | 項目 | いまの状態 |
 |---|---|
-| 1.1.0 | main へマージ済み（`e13080f`）・タグ `v1.1.0`・CIはPRとmainの両方でsuccess |
-| ストア | **公開中は 1.0.1 のまま。1.1.0 は提出していない** |
-| 再監査 | 2026-08-05 に2回目の外部レビュー。**7件（P1×2・P2×4・P3×1）を指摘され、7件とも実測で再現した** |
-| 1.1.1 | 再監査への対応。**作業ツリーにあるだけで、commit も push もしていない** |
+| 1.1.0 | main へマージ済み（`e13080f`）・タグ `v1.1.0`・CI success |
+| 1.1.1 | 2回目の監査への対応。main へマージ済み（`00a3eee`）・タグ `v1.1.1`・CI success |
+| 1.1.2 | 3回目の監査への対応。**作業ツリーにあるだけで、commit も push もしていない** |
+| ストア | **公開中は 1.0.1 のまま。1.1.0 も 1.1.1 も提出していない** |
+| 監査 | 2026-08-05 に外部レビューが3回。**指摘は 4件 → 7件 → 5件で、いずれも全件が実測で再現した** |
+
+3回目（T3-001〜005）の要点と対応は [CHANGELOG.md](CHANGELOG.md) の 1.1.2 の節を正本とする。
+とくに **1.1.1 の README に書いた「少なく数えない」という保証は、1.1.1 の時点では成立していなかった**
+（`foobar.みんな/` などで公式を下回っていた）。1.1.2 でこれを直し、公式実装を判定器にした
+機械検査を入れて、同じ主張を測れる形にした。
 
 「status: COMPLETE」は RS-MAJ-01〜04 に対する判定であって、
 再監査で出た RA-001〜007 を含む判定ではない。RA系の対応状況は
@@ -109,7 +115,7 @@
 ## Test coverage
 
 - **unit**: 35テスト。手書き期待値103行（WEIGHT 33 / URLS 28 / TITLES 7 / LOCATIONS 12 / BUILD 23）。期待値は本番関数で生成していない。
-- **conformance**: X文字数を twitter-text v3 の config 値（既定2・重み1の4範囲・emoji parsing・URL=23・NFC）に対して照合。境界は 279/280/281 を明示的に検査。切り詰めは絵文字301位置を走査し、孤立サロゲート・`encodeURIComponent` 例外・重み超過が無いことを確認。
+- **X文字数の検査**（当時は conformance と呼んでいたが、公式コーパスは実行していない）: X文字数を twitter-text v3 の config 値（既定2・重み1の4範囲・emoji parsing・URL=23・NFC）に対して照合。境界は 279/280/281 を明示的に検査。切り詰めは絵文字301位置を走査し、孤立サロゲート・`encodeURIComponent` 例外・重み超過が無いことを確認。
 - **actual-extension E2E**: 10テスト。出荷する9ファイルだけを一時ディレクトリへ並べ、`Extensions.loadUnpacked`（`--remote-debugging-pipe` ＋ `--enable-unsafe-extension-debugging`）で本物のChromeへ読み込む。`x.com` と `github.com` は `--host-resolver-rules` でローカルHTTPSサーバへ向けるので、外部通信も実アカウントも要らない。
 - **CI**: `.github/workflows/ci.yml`。ubuntu-latest で Chrome の存在を先に確認し、無ければ**失敗させる**（黙ってskipしない）。`npm ci` → unit → e2e → package → 2回のSHA-256一致確認。
 - **package reproducibility**: 同一worktreeで2回生成し SHA-256 一致を実測。
@@ -128,7 +134,7 @@
 
 1. **ツールバーアイコン押下・キーボードショートカットを、ブラウザのUIイベントとして発火させたE2Eは無い。** `chrome.action.onClicked` と `chrome.commands.onCommand` は CDP から合成できない。E2Eはリスナーが呼ぶ本番関数（`shareActiveTab` / `openShareWindow`）を service worker 内で直接呼んでおり、リスナー登録そのものは `manifest.json` とコードの静的確認にとどまる。
 2. **IME変換中のEscは単体テスト（偽イベント）でのみ検査。** 実ブラウザのIME合成イベントは再現していない。
-3. **X文字数は「公式configの値」に対する適合であって、twitter-text の公式テストコーパス（conformance YAML）は流していない。** 外部依存を入れない方針を優先した。絵文字の切り出しは `Intl.Segmenter` で、twitter-text の絵文字正規表現と完全一致する保証は無い。この差を吸収するために本文上限を256でなく250のままにしている。
+3. **X文字数は「公式configの値」に対する適合であって、twitter-text の公式テストコーパス（conformance YAML）は実行していない。** 外部依存を入れない方針を優先した。絵文字の切り出しは `Intl.Segmenter` で、twitter-text の絵文字正規表現と完全一致する保証は無い。この差を吸収するために本文上限を256でなく250のままにしている。
 4. **実際の x.com / github.com に対する動作確認は未実施**（E2Eはローカルの代替サーバ）。1.0.1 の実GitHubでの計測結果は README の「検証状況」に残っているが、今回の変更後に実サイトで押した記録は無い。
 5. **Windows での実行は未確認。** Chrome探索のWindows分岐は書いたが動かしていない。
 6. **CIは未実行。** ワークフローファイルを置いただけで、GitHub Actions 上で走らせてはいない（push していないため）。

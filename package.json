@@ -1,6 +1,6 @@
 {
   "name": "reposhout",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "description": "Share GitHub repos, issues and PRs to X with a pre-filled post. Chrome extension, MIT.",
   "license": "MIT",
