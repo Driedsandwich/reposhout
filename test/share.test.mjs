@@ -29,8 +29,68 @@ test('URLの正規化がページ種別ごとの方針どおり', () => {
 
 test('フォールバック経路も同じURL方針を使う', () => {
   for (const [label, input, want] of FIX.URLS) {
-    assert.equal(GXS.fallbackUrl(input), want, `フォールバック: ${label}`);
+    // 機微ルートは共有そのものをしないので null になる
+    const expected = GXS.isSensitiveUrl(input) ? null : want;
+    assert.equal(GXS.fallbackUrl(input), expected, `フォールバック: ${label}`);
   }
+});
+
+test('認証・設定・管理画面は共有しない（RA-003の回帰）', () => {
+  const blocked = [
+    'https://github.com/settings/tokens?token=ghp_x',
+    'https://github.com/settings/profile',
+    'https://github.com/login/oauth/authorize?client_id=a&state=b',
+    'https://github.com/sessions/two-factor',
+    'https://github.com/o/r/settings/secrets/actions',
+    'https://github.com/o/r/settings/keys',
+    'https://github.com/orgs/acme/settings/profile',
+    'https://github.com/orgs/acme/billing',
+    'https://github.com/orgs/acme/people',
+    'https://github.com/enterprises/e/settings/profile',
+    'https://github.com/organizations/acme/settings/profile',
+    'https://github.com/account/billing'
+  ];
+  for (const url of blocked) {
+    assert.equal(GXS.isSensitiveUrl(url), true, `機微と判定されない: ${url}`);
+    assert.equal(GXS.buildShare(url, 'Personal access tokens'), null, `共有されてしまう: ${url}`);
+    assert.equal(GXS.fallbackUrl(url), null, `フォールバックで漏れる: ${url}`);
+  }
+  // 対照: 通常のページは共有できる（検査が全部nullを返しているだけではないこと）
+  for (const url of ['https://github.com/o/r', 'https://github.com/o/r/issues/1', 'https://github.com/o/r/settings-like']) {
+    assert.equal(GXS.isSensitiveUrl(url), false, url);
+    assert.ok(GXS.buildShare(url, 'T · GitHub'), url);
+    assert.ok(GXS.fallbackUrl(url), url);
+  }
+});
+
+test('固定サフィックスは可変タイトルより優先して残す（RA-004の回帰）', () => {
+  const cases = [
+    ['https://github.com/owner/repo/issues/123', 'A'.repeat(400) + ' · Issue #123 · owner/repo', '(Issue #123 · owner/repo)'],
+    ['https://github.com/owner/repo/pull/45', 'あ'.repeat(400) + ' by x · Pull Request #45 · owner/repo', '(PR #45 · owner/repo)'],
+    ['https://github.com/o/r/discussions/7', '\u{1F600}'.repeat(300) + ' · Discussion #7 · o/r', '(Discussion #7 · o/r)']
+  ];
+  for (const [url, title, suffix] of cases) {
+    const s = GXS.buildShare(url, title);
+    assert.ok(s.text.endsWith(suffix), `末尾にサフィックスが無い: ${JSON.stringify(s.text.slice(-40))}`);
+    assert.ok(s.text.includes('…'), '切り詰めの印が無い');
+    assert.ok(GXS.weightedLength(s.text) <= GXS.MAX_WEIGHT, `重み超過: ${GXS.weightedLength(s.text)}`);
+  }
+});
+
+test('サフィックスだけで上限を超える異常時も壊れない', () => {
+  const long = ' (Issue #1 · ' + 'x'.repeat(400) + '/y)';
+  const out = GXS.truncateWithSuffix('タイトル', long);
+  assert.ok(GXS.weightedLength(out) <= GXS.MAX_WEIGHT, `重み超過: ${GXS.weightedLength(out)}`);
+  assert.doesNotThrow(() => encodeURIComponent(out));
+});
+
+test('スキーム無しドメインを少なく数えない（RA-001の回帰）', () => {
+  assert.equal(GXS.weightedLength('example.com'), 23);
+  assert.equal(GXS.weightedLength('a.co'), 23);
+  const many = Array(50).fill('a.co').join(' ');
+  assert.equal(GXS.weightedLength(many), 50 * 23 + 49);
+  const out = GXS.truncate(many);
+  assert.ok(GXS.weightedLength(out) <= GXS.MAX_WEIGHT, `切り詰められていない: ${GXS.weightedLength(out)}`);
 });
 
 test('機微なルートではクエリもハッシュも共有しない', () => {

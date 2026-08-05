@@ -91,6 +91,20 @@ test('配布物の一覧が固定されている', () => {
   }
 });
 
+test('CIワークフローが供給網の最低条件を満たす', () => {
+  const wf = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+  const uses = [...wf.matchAll(/uses:\s*([^\s#]+)/g)].map((m) => m[1]);
+  assert.ok(uses.length >= 3, `uses が少なすぎる: ${uses.length}`);
+  for (const u of uses) {
+    // 可変タグ（@v7）は付け替えられるので、完全なcommit SHAで固定する
+    assert.match(u, /@[0-9a-f]{40}$/, `commit SHA で固定されていない: ${u}`);
+  }
+  assert.match(wf, /^permissions:\n  contents: read$/m, 'permissions: contents: read が無い');
+  assert.match(wf, /timeout-minutes:\s*\d+/, 'timeout-minutes が無い');
+  assert.ok(!/pull_request_target/.test(wf), 'pull_request_target は使わない');
+  assert.ok(!/\$\{\{\s*secrets\./.test(wf), 'secret を参照している');
+});
+
 test('配布物にテスト・ストア素材・文書を含めない', () => {
   for (const f of PACKAGE_FILES) {
     assert.ok(!f.startsWith('test/'), f);

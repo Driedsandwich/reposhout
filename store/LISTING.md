@@ -1,6 +1,6 @@
 # Chrome ウェブストア 提出手順書
 
-更新: 2026-08-05 / 対象: RepoShout **1.1.0**（未提出。ストアで公開中なのは 1.0.1・2026-08-03通過）
+更新: 2026-08-05 / 対象: RepoShout **1.1.1**（未提出。ストアで公開中なのは 1.0.1・2026-08-03通過。1.1.0 はタグのみで提出していない）
 **この文書は原稿と手順です。提出（Submit for review）はあなたが実行します。**
 初回提出と更新提出の両方でこの文書を使います。更新のときは §1 のアップロードと、変えた機能に関わる §2 の掲載文だけを直せば足ります。
 
@@ -25,16 +25,16 @@
 **「新しいアイテムを追加」→ ZIPをドラッグ**
 
 ```
-dist/reposhout-1.1.0.zip
+dist/reposhout-1.1.1.zip
 ```
 
-同梱物は13ファイル。`store/` と `test/` は動作に不要なので除外済みです。
+同梱物は9ファイル（`npm run package` の出力に一覧が出ます）。`store/` `test/` `scripts/` `.github/` と文書は動作に不要なので、収録一覧（allowlist）に入れていません。
 アップロード後、名前は `manifest.json` から自動で入ります（入力欄はありません）。
 
 | 自動で入る値 | 内容 |
 |---|---|
 | Name | `RepoShout — Share GitHub repos, issues & PRs to X`（49文字 / 上限75） |
-| Version | `1.1.0`（manifest の値。前回より大きくないと弾かれます） |
+| Version | `1.1.1`（manifest の値。前回より大きくないと弾かれます） |
 | Short description | 下の §2 と同一（manifest の `description`・117文字 / 上限132） |
 
 ---
@@ -63,11 +63,13 @@ Changed your mind? Press Escape in the share window to dismiss it.
     Repository   →  owner/repo: description
     Issue        →  Title (Issue #123 · owner/repo)
     Pull request →  Title (PR #123 · owner/repo)
+• Authentication, account, settings and organisation admin pages are never shared
 • Query strings are handled per page type: filters on issue lists, ?plain=1 on a
   Markdown file and a prepared pull request's title and body are kept, while
-  tracking parameters are dropped. Line and comment anchors are kept
+  tracking parameters are dropped. Line, comment and README section anchors are kept
 • Character counting follows X's published rules, including Japanese, Chinese and
-  Korean text and emoji, so a long title is trimmed to something X will accept
+  Korean text, emoji and links, so a long title is trimmed to something X accepts
+• Issue and pull request numbers stay in the post even when the title is trimmed
 • Light and dark mode follow GitHub's own theme automatically
 • Press Escape in the share window to dismiss it if you change your mind
 
@@ -77,7 +79,12 @@ RepoShout requests two API permissions: activeTab and storage. activeTab lets it
 read the current tab's URL and title, only at the moment you invoke it, purely to
 build the post text. storage holds one thing: the identifiers of the windows the
 extension itself opened, kept in memory and cleared when you quit the browser.
-The extension makes no network requests of its own and sends nothing anywhere.
+
+Nothing is sent to the developer, and there is no analytics or tracking. The page
+title and URL are sent to X, because that is what the extension does: they are
+placed in X's own composer link and reach X when the composer opens, before you
+decide whether to post. Authentication, account, settings and organisation
+admin pages are refused outright and are never shared.
 
 It runs a script on x.com for one reason only: to listen for the Escape key so
 you can dismiss the share window. That script reads nothing from X, and it will
@@ -253,7 +260,7 @@ the popup (for example to /i/flow/login when the user is signed out).
 > **【実績】この回答のまま 1.0.0（2026-08-02）と 1.0.1（2026-08-03）の2回とも審査を通過しました。**
 > 以下は当初の懸念の記録で、対応は不要です。差し戻された場合にだけ読んでください。
 >
-> **ここだけ判断が割れます。** 本拡張はURLとタイトルを**ユーザー操作の瞬間にのみ**読み、保存も送信もしません。
+> **ここだけ判断が割れます。** 本拡張はURLとタイトルを**ユーザー操作の瞬間にのみ**読み、保存はしません。ただし**Xへは渡ります**（投稿画面を開くのが機能そのものなので）。
 > ただし審査側が「Web history」「Website content」をより広く解釈する可能性があります。
 > **No で弾かれたら Yes に変え、「ユーザー操作時のみ・端末内処理のみ・保存も送信もなし」と補足して再提出**してください。
 > プライバシーポリシーは用意済みなので、どちらの回答でも要件は満たせます。
@@ -313,7 +320,7 @@ https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md
 RepoShout は宛先をXに絞り、サイドパネルもカード生成も持ちません。差別化は次の3点です（いずれも実測に基づく事実で、README にも記載済み）。
 
 1. ログイン状態とログアウト状態の**両方**に対応（GitHubはこの2つで実装が別物。ログイン時のIssue/PRにはボタン行自体が無いため、ツールバー/ショートカットで補っている）
-2. 文字数の数え方を**twitter-text v3 の定義どおりに実装**（近似ではない。半角カタカナや絵文字を含む）。単体・適合テスト35件と、実際のChromeへ拡張を読み込む**E2E 10件**で検査している（2026-08-05 実測・いずれも全PASS）
+2. 文字数の数え方を**Xの規則に沿わせ、ずれるときは必ず多めに数える**（半角カタカナ・絵文字・スキーム無しドメインを含む）。単体・適合テスト40件と、実際のChromeへ拡張を読み込む**E2E 10件**で検査している（2026-08-05 実測・いずれも全PASS）
 3. Open / Merged / Closed の状態を**意図的に出さない**（ログイン状態で読み取り値が食い違う事象を実測したため）
 
 それ以前の同種拡張（2015 / 2018 / 2021）はいずれも更新停止かつManifest V2世代で、現在は動作しません。

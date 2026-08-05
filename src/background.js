@@ -159,10 +159,13 @@ async function shareActiveTab() {
   } catch (e) {
     threw = true;
   }
-  if (!share && !threw) return; // github.com 以外では何もしない
+  if (!share && !threw) return; // github.com 以外・認証や設定の画面では何もしない
   if (!share) {
-    // フォールバックも本体と同じURL方針を使う（別実装を残さない）
-    share = { intentUrl: self.GXS.intentUrlFor('', self.GXS.fallbackUrl(tab.url)) };
+    // フォールバックも本体と同じURL方針を使う（別実装を残さない）。
+    // null が返るのは機微なページなので、その場合も何も開かない。
+    var bare = self.GXS.fallbackUrl(tab.url);
+    if (!bare) return;
+    share = { intentUrl: self.GXS.intentUrlFor('', bare) };
   }
 
   await openShareWindow(share.intentUrl);

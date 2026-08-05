@@ -42,7 +42,9 @@ octocat/Hello-World: My first repository on GitHub!
 https://github.com/octocat/Hello-World
 ```
 
-Query strings are handled per route, not stripped wholesale. Parameters that carry meaning are kept — the filter on `/issues?q=…`, `?plain=1` on a Markdown file, the `quick_pull`/`title`/`body` of a prepared pull request, `?diff=split&w=1` on a diff, `?q=…&type=…` on GitHub search. Anything not on that route's list is dropped, which covers `?tab=readme-ov-file`, `notification_referrer_id` and `utm_*`. On authentication, account and settings routes the query and the fragment are both dropped, so an OAuth `client_id`/`state` or a token in a URL can never reach a draft post. Line anchors (`#L10-L20`) and comment anchors are kept, because those are usually the point of sharing.
+Authentication, account, settings and organisation-administration pages are not shared at all — the button and the shortcut simply do nothing there, because a page like *Personal access tokens* has a title and a path that have no business in a draft post.
+
+Query strings on the pages that *are* shared are handled per route, not stripped wholesale. Parameters that carry meaning are kept — the filter on `/issues?q=…`, `?plain=1` on a Markdown file, the `quick_pull`/`title`/`body` of a prepared pull request, `?diff=split&w=1` on a diff, `?q=…&type=…` on GitHub search. Anything not on that route's list is dropped, which covers `?tab=readme-ov-file`, `notification_referrer_id` and `utm_*`. On authentication, account and settings routes the query and the fragment are both dropped, so an OAuth `client_id`/`state` or a token in a URL can never reach a draft post. Line anchors (`#L10-L20`), comment anchors and README section anchors (`#readme`) are kept, because those are usually the point of sharing; a fragment shaped like `key=value` is not.
 
 The full policy is the `QUERY_ALLOW` table in [`src/share.js`](src/share.js), and every row of it is covered by [`test/fixtures.js`](test/fixtures.js).
 
@@ -76,7 +78,7 @@ This is not the first attempt at the idea, and it is worth being straight about 
 RepoShout is narrower than RepoCast on purpose (one destination, no side panel, no cards) and differs in three ways that came out of measurement rather than preference:
 
 - **It handles signed-in and signed-out GitHub, which are different implementations.** Signed-out pages use the legacy `ul.pagehead-actions`; signed-in repository pages use a React header keyed on `data-testid="repo-header-actions"`; signed-in issues and pull requests use a third one again, the Primer PageHeader action slot (`data-component="PH_Actions"`). All three anchors are attributes GitHub keeps stable for its own tooling, not hashed CSS-module class names.
-- **Character counting follows twitter-text v3 rather than approximating it** — default weight 2 with the four weight-1 ranges, emoji counted one grapheme cluster at a time, URLs counted as 23 whatever their length, NFC normalisation first. Approximations fail in both directions: an earlier version counted half-width katakana and arrows as 1 and could build a post X refuses, and counted a ZWJ family emoji as 11 instead of 2.
+- **Character counting follows X's published rules and errs upwards, never downwards** — default weight 2 with the four weight-1 ranges, emoji counted one grapheme cluster at a time, anything that looks like a domain counted as 23, NFC normalisation first. It is not the official `twitter-text` parser and has not been run against the official conformance corpus; where it differs it counts *more* than X would, because only under-counting can build a post X refuses. Both directions have bitten this extension before: an earlier version counted half-width katakana as 1 and bare domains as their literal length.
 - **Open / Merged / Closed state is deliberately absent from the post text.** The value read for the same pull request differed between signed-in and signed-out pages during testing, so it is omitted rather than risk publishing something false.
 
 ## Design
@@ -98,7 +100,7 @@ RepoShout requests two API permissions.
 | `activeTab` | Read the URL and title of the tab you are on. Per Chrome's design it is granted only at the moment you explicitly invoke the extension (toolbar click or keyboard shortcut) and only for that tab. It does not allow background monitoring of browsing. |
 | `storage` | Remember which window the extension itself opened, so Esc closes that window and nothing else. Written to `chrome.storage.session`, which lives in memory, is cleared when you quit the browser, is never written to disk, and is not readable by content scripts. |
 
-The `storage` permission was added in 1.1.0. What it holds is a list of window IDs and the time each was opened — no URLs, no page content, no history. Nothing is sent anywhere.
+The `storage` permission was added in 1.1.0. What it holds is a list of window IDs and the time each was opened — no URLs, no page content, no history. **That record** is never sent anywhere.
 
 Content scripts run on two sites:
 
@@ -111,7 +113,7 @@ The X script never reads page content. Before closing a window it asks the servi
 
 Until 1.0.1 the script also accepted a window whose `window.name` was a fixed string. That string is written in this public repository, and any page can open a window with the same name, so it was never proof of anything; 1.1.0 removes it. **It cannot close your own X tabs** — and that is now checked by an end-to-end test that opens a window with the old forged name and asserts Esc leaves it alone.
 
-The extension makes no network requests of its own. The only thing it stores is the list of window IDs described above, in memory, until you quit the browser. See [PRIVACY.md](PRIVACY.md).
+The extension makes no background network requests and contacts no server of its own. It does hand two values to X — the page title and the canonicalised URL travel to X inside the composer link, at the moment the composer opens, before you decide whether to post. That is the feature, not a side effect, but it is worth being explicit about: if a page is confidential, do not press Share on it. The only thing the extension itself stores is the list of window IDs described above, in memory, until you quit the browser. See [PRIVACY.md](PRIVACY.md).
 
 ## Layout
 
@@ -143,7 +145,7 @@ Requirements: Node 22+, Chrome or Chromium (found via `CHROME_PATH` or the usual
 
 | Suite | Command | What it covers |
 |---|---|---|
-| Unit + conformance | `npm run test:unit` | 35 tests over 103 hand-written fixtures: character weight against the twitter-text v3 definition, the per-route URL policy, title parsing, truncation safety across 301 emoji positions |
+| Unit + conformance | `npm run test:unit` | 40 tests over 129 hand-written fixtures: character weight against X's rules, the per-route URL policy, refusal of sensitive routes, suffix preservation, title parsing, truncation safety across 301 emoji positions |
 | Manifest and package | included above | Manifest V3 validity, the permission list (the test fails if a permission is added), no remote-code patterns, the exact list of shipped files |
 | Real-extension E2E | `npm run test:e2e` | 10 tests. Loads the nine shipped files into real Chrome via `Extensions.loadUnpacked`, with `x.com` and `github.com` mapped to a local HTTPS server, and drives the real service worker |
 | Browser runner | open `test/share.test.html` | The same fixtures, rendered as a table — useful for reading the actual output |
@@ -159,7 +161,7 @@ The E2E is the one that matters for the Escape behaviour, because that behaviour
 | Shift+Esc | does not close |
 | After the window is closed, its ID is forgotten | not reusable |
 
-Measured 2026-08-05: unit 35 passed / 0 failed, E2E 10 passed / 0 failed, browser runner 195 checks / 0 failed. Both Escape cases were also run against the 1.0.1 implementations to confirm they fail there — a test that cannot fail proves nothing.
+Measured 2026-08-05: unit 40 passed / 0 failed, E2E 10 passed / 0 failed. Both Escape cases were also run against the 1.0.1 implementations to confirm they fail there — a test that cannot fail proves nothing.
 
 ## Verification status
 
@@ -205,6 +207,8 @@ A second review of the published 1.0.1 raised four findings. Each was reproduced
 - **Pages other than repositories, issues and pull requests have no in-page button** when signed in — Actions runs, file views, notifications and settings have no action row the button belongs in. The toolbar icon and shortcut cover them.
 - **Open / Merged / Closed state is not included in the post text.** The value read for the same pull request differed between signed-in and signed-out pages during testing, so it is omitted rather than risk publishing something false.
 - `github.com` only. GitHub Enterprise and Gist are out of scope.
+- **The extension cannot tell a private repository from a public one by its URL.** It refuses GitHub's authentication and settings pages, but on an ordinary repository page it is your call whether the title and URL should reach X.
+- Character counting is not the official `twitter-text` parser. See the note under *Related work*.
 - Behaviour after any future GitHub redesign cannot be verified in advance.
 
 ## License

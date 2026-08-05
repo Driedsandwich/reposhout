@@ -68,7 +68,14 @@
   var SENSITIVE_FIRST_SEGMENTS = [
     'login', 'logout', 'session', 'sessions', 'settings', 'account', 'user',
     'signup', 'join', 'password_reset', 'auth', 'oauth', 'authorize', 'devices',
-    'sudo', 'two_factor', 'verify', 'billing'
+    'sudo', 'two_factor', 'verify', 'billing', 'organizations', 'enterprises',
+    'invitations', 'account_verifications', 'password', 'security'
+  ];
+
+  /* /orgs/<org>/... のうち管理系。組織トップやDiscussionは対象外 */
+  var SENSITIVE_ORG_SECTIONS = [
+    'settings', 'billing', 'security', 'people', 'teams', 'sso', 'saml',
+    'audit-log', 'secrets', 'security-analysis', 'oauth_application_policy'
   ];
 
   /*
@@ -122,6 +129,13 @@
   /* ハッシュ自体が資格情報を運ぶ形（implicit OAuth 等）なら捨てる */
   var SENSITIVE_HASH_RE = /(^|[#&])(access_token|id_token|token|code|state)=/i;
 
+  /*
+   * リポジトリトップで残してよいハッシュ。READMEの見出しアンカー（#readme、
+   * #installation、日本語見出しのパーセントエンコード）を想定する。
+   * key=value の形や極端に長いものは残さない。
+   */
+  var SAFE_SECTION_HASH_RE = /^#[A-Za-z0-9%][A-Za-z0-9._%-]{0,63}$/;
+
   function inWeightOneRange(cp) {
     for (var i = 0; i < WEIGHT_ONE_RANGES.length; i++) {
       if (cp >= WEIGHT_ONE_RANGES[i][0] && cp <= WEIGHT_ONE_RANGES[i][1]) return true;
@@ -157,7 +171,21 @@
     if (cps.indexOf(KEYCAP) !== -1) return true;
     if (cps.length >= 2 && cps[0] >= RI_START && cps[0] <= RI_END) return true;
     for (var i = 0; i < cps.length; i++) {
-      if (cps[i] > 0xFFFF && EXTENDED_PICTOGRAPHIC.test(String.fromCodePoint(cps[i]))) return true;
+      var cp = cps[i];
+      /*
+       * BMP内の絵文字も見る。以前は `cp > 0xFFFF` を条件にしていたため、
+       * ✊🏽（U+270A + 肌色修飾子）や ☝🏽 を「絵文字ではない2文字」として
+       * 4と数えていた（2026-08-05の再監査で再現）。
+       *
+       * 肌色修飾子そのものを条件に足すことも考えたが、ベース側が
+       * Extended_Pictographic なので結果が変わらない（＝死にコードになる）。
+       * 変異テストで検出できなかったので置いていない。
+       */
+      if (EXTENDED_PICTOGRAPHIC.test(String.fromCodePoint(cp))) {
+        // © のように単独では文字として表示されるものは、重み1のまま
+        if (cps.length === 1 && inWeightOneRange(cp)) return false;
+        return true;
+      }
     }
     return false;
   }
@@ -190,29 +218,37 @@
   }
 
   /*
-   * 本文中のURLを取り出す。twitter-text はURLを t.co 長（23）に置き換えて数えるため、
-   * 長いURLでも短いURLでも一律23になる。
-   * GitHubのタイトル・説明が対象なので、スキーム付きと www. 始まりだけを見る。
+   * 本文中の「URLとして数えるべきトークン」を切り出す。
+   * Xは長さによらずURLを23として数えるので、ここも23で数える。
+   *
+   * ⚠️ スキームの無いドメインもXはリンクとして扱う。
+   * 旧実装は http(s):// と www. だけを見ていたため、`a.co` を50個並べた文面を
+   * 249と数えて切り詰めず、X側では1199相当になって投稿できなかった
+   * （2026-08-05の再監査で再現）。
+   *
+   * 有効なTLDの一覧は持たない。「ドットを含み、最後がアルファベット2文字以上」なら
+   * すべてURLとして数える。公式より**多めに数えることはあっても、少なく数えない**。
+   * 少なく数える方向だけが「Xに弾かれる文面を作る」事故につながるため。
+   * 例: `index.js` は公式なら8だがここでは23。切り詰めが少し早まるだけで害はない。
    */
-  var URL_IN_TEXT_RE = /(https?:\/\/[^\s<>"'）」]+)|((?:^|[\s(（])www\.[^\s<>"'）」]+)/gi;
+  var URL_TOKEN_RE = /^(?:https?:\/\/)?[^\s.@][^\s]*\.[A-Za-z]{2,}(?:[:\/?#][^\s]*)?$/;
+  var LEADING_PUNCT_RE = /^[([<「（【“"'‘]*/;
+  var TRAILING_PUNCT_RE = /[)\]>」）】”"'’.,;:!?、。…]+$/;
 
   function splitUrls(text) {
     var parts = [];
     var last = 0;
+    var re = /\S+/g;
     var m;
-    URL_IN_TEXT_RE.lastIndex = 0;
-    while ((m = URL_IN_TEXT_RE.exec(text)) !== null) {
+    while ((m = re.exec(text)) !== null) {
       var raw = m[0];
-      var offset = m.index;
-      // www. 側は直前の空白/括弧を含めて拾っているので、URL本体まで進める
-      var lead = raw.search(/https?:\/\/|www\./i);
-      if (lead > 0) {
-        offset += lead;
-        raw = raw.slice(lead);
-      }
-      if (offset > last) parts.push({ type: 'text', value: text.slice(last, offset) });
-      parts.push({ type: 'url', value: raw });
-      last = offset + raw.length;
+      var lead = raw.match(LEADING_PUNCT_RE)[0].length;
+      var core = raw.slice(lead).replace(TRAILING_PUNCT_RE, '');
+      if (!core || !URL_TOKEN_RE.test(core)) continue;
+      var start = m.index + lead;
+      if (start > last) parts.push({ type: 'text', value: text.slice(last, start) });
+      parts.push({ type: 'url', value: core });
+      last = start + core.length;
     }
     if (last < text.length) parts.push({ type: 'text', value: text.slice(last) });
     return parts;
@@ -243,7 +279,7 @@
   var ELLIPSIS = '…';
 
   /*
-   * 重み MAX_WEIGHT に収まるよう切り詰める。
+   * 重み budget に収まるところまで取り出す（末尾の「…」は付けない）。
    *
    * 切る単位は書記素（grapheme cluster）。コードポイント単位で切ると
    * 肌色つき絵文字やZWJ連結の途中で割れて、見た目が壊れた文字が残る。
@@ -253,12 +289,8 @@
    *
    * URLは23として数えるので、途中で切らず「丸ごと入るか入らないか」で扱う。
    */
-  function truncate(text) {
-    var s = normalizeNFC(text);
-    if (weightedLength(s) <= MAX_WEIGHT) return s;
-
-    var budget = MAX_WEIGHT - weightedLength(ELLIPSIS);
-    var parts = splitUrls(s);
+  function takeToWeight(text, budget) {
+    var parts = splitUrls(text);
     var acc = 0;
     var out = '';
 
@@ -283,7 +315,32 @@
         out += gs[g];
       }
     }
-    return out.replace(/\s+$/, '') + ELLIPSIS;
+    return out;
+  }
+
+  function truncate(text) {
+    var s = normalizeNFC(text);
+    if (weightedLength(s) <= MAX_WEIGHT) return s;
+    return takeToWeight(s, MAX_WEIGHT - weightedLength(ELLIPSIS)).replace(/\s+$/, '') + ELLIPSIS;
+  }
+
+  /*
+   * 可変のタイトルと、固定のサフィックス「 (Issue #123 · owner/repo)」を分けて扱う。
+   *
+   * 旧実装は連結してから末尾を切っていたので、長いタイトルでは
+   * 識別に最も効くサフィックス（種別・番号・リポジトリ名）が真っ先に消えていた
+   * （2026-08-05の再監査で再現）。サフィックスぶんを先に確保してから、
+   * 可変のタイトル側だけを削る。
+   */
+  function truncateWithSuffix(title, suffix) {
+    var t = normalizeNFC(title);
+    var sfx = normalizeNFC(suffix || '');
+    var sw = weightedLength(sfx);
+    if (weightedLength(t) + sw <= MAX_WEIGHT) return t + sfx;
+    // サフィックス単独で上限に達する異常時は、サフィックス側を優先して切り詰める
+    if (sw + weightedLength(ELLIPSIS) >= MAX_WEIGHT) return truncate(sfx.replace(/^\s+/, ''));
+    var budget = MAX_WEIGHT - sw - weightedLength(ELLIPSIS);
+    return takeToWeight(t, budget).replace(/\s+$/, '') + ELLIPSIS + sfx;
   }
 
   /* ============================================================
@@ -329,6 +386,9 @@
 
     var s0 = seg[0].toLowerCase();
     if (SENSITIVE_FIRST_SEGMENTS.indexOf(s0) !== -1) return 'sensitive';
+    // /orgs/<org>/settings のような組織の管理画面
+    if (s0 === 'orgs' && seg.length >= 3 &&
+        SENSITIVE_ORG_SECTIONS.indexOf(seg[2].toLowerCase()) !== -1) return 'sensitive';
     if (s0 === 'search') return 'search';
     if (seg.length === 1) return RESERVED_OWNERS.indexOf(s0) !== -1 ? 'other' : 'user';
     if (RESERVED_OWNERS.indexOf(s0) !== -1) return 'other';
@@ -351,6 +411,25 @@
     if (s2 === 'releases' || s2 === 'tags') return 'releases';
     if (s2 === 'wiki') return 'wiki';
     return 'repo-sub';
+  }
+
+  /*
+   * 認証・設定・管理画面かどうか。
+   *
+   * これらのページはクエリを落としてもタイトルとパスが残り、
+   * 「Personal access tokens」「Actions secrets」といった文字列を
+   * Xの下書きへ送ることになる。共有機能の通常の目的から外れるので、
+   * 何も開かない（＝判断がつかないときは共有しない側へ倒す）。
+   */
+  function isSensitiveUrl(rawUrl) {
+    var u;
+    try {
+      u = new URL(rawUrl);
+    } catch (e) {
+      return false;
+    }
+    if (u.protocol !== 'https:' || u.hostname !== 'github.com') return false;
+    return routeOf(u) === 'sensitive';
   }
 
   function keepParam(route, name) {
@@ -407,8 +486,10 @@
     }
 
     var hash = u.hash || '';
-    if (route === 'repo' || route === 'root' || route === 'sensitive') hash = '';
-    if (hash && SENSITIVE_HASH_RE.test(hash)) hash = '';
+    if (route === 'root' || route === 'sensitive') hash = '';
+    // リポジトリトップは、READMEの節を指すハッシュだけ残す（?tab= 等のクエリは落とす）
+    if (route === 'repo' && !SAFE_SECTION_HASH_RE.test(hash)) hash = '';
+    if (hash && (SENSITIVE_HASH_RE.test(hash) || /%3D/i.test(hash))) hash = '';
 
     return u.origin + path + qs + hash;
   }
@@ -419,6 +500,7 @@
    * ここで split('?')[0] のような独自処理を書くと方針が二重化するので書かない。
    */
   function fallbackUrl(rawUrl) {
+    if (isSensitiveUrl(rawUrl)) return null;   // 例外時の逃げ道から機微ページが漏れないようにする
     try {
       return canonicalUrl(rawUrl, null);
     } catch (e) {
@@ -490,24 +572,24 @@
   function buildShare(rawUrl, rawTitle) {
     var info = parseLocation(rawUrl);
     if (!info) return null;
+    if (isSensitiveUrl(rawUrl)) return null;   // 認証・設定・管理画面は共有しない
 
     var url = canonicalUrl(rawUrl, info);
     var title = cleanTitle(info.kind, rawTitle);
-    var text;
+    var suffix = '';
 
     if (info.kind === 'issue') {
-      text = title + ' (Issue #' + info.number + ' · ' + info.repo + ')';
+      suffix = ' (Issue #' + info.number + ' · ' + info.repo + ')';
     } else if (info.kind === 'pr') {
-      text = title + ' (PR #' + info.number + ' · ' + info.repo + ')';
+      suffix = ' (PR #' + info.number + ' · ' + info.repo + ')';
     } else if (info.kind === 'discussion') {
-      text = title + ' (Discussion #' + info.number + ' · ' + info.repo + ')';
-    } else {
-      text = title;
+      suffix = ' (Discussion #' + info.number + ' · ' + info.repo + ')';
     }
 
     // タイトルが取れなかった場合は repo 名、それも無ければURLで代替する
-    if (!text.trim()) text = info.repo || url;
-    text = truncate(text.trim());
+    var base = title.trim();
+    if (!base && !suffix) base = info.repo || url;
+    var text = base ? truncateWithSuffix(base, suffix) : truncate(suffix.trim());
 
     return {
       kind: info.kind,
@@ -525,6 +607,8 @@
     cleanTitle: cleanTitle,
     canonicalUrl: canonicalUrl,
     fallbackUrl: fallbackUrl,
+    isSensitiveUrl: isSensitiveUrl,
+    truncateWithSuffix: truncateWithSuffix,
     intentUrlFor: intentUrlFor,
     routeOf: routeOf,
     weightedLength: weightedLength,

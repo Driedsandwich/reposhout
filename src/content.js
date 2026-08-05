@@ -157,11 +157,17 @@
     } catch (e) {
       threw = true;
     }
-    // 対象外ページ（buildShareがnullを返した）なら何もしない
+    // 対象外ページ（buildShareがnullを返した）なら何もしない。
+    // 認証・設定・管理画面もここで止まる。
     if (!share && !threw) return;
-    // 例外が出た場合だけ、URLだけの共有にフォールバックする（URL方針は本体と同じものを使う）
+    /*
+     * 例外が出た場合だけ、URLだけの共有にフォールバックする（URL方針は本体と同じものを使う）。
+     * 方針が使えない・機微ページと判定された場合は何も開かない。
+     * 判断がつかないときは共有しない側へ倒す。
+     */
     if (!share) {
-      var bare = window.GXS ? window.GXS.fallbackUrl(location.href) : location.origin + location.pathname;
+      var bare = window.GXS ? window.GXS.fallbackUrl(location.href) : null;
+      if (!bare) return;
       share = { intentUrl: 'https://x.com/intent/post?url=' + encodeURIComponent(bare) };
     }
 

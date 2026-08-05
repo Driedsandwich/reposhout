@@ -1,15 +1,19 @@
 # Privacy Policy / プライバシーポリシー
 
 **RepoShout** — Chrome extension
-Last updated / 最終更新: 2026-08-05（1.1.0）
+Last updated / 最終更新: 2026-08-05（1.1.1）
 
 ---
 
 ## English
 
-### Information we collect
+### Where your data goes — the short version
 
-**None.** RepoShout does not collect, store, or transmit any user information.
+RepoShout sends **nothing to the developer, and nothing to any server the developer operates**. There is no analytics, no telemetry, no advertising SDK, and no account.
+
+It does, however, hand two values to X, because that is the whole point of the extension: **when you press Share, the title and the canonicalised URL of the GitHub page you are on are placed in an X Web Intent link and sent to X to pre-fill its composer.** This happens the moment the composer opens — before you decide whether to press Post. If you never press Post, X has still received the title and the URL.
+
+RepoShout never posts on your behalf, and never stores the title or URL.
 
 ### Information we process
 
@@ -18,11 +22,15 @@ When — and only when — you activate the extension (by clicking the in-page *
 - the page URL
 - the page title
 
-These are used solely to compose the post text and the `x.com` share URL. All processing happens locally in your browser.
+They are used solely to build the post text and the `x.com` share link. The composing itself happens in your browser; the finished link is then opened on X, which is how the values reach X.
 
 ### Where data goes
 
-RepoShout makes **no network requests of its own**. When you activate it, it opens the X (formerly Twitter) post composer in a new window with the text and URL pre-filled. This is an ordinary link navigation. **Whether to actually post is entirely your decision, made on X's own screen.** The extension never posts on your behalf.
+RepoShout makes no background network requests, and contacts no server of its own. What it does is open the X (formerly Twitter) post composer in a new window, as an ordinary link navigation, with the text and URL already in the address. **The title and URL travel to X as part of that address.** Once the composer is open, **whether to actually post is entirely your decision, made on X's own screen** — the extension never posts on your behalf.
+
+X, and your browser, then handle those values under their own policies.
+
+**A caution.** If a GitHub page is private or confidential, do not press Share on it unless you intend its title and URL to reach X. From version 1.1.1 the extension refuses to share GitHub's authentication, account, settings and organisation-administration pages at all, but it cannot tell whether an ordinary repository is public or private from the URL alone.
 
 ### Storage
 
@@ -67,9 +75,13 @@ See [SUPPORT.md](SUPPORT.md). For suspected security problems, see [SECURITY.md]
 
 ## 日本語
 
-### 収集する情報
+### データがどこへ行くか（先に結論）
 
-**ありません。** RepoShout は利用者の情報を収集・保存・送信しません。
+RepoShout は、**開発者にも、開発者が運営するサーバーにも、何も送りません**。解析ツールも、利用状況の送信も、広告SDKも、アカウントもありません。
+
+一方で、**2つの値はXへ渡ります。それがこの拡張の目的そのものだからです**——Shareを押すと、見ているGitHubページのタイトルと正規化済みURLがXの投稿画面のURLに入り、下書きを埋めるためにXへ送られます。これは投稿画面が開いた時点で起きます。**あなたがPostを押すかどうかとは関係なく**、開いた時点でXはタイトルとURLを受け取っています。
+
+RepoShout が代わりに投稿することはなく、タイトルとURLを保存することもありません。
 
 ### 処理する情報
 
@@ -78,11 +90,15 @@ See [SUPPORT.md](SUPPORT.md). For suspected security problems, see [SECURITY.md]
 - ページのURL
 - ページのタイトル
 
-これらは投稿用の文面と `x.com` の共有URLを組み立てるためだけに使われ、処理はすべて利用者のブラウザ内で完結します。
+これらは投稿用の文面と `x.com` の共有リンクを組み立てるためだけに使われます。組み立て自体はブラウザ内で行われ、できあがったリンクをXで開くことで、値がXへ渡ります。
 
 ### 送信先
 
-RepoShout は**独自の通信を一切行いません**。操作すると、文面とURLが入力済みの状態でX（旧Twitter）の投稿画面を新しいウィンドウで開きます。これは通常のリンクを開く動作です。**実際に投稿するかどうかは、X の画面上で利用者が決めます。** 拡張が代わりに投稿することはありません。
+RepoShout はバックグラウンドでの通信を行わず、独自のサーバーとも通信しません。行うのは、文面とURLが入ったアドレスで X（旧Twitter）の投稿画面を新しいウィンドウで開くことだけです。通常のリンクを開く動作ですが、**タイトルとURLはそのアドレスの一部としてXへ渡ります**。投稿画面が開いたあと、**実際に投稿するかどうかは X の画面上で利用者が決めます**——拡張が代わりに投稿することはありません。
+
+渡ったあとの取り扱いには、X およびブラウザそれぞれのポリシーが適用されます。
+
+**注意。** 非公開・機密のGitHubページでは、そのタイトルとURLをXへ送る意図がある場合だけShareを押してください。バージョン1.1.1 から、GitHubの認証・アカウント・設定・組織管理の画面では拡張が共有そのものを拒否しますが、**通常のリポジトリが公開か非公開かはURLだけでは判別できません**。
 
 ### 保存
 
