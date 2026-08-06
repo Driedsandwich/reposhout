@@ -15,6 +15,7 @@
  *     読んでハッシュを計算し、申告と突き合わせる（呼び出し側が計算して渡す）。
  *   ・申告は runtime（配布物）だけでなく **metadata（掲載文・申告の位置）** にも結び付ける。
  *     監査後に文書を書き換えたら合わなくなる。
+ *   ・確認日は JST で見る（UTCだと日本の当日を「未来」として弾く・R11-005）。
  *   ・成果物の中身は root 直下ちょうど3点だけを許す（R11-004）。
  */
 
@@ -23,6 +24,16 @@ const HEX64 = /^[0-9a-f]{64}$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const blank = (v) => typeof v !== 'string' || v.trim() === '';
+
+/*
+ * その時間帯での「今日」を YYYY-MM-DD で返す（第11回監査 R11-005）。
+ * UTC で見ると、JSTの 00:30 に確認した当日を「未来の日付」として弾く。
+ */
+export function dateIn(timeZone, at = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(at);
+}
 
 /* YYYY-MM-DD として実在する日か（2026-02-30 のようなものを弾く） */
 function isRealDate(s) {

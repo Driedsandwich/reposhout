@@ -22,7 +22,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { validateStoreReadiness } from '../scripts/store-readiness.mjs';
+import { validateStoreReadiness, dateIn } from '../scripts/store-readiness.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (f) => readFileSync(join(ROOT, f), 'utf8').replace(/\r\n/g, '\n');
@@ -486,3 +486,38 @@ test('版が食い違えば落ちる', () => {
   failsWith(strictInputs({ packageVersion: '9.9.9' }), '版の一致');
 });
 
+/* ---- 時間帯（R11-005） ---------------------------------------------------
+ *
+ * UTC で「今日」を出すと、JST の 00:30 に確認した当日が翌日扱いになり、
+ * 正しく記録した確認日を「未来」として弾く。境界で確かめる。
+ */
+test('「今日」は JST で数える', () => {
+  const cases = [
+    ['2026-08-06T14:59:00Z', '2026-08-06', 'JST 23:59（同じ日）'],
+    ['2026-08-06T15:00:00Z', '2026-08-07', 'JST 00:00（日付が変わる）'],
+    ['2026-08-06T15:30:00Z', '2026-08-07', 'JST 00:30（監査が指摘した時刻）'],
+    ['2026-08-06T23:59:00Z', '2026-08-07', 'JST 08:59'],
+    ['2026-08-07T00:00:00Z', '2026-08-07', 'JST 09:00'],
+    ['2028-02-28T15:30:00Z', '2028-02-29', 'うるう日をまたぐ']
+  ];
+  for (const [iso, want, why] of cases) {
+    assert.equal(dateIn('Asia/Tokyo', new Date(iso)), want, why);
+  }
+  // 対照: 同じ時刻を UTC で見ると別の日になる（＝この違いが問題だった）
+  assert.equal(dateIn('UTC', new Date('2026-08-06T15:30:00Z')), '2026-08-06');
+});
+
+test('JST の当日に確認した記録が、未来として弾かれない', () => {
+  const d = confirmedDisclosure();
+  for (const c of d.categories) {
+    if (c.ownerConfirmation) c.ownerConfirmation.confirmedOn = '2026-08-07';
+  }
+  const jst = dateIn('Asia/Tokyo', new Date('2026-08-06T15:30:00Z'));   // JST 00:30
+  const r = validateStoreReadiness(strictInputs({ disclosure: d, today: jst }));
+  assert.deepEqual(r.problems, [], r.problems.join('\n'));
+  // UTC で数えると、同じ記録が未来扱いになる（対照）
+  const utc = dateIn('UTC', new Date('2026-08-06T15:30:00Z'));
+  const bad = validateStoreReadiness(strictInputs({ disclosure: d, today: utc }));
+  assert.ok(bad.problems.some((p) => p.includes('確認日が未来でない')),
+    '対照が成立していない＝UTCでも弾かれない');
+});

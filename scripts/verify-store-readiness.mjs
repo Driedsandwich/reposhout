@@ -20,7 +20,7 @@ import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { validateStoreReadiness } from './store-readiness.mjs';
+import { validateStoreReadiness, dateIn } from './store-readiness.mjs';
 import { readZip } from './zip-read.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -42,7 +42,8 @@ const argOf = (name) => {
 
 const candidate = JSON.parse(read('store/SUBMISSION_CANDIDATE.json'));
 
-const today = argOf('--today') || new Date().toISOString().slice(0, 10);
+/* 確認日は本人の暮らしている時間帯で見る（第11回監査 R11-005） */
+const today = argOf('--today') || dateIn(candidate.confirmationTimeZone || 'Asia/Tokyo');
 
 /* 外側の成果物ZIP。GitHub が書くので data descriptor 付きで来る（実測） */
 const artifactPath = argOf('--artifact');
