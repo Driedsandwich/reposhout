@@ -278,13 +278,57 @@ test('プライバシーポリシーに Limited Use の遵守声明がある', (
     ['Limited Use', 'Limited Use の明記'],
     ['ユーザーデータポリシー（Limited Use の要件を含む）に従います', '日本語の遵守声明'],
     ['creditworthiness', '信用力判断に使わないこと'],
-    ['人がこのデータを読むことはありません', '人が読まないこと']
+    ["human review by the developer or", '人手閲覧を開発者側に限定していること'],
+    ['開発者または開発者のために行動する者の人手閲覧', '日本語側の同じ限定']
   ]) {
-    assert.ok(p.includes(needle), `PRIVACY.md に「${why}」が無い: ${needle}`);
+    assert.ok(p.replace(/\s+/g, ' ').includes(needle), `PRIVACY.md に「${why}」が無い: ${needle}`);
   }
   // ストアへ貼るポリシーURLがこの文書を指していること
   assert.ok(read('store/LISTING.md').includes('blob/main/PRIVACY.md'),
     'ストア文書のポリシーURLが PRIVACY.md を指していない');
+});
+
+/*
+ * 第10回監査 R10-001。同じ文書が「Xへ渡る」と書いているのに「人は誰も読まない」
+ * 「受け取れるサーバーは無い」「何も保存しない」と断定していた。約束できるのは
+ * 開発者側だけで、X側で誰が読むかも、session storage に何が残るかも別の話。
+ */
+test('プライバシーポリシーが、保証できない範囲まで断定していない', () => {
+  const flat = read('PRIVACY.md').replace(/\s+/g, ' ');
+  assert.ok(/X receives|Xへ渡/.test(flat), '前提が崩れている（Xへ渡ると書いていない）');
+  for (const [re, why] of [
+    [/No human [\u2014-] including the developer/, '「人は誰も読まない」と断定している'],
+    [/開発者を含め、人がこのデータを読むことはありません/, '同（日本語）'],
+    [/there is no server that could receive it/i, '「受け取れるサーバーは無い」と限定なしに断定している'],
+    [/受け取れるサーバーも存在しません/, '同（日本語）'],
+    [/nothing is retained/i, '「何も保存しない」と断定している（ウィンドウIDと時刻は保存する）']
+  ]) {
+    assert.ok(!re.test(flat), `PRIVACY.md が言い過ぎている: ${why}`);
+  }
+  // Xが受け取ったあとの扱いは、Xのポリシーの話だと書いてあること
+  assert.ok(/X's own policies/i.test(flat) && /Xのポリシーに従って/.test(flat),
+    'X側の扱いについての限定が無い');
+});
+
+/*
+ * 第10回監査 R10-001。content script の表が「ボタン行を探すためだけに読む」と
+ * だけ書いていたが、押された時点で location.href と document.title を読む。
+ */
+test('content script の表が、押されたときに読む2つを書いている', () => {
+  /*
+   * 文書のどこかにあるか、ではなく**その行にあるか**を見る。英語の行から消しても
+   * 日本語の行に同じ語が残っていて通ってしまった（この検査を作ったときの変異で実測）。
+   */
+  const rows = read('PRIVACY.md').split('\n')
+    .filter((l) => l.startsWith('| `https://github.com/*`'));
+  assert.equal(rows.length, 2, `GitHub側の行が2つ（英日）でない: ${rows.length}`);
+  for (const row of rows) {
+    for (const needle of ['location.href', 'document.title']) {
+      assert.ok(row.includes(needle), `PRIVACY.md の表の行に「${needle}」が無い: ${row.slice(0, 60)}…`);
+    }
+  }
+  assert.ok(rows.some((r) => r.includes('trusted click')), '英語の行に trusted click が無い');
+  assert.ok(rows.some((r) => r.includes('利用者の操作によるクリック')), '日本語の行に同じ説明が無い');
 });
 
 test('ストア文書が、手元ビルドを提出用として案内していない', () => {

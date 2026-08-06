@@ -58,7 +58,7 @@ RepoShout also runs content scripts on two sites:
 
 | Site | What the script does |
 |---|---|
-| `https://github.com/*` | Adds the Share button. Reads the page only to locate the button row; adds one `<style>` element and one wrapper holding one button (an `<li>` or a `<div>`, matching the container) and modifies nothing else. It deletes and replaces nothing of GitHub's own. |
+| `https://github.com/*` | Adds the Share button. Until you press it, it reads the page only to locate the button row. **When you press it (a trusted click), it reads `location.href` and `document.title`** — the two values described above — and nothing from the page body. It adds one `<style>` element and one wrapper holding one button (an `<li>` or a `<div>`, matching the container) and modifies nothing else. It deletes and replaces nothing of GitHub's own. |
 | `https://x.com/*` | **Listens for the Escape key, and nothing else.** It closes the share window this extension opened. It does not read, store, or transmit anything from X. |
 
 The X script is deliberately blind to page content. Before closing anything it asks the service worker whether this window is one the extension itself opened, and the only evidence accepted is the window ID recorded at creation time. **If it does not match — which is the case for every X tab you opened yourself — it does nothing.** It cannot close your normal X tabs.
@@ -76,9 +76,15 @@ Concretely:
   composer you asked for. There is no other transfer.
 - This data is **never** used for advertising, sold to anyone, or used to determine
   creditworthiness or for lending purposes.
-- **No human — including the developer — reads this data.** The developer receives nothing;
-  there is no server that could receive it.
-- Nothing is used to build a profile, and nothing is retained (see Storage above).
+- **RepoShout does not make the title or URL available for human review by the developer or
+  anyone acting on the developer's behalf.** There is no developer-operated backend — the
+  developer receives nothing because no server of the developer's exists to receive it.
+  As described above, X receives the title and URL solely to open the composer you asked
+  for, and handles them under X's own policies. What X does on its side is X's to state,
+  not something this extension can promise.
+- Nothing is used to build a profile. **The title and URL are not retained** by the
+  extension; the only things it stores are the window ID and timestamp described under
+  Storage above.
 
 ### Changes to this policy
 
@@ -143,7 +149,7 @@ RepoShout はバックグラウンドでの通信を行わず、独自のサー�
 
 | サイト | スクリプトがすること |
 |---|---|
-| `https://github.com/*` | Share ボタンを追加します。ページを読むのはボタン行の位置を探すためだけで、`<style>` を1つとボタン1個を包む要素を1つ足す以外は何も変更しません（包む要素はコンテナに合わせて `<li>` または `<div>`）。GitHub側の要素は消しも置き換えもしません。 |
+| `https://github.com/*` | Share ボタンを追加します。押されるまでは、ページを読むのはボタン行の位置を探すためだけです。**押された時点（利用者の操作によるクリック）で `location.href` と `document.title` を読みます**——上に書いた2つの値で、ページ本文は読みません。`<style>` を1つとボタン1個を包む要素を1つ足す以外は何も変更しません（包む要素はコンテナに合わせて `<li>` または `<div>`）。GitHub側の要素は消しも置き換えもしません。 |
 | `https://x.com/*` | **Escキーの検知だけを行います。** 拡張が開いた共有用ウィンドウを閉じるためです。Xから何かを読み取ることも、保存することも、送信することもありません。 |
 
 X側のスクリプトは、意図的にページの中身を見ません。閉じる前に、service worker へ「このウィンドウは拡張が開いたものか」とだけ尋ねます。根拠として使うのは、開いた時点で記録したウィンドウIDだけです。**一致しない場合（＝あなたが自分で開いたXのタブはすべてこれに当たります）、何もしません。** 通常のXのタブを閉じることはできません。
@@ -161,9 +167,13 @@ RepoShout が Google API から受け取った情報の利用、および取り�
   それ以外の転送はありません。
 - このデータを広告に使うことも、誰かに販売することも、信用力の判断や融資の目的に
   使うことも**ありません**。
-- **開発者を含め、人がこのデータを読むことはありません。** 開発者は何も受け取りませんし、
-  受け取れるサーバーも存在しません。
-- プロフィールの作成には使わず、保存もしません（上の「保存」を参照）。
+- **RepoShout は、タイトルやURLを開発者または開発者のために行動する者の人手閲覧に供しません。**
+  開発者が運営するサーバー（backend）はありません——受け取れるサーバーが存在しないので、
+  開発者は何も受け取りません。上記のとおり、Xは利用者が要求した投稿画面を開くために
+  タイトルとURLを受け取り、そのあとはXのポリシーに従って取り扱います。X側で何が起きるかは
+  Xが述べることで、この拡張が約束できることではありません。
+- プロフィールの作成には使いません。**タイトルとURLは、拡張側では保存しません。**
+  保存するのは上の「保存」に書いたウィンドウIDと時刻だけです。
 
 ### 本ポリシーの変更
 
