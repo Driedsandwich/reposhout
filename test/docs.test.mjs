@@ -364,6 +364,74 @@ test('ストア文書が、正本の成果物と一致していて、可変な m
   }
 });
 
+/*
+ * 第10回監査 R10-005。READMEの冒頭は「ツールバーとショートカットはGitHubのどの
+ * ページでも使える」と書いていた。実装は認証・アカウント・設定・組織管理を
+ * 全入口で拒否するので、事実と違う。
+ *
+ * 第9回で入れた検査は**文書のどこかに正しい文があるか**しか見ていなかったので、
+ * 巻末の「制約」に正しい説明があることで通ってしまい、冒頭の矛盾を見逃した。
+ * ここでは**その節だけを切り出して**判定する。
+ */
+function section(body, heading) {
+  const i = body.indexOf(heading);
+  assert.ok(i >= 0, `見出しが無い: ${heading}`);
+  const rest = body.slice(i + heading.length);
+  const next = rest.search(/\n## /);
+  return rest.slice(0, next === -1 ? undefined : next);
+}
+
+/* 節に対する判定。対照（旧文面）でも同じ関数を使う */
+function topSectionProblems(sec, forbidden, required) {
+  const problems = [];
+  for (const [needle, why] of forbidden) if (sec.includes(needle)) problems.push(`言い過ぎ: ${why}`);
+  for (const [needle, why] of required) if (!sec.includes(needle)) problems.push(`不足: ${why}`);
+  return problems;
+}
+
+const TOP_RULES = {
+  'README.md': {
+    heading: '## What it does',
+    forbidden: [['every GitHub page', '「どのページでも使える」'],
+                ['Anywhere else on GitHub', '「GitHubのそれ以外どこでも」']],
+    required: [['shareable GitHub pages', '共有できるページに限る、と書くこと'],
+               ['refused at every entry point', '機微なページを全入口で拒否すること']]
+  },
+  'README.ja.md': {
+    heading: '## できること',
+    forbidden: [['どのページでも使えます', '「どのページでも使える」'],
+                ['| その他のGitHubページ |', '「その他のGitHubページ」（共有可能の限定が無い）']],
+    required: [['共有可能なGitHubページ', '共有できるページに限る、と書くこと'],
+               ['すべての入口で拒否', '機微なページを全入口で拒否すること']]
+  }
+};
+
+test('READMEの冒頭の節が、実装と食い違っていない', () => {
+  for (const [f, rule] of Object.entries(TOP_RULES)) {
+    const sec = section(read(f), rule.heading);
+    const problems = topSectionProblems(sec, rule.forbidden, rule.required);
+    assert.deepEqual(problems, [], `${f} の冒頭: ${problems.join(' / ')}`);
+  }
+});
+
+test('冒頭の節の検査が効いているかの対照', () => {
+  /*
+   * 旧文面（巻末には正しい説明があるが冒頭は矛盾している状態）を作って、
+   * 同じ判定に掛ける。落ちなければ、この検査は矛盾を捕まえられていない。
+   */
+  const old = {
+    'README.md': '\n| Anywhere else on GitHub | Toolbar icon |\n\n' +
+                 'The toolbar icon and the shortcut work on every GitHub page.\n',
+    'README.ja.md': '\n| その他のGitHubページ | ツールバーのアイコン |\n\n' +
+                    'ツールバーアイコンとショートカットは、GitHubのどのページでも使えます。\n'
+  };
+  for (const [f, rule] of Object.entries(TOP_RULES)) {
+    const problems = topSectionProblems(old[f], rule.forbidden, rule.required);
+    assert.ok(problems.length >= 2,
+      `対照が成立していない＝旧文面でも通ってしまう: ${f} / ${problems.join(' / ')}`);
+  }
+});
+
 test('ストア文書が、手元ビルドを提出用として案内していない', () => {
   for (const f of ['store/LISTING.md', 'store/STORE_DASHBOARD_CHANGES.md']) {
     const body = read(f);
