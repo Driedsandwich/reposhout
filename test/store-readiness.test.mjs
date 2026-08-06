@@ -385,6 +385,38 @@ test('成果物の名前が正本と違えば落ちる', () => {
   }), '成果物の名前');
 });
 
+test('成果物に入れ子の同名ファイルがあれば落ちる（R11-004）', () => {
+  /*
+   * 以前は basename だけで引いていたので、nested/release-manifest.json が
+   * root の記録を上書きし、余計なファイルにも気づけなかった。
+   */
+  const cand = readyCandidate();
+  const base = fakeArtifact(cand);
+  const files = base.files.concat([
+    { name: 'nested/release-manifest.json', data: Buffer.from('{}', 'utf8') }
+  ]);
+  failsWith(strictInputs({ candidate: cand, artifact: { ...base, files } }),
+    '成果物の中身がちょうど3点');
+});
+
+test('成果物に余計なファイルがあれば落ちる', () => {
+  const cand = readyCandidate();
+  const base = fakeArtifact(cand);
+  const files = base.files.concat([{ name: 'README.txt', data: Buffer.from('x', 'utf8') }]);
+  failsWith(strictInputs({ candidate: cand, artifact: { ...base, files } }),
+    '成果物の中身がちょうど3点');
+});
+
+test('ハッシュの控えが1行まるごと一致しなければ落ちる', () => {
+  const cand = readyCandidate();
+  const base = fakeArtifact(cand);
+  const files = base.files.map((f) => f.name.endsWith('.sha256')
+    ? { ...f, data: Buffer.from(`${cand.innerSha256}  wrong-name.zip\n`, 'utf8') }
+    : f);
+  failsWith(strictInputs({ candidate: cand, artifact: { ...base, files } }),
+    'ハッシュの控えが1行まるごと一致');
+});
+
 test('PRで作られた成果物なら落ちる', () => {
   const cand = readyCandidate();
   failsWith(strictInputs({

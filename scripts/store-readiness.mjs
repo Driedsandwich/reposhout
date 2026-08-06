@@ -15,6 +15,7 @@
  *     読んでハッシュを計算し、申告と突き合わせる（呼び出し側が計算して渡す）。
  *   ・申告は runtime（配布物）だけでなく **metadata（掲載文・申告の位置）** にも結び付ける。
  *     監査後に文書を書き換えたら合わなくなる。
+ *   ・成果物の中身は root 直下ちょうど3点だけを許す（R11-004）。
  */
 
 const HEX40 = /^[0-9a-f]{40}$/;
@@ -213,7 +214,23 @@ export function validateStoreReadiness(input) {
     check('成果物の名前', artifact.outerName === candidate.artifactName,
       `${artifact.outerName} は正本 ${candidate.artifactName} と違う`);
 
-    const byName = new Map(artifact.files.map((f) => [f.name.replace(/^.*\//, ''), f.data]));
+    /*
+     * root 直下ちょうど3点だけを許す（第11回監査 R11-004）。
+     * 以前は basename だけで引いていたので、nested/release-manifest.json が
+     * 同じ鍵で上書きし、入れ子や余計なファイルを見逃した。
+     */
+    const wanted = ['release-manifest.json', candidate.innerName, `${candidate.innerName}.sha256`];
+    const names = artifact.files.map((f) => f.name);
+    check('成果物の中身がちょうど3点',
+      names.length === 3 && wanted.every((w) => names.includes(w)),
+      `中身: ${names.join(' / ')}`);
+    check('成果物に入れ子や余計なものが無い',
+      names.every((n) => !n.includes('/') && !n.endsWith('/')),
+      `入れ子またはディレクトリがある: ${names.filter((n) => n.includes('/')).join(' / ') || '(なし)'}`);
+    check('成果物に同じ名前が二度入っていない',
+      new Set(names).size === names.length, `重複: ${names.join(' / ')}`);
+
+    const byName = new Map(artifact.files.map((f) => [f.name, f.data]));
     const manifestRaw = byName.get('release-manifest.json');
     const innerZip = byName.get(candidate.innerName);
     const shaFile = byName.get(`${candidate.innerName}.sha256`);
@@ -243,8 +260,10 @@ export function validateStoreReadiness(input) {
       }
     }
     if (shaFile) {
-      check('ハッシュの控えの中身', shaFile.toString('utf8').includes(candidate.innerSha256),
-        '控えのハッシュが正本と違う');
+      /* 「含んでいる」ではなく1行まるごと一致で見る（R11-004） */
+      check('ハッシュの控えが1行まるごと一致',
+        shaFile.toString('utf8') === `${candidate.innerSha256}  ${candidate.innerName}\n`,
+        `控えの中身が違う: ${JSON.stringify(shaFile.toString('utf8').slice(0, 120))}`);
     }
     if (manifestRaw) {
       let rm = null;
