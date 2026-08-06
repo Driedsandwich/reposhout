@@ -241,6 +241,67 @@ test('QA手順の検査が効いているかの対照', () => {
     '対照が成立していない＝旧手順でも通ってしまう');
 });
 
+/*
+ * 第9回監査 R9-005。禁止語の一覧方式は、語の間に別の語が挟まると一致しない。
+ * 日本語READMEの「公式の conformance コーパスは npm パッケージに同梱されていないため、
+ * 走らせていません」は、禁止語「公式 conformance コーパスは走らせていない」と一字違いで
+ * 素通りしていた。**書いてあるべきことを積極的に要求する**形へ変える。
+ */
+test('READMEが、実装と一致する事実を積極的に書いている', () => {
+  const must = {
+    'README.md': [
+      ['validate.yml', '走らせている公式コーパスの名前'],
+      ['counting sections', '走らせている範囲'],
+      ['pinned upstream commit', '固定していること'],
+      ['refused at every entry point', '設定・認証ページを全入口で拒否すること']
+    ],
+    'README.ja.md': [
+      ['validate.yml', '走らせている公式コーパスの名前'],
+      ['文字数の3節', '走らせている範囲'],
+      ['配布物には入りません', '配布物に入らないこと'],
+      ['すべての入口で拒否', '設定・認証ページを全入口で拒否すること'],
+      ['文字数の3節は実際に走らせています', '走らせている事実（否定形で書かない）']
+    ]
+  };
+  for (const [f, pairs] of Object.entries(must)) {
+    const body = read(f);
+    for (const [needle, why] of pairs) {
+      assert.ok(body.includes(needle), `${f} に「${why}」が書いていない: ${needle}`);
+    }
+  }
+});
+
+test('プライバシーポリシーに Limited Use の遵守声明がある', () => {
+  const p = read('PRIVACY.md');
+  for (const [needle, why] of [
+    ['adheres to the Chrome Web Store User Data Policy', '英語の遵守声明'],
+    ['Limited Use', 'Limited Use の明記'],
+    ['ユーザーデータポリシー（Limited Use の要件を含む）に従います', '日本語の遵守声明'],
+    ['creditworthiness', '信用力判断に使わないこと'],
+    ['人がこのデータを読むことはありません', '人が読まないこと']
+  ]) {
+    assert.ok(p.includes(needle), `PRIVACY.md に「${why}」が無い: ${needle}`);
+  }
+  // ストアへ貼るポリシーURLがこの文書を指していること
+  assert.ok(read('store/LISTING.md').includes('blob/main/PRIVACY.md'),
+    'ストア文書のポリシーURLが PRIVACY.md を指していない');
+});
+
+test('ストア文書が、手元ビルドを提出用として案内していない', () => {
+  for (const f of ['store/LISTING.md', 'store/STORE_DASHBOARD_CHANGES.md']) {
+    const body = read(f);
+    assert.ok(!body.includes('`npm run package` で作れます'),
+      `${f} が手元ビルドを提出用として案内している`);
+    assert.ok(body.includes('reposhout-package-'),
+      `${f} に、どの成果物を出すかが書いていない`);
+  }
+  // 出す正本が一意に決まっていること
+  assert.match(read('store/LISTING.md'), /成果物 : reposhout-package-[0-9a-f]{40}/,
+    '提出する成果物が一意に指定されていない');
+  assert.match(read('store/LISTING.md'), /SHA-256 : [0-9a-f]{64}/,
+    '提出するZIPのSHA-256が書いていない');
+});
+
 test('公式コーパスを走らせている範囲が、READMEに書いてある', () => {
   for (const [f, needles] of Object.entries({
     'README.md': ['validate.yml', 'counting sections', 'pinned upstream commit'],
@@ -289,7 +350,7 @@ test('ストア文書のデータ申告が、正本と1つ残らず一致する'
        * 第7回監査 R7-002。本人の確認が要る欄を、文書側では確定した No として
        * 見せていた。貼る人は文書しか見ないので、確認待ちのものを確定値で出さない。
        */
-      if (cat.ownerMustConfirm) {
+      if (cat.requiresOwnerConfirmation && cat.confirmationStatus !== 'confirmed') {
         assert.equal(cat.answer, null, `${cat.label}: 確認待ちなのに正本が答えを持っている`);
         assert.ok(['Yes', 'No'].includes(cat.proposedAnswer),
           `${cat.label}: 案（proposedAnswer）が無い`);
@@ -307,7 +368,7 @@ test('ストア文書のデータ申告が、正本と1つ残らず一致する'
 });
 
 test('確認待ちの欄に、確認結果を書く場所が用意してある', () => {
-  const pending = DISCLOSURE.categories.filter((c) => c.ownerMustConfirm);
+  const pending = DISCLOSURE.categories.filter((c) => c.requiresOwnerConfirmation);
   assert.ok(pending.length >= 1, '確認待ちの欄が1つも無い');
   for (const c of pending) {
     const oc = c.ownerConfirmation;
@@ -323,7 +384,11 @@ test('データ申告の欄が9つそろっている', () => {
   assert.equal(labels.length, 9, `欄の数が違う: ${labels.length}`);
   assert.equal(new Set(labels).size, 9, '同じ欄が二重に入っている');
   for (const c of DISCLOSURE.categories) {
-    if (c.ownerMustConfirm) {
+    assert.ok(['pending', 'confirmed', 'not_required'].includes(c.confirmationStatus),
+      `${c.label}: confirmationStatus が想定外: ${c.confirmationStatus}`);
+    assert.equal(c.requiresOwnerConfirmation, c.confirmationStatus !== 'not_required',
+      `${c.label}: 確認の要否と状態が食い違っている`);
+    if (c.confirmationStatus === 'pending') {
       assert.equal(c.answer, null, `${c.label}: 確認待ちなら答えは持たない`);
       assert.ok(['Yes', 'No'].includes(c.proposedAnswer), `${c.label} の案が Yes / No でない`);
     } else {

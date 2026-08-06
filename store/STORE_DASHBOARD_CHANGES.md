@@ -124,11 +124,20 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 
 ## 4. アップロードするもの
 
+**手元で `npm run package` して作ったZIPは提出しません**（名前に `NON-SUBMITTABLE` が付きます・第9回監査 R9-003）。
+使うのは main への push で走ったCIが残した成果物だけです。取り出し方は
+[LISTING.md](LISTING.md) §1「どのZIPを出すか」を見てください。
+
+今回出すもの:
+
 ```
-dist/reposhout-1.1.7.zip
+成果物 : reposhout-package-405b3c633797ae5a7d0a835c84d5367dbe7f35e0
+中のZIP : reposhout-1.1.7.zip
+SHA-256 : 86e52fd07ea9f604e27ef228dc234651a99667a8e79dd08676f9692b7dfffc0c
 ```
 
-`npm run package` で作れます。同じ内容なら何度作っても同じZIPになるので、`dist/reposhout-1.1.7.zip.sha256` の値を控えておけば、提出したものと手元のものが同じかを後から確かめられます。
+現在の main（`ce48958`）から作られた成果物も中身は1バイト違わず同じですが、
+**タグ `v1.1.7` と同じコミットから作られた上記を正本**とします（第9回監査 R9-004）。
 
 ---
 

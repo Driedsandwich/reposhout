@@ -63,6 +63,23 @@ RepoShout also runs content scripts on two sites:
 
 The X script is deliberately blind to page content. Before closing anything it asks the service worker whether this window is one the extension itself opened, and the only evidence accepted is the window ID recorded at creation time. **If it does not match — which is the case for every X tab you opened yourself — it does nothing.** It cannot close your normal X tabs.
 
+### Compliance with the Chrome Web Store User Data Policy
+
+RepoShout's use of information received from Google APIs, and any user data it handles,
+**adheres to the Chrome Web Store User Data Policy, including the Limited Use requirements.**
+
+Concretely:
+
+- The page title and URL are used **only** to provide the extension's single purpose —
+  opening X's post composer pre-filled with the page you are on.
+- The only transfer to a third party is to X, and only to the extent required to open the
+  composer you asked for. There is no other transfer.
+- This data is **never** used for advertising, sold to anyone, or used to determine
+  creditworthiness or for lending purposes.
+- **No human — including the developer — reads this data.** The developer receives nothing;
+  there is no server that could receive it.
+- Nothing is used to build a profile, and nothing is retained (see Storage above).
+
 ### Changes to this policy
 
 Any change will be reflected in this file with an updated date.
@@ -130,6 +147,23 @@ RepoShout はバックグラウンドでの通信を行わず、独自のサー�
 | `https://x.com/*` | **Escキーの検知だけを行います。** 拡張が開いた共有用ウィンドウを閉じるためです。Xから何かを読み取ることも、保存することも、送信することもありません。 |
 
 X側のスクリプトは、意図的にページの中身を見ません。閉じる前に、service worker へ「このウィンドウは拡張が開いたものか」とだけ尋ねます。根拠として使うのは、開いた時点で記録したウィンドウIDだけです。**一致しない場合（＝あなたが自分で開いたXのタブはすべてこれに当たります）、何もしません。** 通常のXのタブを閉じることはできません。
+
+### Chrome ウェブストアのユーザーデータポリシーの遵守
+
+RepoShout が Google API から受け取った情報の利用、および取り扱うすべての利用者データは、
+**Chrome ウェブストアのユーザーデータポリシー（Limited Use の要件を含む）に従います。**
+
+具体的には次のとおりです。
+
+- ページのタイトルとURLは、この拡張の唯一の目的——見ているページでXの投稿画面を開くこと——
+  **のためだけ**に使います。
+- 第三者へ渡るのはXだけで、利用者が求めた投稿画面を開くために必要な範囲に限ります。
+  それ以外の転送はありません。
+- このデータを広告に使うことも、誰かに販売することも、信用力の判断や融資の目的に
+  使うことも**ありません**。
+- **開発者を含め、人がこのデータを読むことはありません。** 開発者は何も受け取りませんし、
+  受け取れるサーバーも存在しません。
+- プロフィールの作成には使わず、保存もしません（上の「保存」を参照）。
 
 ### 本ポリシーの変更
 

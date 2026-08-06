@@ -246,6 +246,26 @@ test('タグpushのCIが、いま付けたタグ自身を検証する', () => {
   assert.equal((step.match(/exit 1/g) || []).length, 3, '3つの判定すべてで停止していない');
 });
 
+/*
+ * 決定論のステップが、2回目のビルドが何もしなくても通る形だった（第9回監査 R9-006）。
+ * 前の dist を消さずにハッシュを読み直していたため。第7回で見つけた
+ * 「何もしないまま成功する」型と同じ。
+ */
+test('決定論のステップが、2回目を作り直させている', () => {
+  const wf = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8').replace(/\r\n/g, '\n');
+  const i = wf.indexOf('同じ内容から同じZIPができることを確かめる');
+  assert.ok(i > 0, '決定論のステップが無い');
+  const step = wf.slice(i, wf.indexOf('\n      - name:', i + 10));
+
+  assert.ok(step.includes('rm -rf dist'), '2回目の前に dist を消していない');
+  assert.ok(step.includes('release-manifest.json'), '2回目が記録を作ったか見ていない');
+  assert.ok(/-eq 3/.test(step), '出力が3点そろったか見ていない');
+  assert.ok(step.includes('cmp '), 'バイト列を比べていない');
+  // 何も無いまま成功する成果物アップロードを許さない
+  assert.ok(wf.includes('if-no-files-found: error'),
+    'upload-artifact が空でも成功する設定になっている');
+});
+
 test('配布するファイルに CRLF が混ざっていない', () => {
   /*
    * 改行が混ざると、同じコミットでもOSによってZIPの中身が変わり、
