@@ -1,7 +1,7 @@
 # Privacy Policy / プライバシーポリシー
 
 **RepoShout** — Chrome extension
-Last updated / 最終更新: 2026-08-05（1.1.3）
+Last updated / 最終更新: 2026-08-06（1.1.4）
 
 ---
 
@@ -30,7 +30,7 @@ RepoShout makes no background network requests, and contacts no server of its ow
 
 X, and your browser, then handle those values under their own policies.
 
-**A caution.** The URL always contains a GitHub account name — `github.com/<account>/<repository>` — and so does the title of a profile page. If a GitHub page is private or confidential, do not press Share on it unless you intend its title and URL, including that account name, to reach X. From version 1.1.1 the extension refuses to share GitHub's authentication, account, settings and organisation-administration pages at all, but it cannot tell whether an ordinary repository is public or private from the URL alone.
+**A caution.** The title, the URL, or the generated suffix may contain a GitHub username or organisation identifier — a repository URL has the form `github.com/<owner>/<repository>`, and a profile page carries the name in its title too. (Not every shareable page does: `github.com/search?q=…`, `/explore` and `/topics/…` carry no account name.) If a GitHub page is private or confidential, do not press Share on it unless you intend its title and URL, including any account name in them, to reach X. From version 1.1.1 the extension refuses to share GitHub's authentication, account, settings and organisation-administration pages at all, but it cannot tell whether an ordinary repository is public or private from the URL alone.
 
 ### Storage
 
@@ -58,7 +58,7 @@ RepoShout also runs content scripts on two sites:
 
 | Site | What the script does |
 |---|---|
-| `https://github.com/*` | Adds the Share button. Reads the page only to locate the button row; adds a single element (an `<li>` or a `<div>`, matching the container) and modifies nothing else. |
+| `https://github.com/*` | Adds the Share button. Reads the page only to locate the button row; adds one `<style>` element and one wrapper holding one button (an `<li>` or a `<div>`, matching the container) and modifies nothing else. It deletes and replaces nothing of GitHub's own. |
 | `https://x.com/*` | **Listens for the Escape key, and nothing else.** It closes the share window this extension opened. It does not read, store, or transmit anything from X. |
 
 The X script is deliberately blind to page content. Before closing anything it asks the service worker whether this window is one the extension itself opened, and the only evidence accepted is the window ID recorded at creation time. **If it does not match — which is the case for every X tab you opened yourself — it does nothing.** It cannot close your normal X tabs.
@@ -98,7 +98,7 @@ RepoShout はバックグラウンドでの通信を行わず、独自のサー�
 
 渡ったあとの取り扱いには、X およびブラウザそれぞれのポリシーが適用されます。
 
-**注意。** 共有するURLには必ずGitHubのアカウント名が入ります（`github.com/<アカウント名>/<リポジトリ名>`）。プロフィールページではタイトルにも入ります。非公開・機密のGitHubページでは、そのアカウント名を含むタイトルとURLをXへ送る意図がある場合だけShareを押してください。バージョン1.1.1 から、GitHubの認証・アカウント・設定・組織管理の画面では拡張が共有そのものを拒否しますが、**通常のリポジトリが公開か非公開かはURLだけでは判別できません**。
+**注意。** タイトル・URL・付け足すサフィックスには、GitHubのユーザー名または組織名が**入る場合があります**（リポジトリのURLは `github.com/<所有者>/<リポジトリ名>` の形で、プロフィールページではタイトルにも入ります）。すべてがそうではありません——`github.com/search?q=…`・`/explore`・`/topics/…` は共有できてアカウント名を含みません。非公開・機密のGitHubページでは、そこに入るアカウント名ごとタイトルとURLをXへ送る意図がある場合だけShareを押してください。バージョン1.1.1 から、GitHubの認証・アカウント・設定・組織管理の画面では拡張が共有そのものを拒否しますが、**通常のリポジトリが公開か非公開かはURLだけでは判別できません**。
 
 ### 保存
 
@@ -126,7 +126,7 @@ RepoShout はバックグラウンドでの通信を行わず、独自のサー�
 
 | サイト | スクリプトがすること |
 |---|---|
-| `https://github.com/*` | Share ボタンを追加します。ページを読むのはボタン行の位置を探すためだけで、要素を1つ足す以外は何も変更しません（コンテナに合わせて `<li>` または `<div>`）。 |
+| `https://github.com/*` | Share ボタンを追加します。ページを読むのはボタン行の位置を探すためだけで、`<style>` を1つとボタン1個を包む要素を1つ足す以外は何も変更しません（包む要素はコンテナに合わせて `<li>` または `<div>`）。GitHub側の要素は消しも置き換えもしません。 |
 | `https://x.com/*` | **Escキーの検知だけを行います。** 拡張が開いた共有用ウィンドウを閉じるためです。Xから何かを読み取ることも、保存することも、送信することもありません。 |
 
 X側のスクリプトは、意図的にページの中身を見ません。閉じる前に、service worker へ「このウィンドウは拡張が開いたものか」とだけ尋ねます。根拠として使うのは、開いた時点で記録したウィンドウIDだけです。**一致しない場合（＝あなたが自分で開いたXのタブはすべてこれに当たります）、何もしません。** 通常のXのタブを閉じることはできません。

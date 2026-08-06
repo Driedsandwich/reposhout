@@ -1,0 +1,137 @@
+{
+  "_about": [
+    "Chrome ウェブストアの Privacy practices（データの取り扱い）へ入力する内容の正本。",
+    "同じ設問への答えが store/LISTING.md と store/STORE_DASHBOARD_CHANGES.md で食い違い、",
+    "どちらを見るかで申告が変わる状態だった（第5回監査 R5-001）。答えはここだけに置き、",
+    "文書側は必ずここから写す。ずれたら test/docs.test.mjs が落ちる。",
+    "",
+    "列を2つに分けているのは、『コードが何をしているか（事実）』と",
+    "『規約がそれをどう分類するか（判断）』を混ぜないため。コードを読んだだけで",
+    "『該当しない』と断定しない。"
+  ],
+  "version": "1.1.4",
+  "dashboardSection": "Privacy practices › Data usage",
+  "policyReference": {
+    "url": "https://developer.chrome.com/docs/webstore/program-policies/user-data-faq",
+    "readOn": "2026-08-06",
+    "handleMeans": "collecting, transmitting, using, or sharing user data",
+    "localProcessingStillNeedsDisclosure": true,
+    "piiExamplesIncludeUsername": true
+  },
+  "dataFlow": {
+    "developerServer": "無い。開発者は何も受け取らない",
+    "analyticsOrTelemetry": "無い",
+    "thirdPartyRecipient": "X（x.com）",
+    "whatReachesX": "ページのタイトルから作った本文と、正規化した github.com のURL",
+    "whenItReachesX": "利用者が Share を押して投稿画面が開いた時点（Post を押す前）",
+    "postIsUserDecision": true,
+    "persistentStorageOfTitleOrUrl": "無い",
+    "sessionStorage": "ウィンドウIDと時刻だけ（chrome.storage.session・メモリ上・12時間で失効）"
+  },
+  "categories": [
+    {
+      "id": "personally_identifiable_information",
+      "label": "Personally identifiable information",
+      "labelJa": "個人を識別できる情報",
+      "answer": "Yes",
+      "codeFact": "共有するURL・タイトル・生成するサフィックスに、GitHubのユーザー名または組織名が入る場合がある（例 github.com/<ユーザー名>/<リポジトリ名>）。プロフィールページを共有すると、そのユーザー名が本人を指す",
+      "policyBasis": "公式FAQはPIIの例に username を明記している。handle には transmit も含まれ、Xへ渡している",
+      "ownerMustConfirm": false
+    },
+    {
+      "id": "health_information",
+      "label": "Health information",
+      "labelJa": "健康情報",
+      "answer": "No",
+      "codeFact": "健康に関する情報を読む処理は無い",
+      "policyBasis": "該当なし",
+      "ownerMustConfirm": false
+    },
+    {
+      "id": "financial_and_payment_information",
+      "label": "Financial and payment information",
+      "labelJa": "financial・支払い情報",
+      "answer": "No",
+      "codeFact": "支払い・金融に関する情報を読む処理は無い",
+      "policyBasis": "該当なし",
+      "ownerMustConfirm": false
+    },
+    {
+      "id": "authentication_information",
+      "label": "Authentication information",
+      "labelJa": "認証情報",
+      "answer": "No",
+      "codeFact": "cookie・トークン・パスワードを読まない。認証・設定・組織管理の画面では共有そのものを拒否し、URLの断片に = を含むもの（#client_secret=… 等）は落とす",
+      "policyBasis": "該当なし",
+      "ownerMustConfirm": false
+    },
+    {
+      "id": "personal_communications",
+      "label": "Personal communications",
+      "labelJa": "個人的なやり取り",
+      "answer": "No",
+      "codeFact": "メール・DM・チャットの類を読む処理は無い",
+      "policyBasis": "該当なし",
+      "ownerMustConfirm": false
+    },
+    {
+      "id": "location",
+      "label": "Location",
+      "labelJa": "位置情報",
+      "answer": "No",
+      "codeFact": "位置情報APIを使わない。IPアドレスも扱わない",
+      "policyBasis": "該当なし",
+      "ownerMustConfirm": false
+    },
+    {
+      "id": "web_history",
+      "label": "Web history",
+      "labelJa": "ウェブ閲覧履歴",
+      "answer": "Yes",
+      "codeFact": "利用者が見ている github.com のページのURLを読み、Xの投稿画面へ渡す",
+      "policyBasis": "公式FAQは web browsing activity の例に『ブラウザがやり取りするドメインやURL』を挙げている",
+      "ownerMustConfirm": false
+    },
+    {
+      "id": "user_activity",
+      "label": "User activity",
+      "labelJa": "ユーザーの操作",
+      "answer": "No",
+      "codeFact": "x.com で keydown を1つ監視しているが、見ているのは Escape かどうかだけで、保存も送信もしない（拡張が自分で開いた投稿画面を閉じるため）。クリック・スクロール・マウス位置・入力内容は読まない",
+      "policyBasis": "この欄は『操作の監視（クリック・マウス位置・スクロール・キーロギング等）』を指す。自分で開いた画面を閉じるための1キー判定は監視にあたらないと判断した",
+      "ownerMustConfirm": true
+    },
+    {
+      "id": "website_content",
+      "label": "Website content",
+      "labelJa": "ウェブサイトのコンテンツ",
+      "answer": "Yes",
+      "codeFact": "ページのタイトル（document.title）を読み、そこから作った本文をXの投稿画面へ渡す",
+      "policyBasis": "handle には use と transmit が含まれる。端末内だけで処理する場合も開示が要る",
+      "ownerMustConfirm": false
+    }
+  ],
+  "certifications": [
+    {
+      "id": "no_unapproved_use",
+      "label": "収集したデータを承認された用途以外に使用・転送しない",
+      "checked": true
+    },
+    {
+      "id": "no_selling",
+      "label": "収集したデータを第三者に販売しない",
+      "checked": true
+    },
+    {
+      "id": "no_creditworthiness",
+      "label": "信用力の判断・融資目的に使用・転送しない",
+      "checked": true
+    }
+  ],
+  "privacyPolicyUrl": "https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md",
+  "history": {
+    "1.0.0": "9項目すべて No で申告して審査を通過",
+    "1.0.1": "同上",
+    "note": "根拠として書いていた『何も送信しない』は事実ではなかった。通ったことは回答が正確だった証明にはならない"
+  }
+}

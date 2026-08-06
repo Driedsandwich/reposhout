@@ -140,6 +140,59 @@ test('検査が本当に効いているか（対照）', () => {
   assert.ok(brokenUrl, 'URLを素で数えても捕まらない＝検査が緩い');
 });
 
+/*
+ * 279 / 280 / 281 の境界。
+ *
+ * 実際のXの投稿画面で確かめるにはアカウントが要り、投稿してしまう危険もあるので、
+ * ここは公式の判定器で見る。280はvalid・281はinvalid、という前提そのものを先に固定してから、
+ * 組み立てた下書きがその範囲に収まることを確かめる。
+ */
+test('279 / 280 / 281 の境目で、公式の判定が期待どおりに変わる', () => {
+  const at = (n) => 'a'.repeat(n);
+  assert.equal(official(at(279)), 279);
+  assert.equal(twitterText.parseTweet(at(279)).valid, true);
+  assert.equal(twitterText.parseTweet(at(280)).valid, true, '280 が invalid 扱いになっている');
+  assert.equal(twitterText.parseTweet(at(281)).valid, false, '281 が valid 扱いになっている');
+  // 自前の計数も同じ値を返す（素のASCIIは重み1）
+  assert.equal(GXS.weightedLength(at(280)), 280);
+});
+
+test('長いタイトルを切り詰めた下書きが、境界を1つも越えない', () => {
+  /*
+   * タイトルの長さを1文字ずつ変えながら、公式の判定で280を超えないことを見る。
+   * 「たまたま短い例では通る」ことにならないよう、境界の直前直後を連続で通す。
+   */
+  const url = 'https://github.com/octocat/Hello-World/issues/1234';
+  let checked = 0;
+  let sawMax = 0;
+  for (const filler of ['a', 'あ', '👍', '✊🏽', 'ｱ']) {
+    for (let n = 1; n <= 320; n++) {
+      const title = filler.repeat(n) + ' · Issue #1234 · octocat/Hello-World';
+      const s = GXS.buildShare(url, title);
+      assert.ok(s, `共有できなかった: ${filler} × ${n}`);
+      const draft = `${s.text} ${s.url}`;
+      const off = official(draft);
+      assert.ok(off <= 280, `公式判定で ${off} > 280: ${filler} × ${n}`);
+      assert.equal(twitterText.parseTweet(draft).valid, true, `公式判定で invalid: ${off}`);
+      sawMax = Math.max(sawMax, off);
+      checked++;
+    }
+  }
+  assert.ok(checked > 1500, `検査した件数が少なすぎる: ${checked}`);
+
+  /*
+   * 「常に短く切りすぎている」なら、この検査は境界を試せていない。
+   * 本文の上限は MAX_WEIGHT=250 で、そこに空白1とURL23が付く。
+   * つまり下書きは最大 274 になるはずで、そこまで実際に使えていることを確かめる。
+   * （250 が 256 でないのは、絵文字の区切り方のずれを吸収する余白を取っているため。
+   *   src/share.js の MAX_WEIGHT のコメントを参照）
+   */
+  const ceiling = GXS.MAX_WEIGHT + 1 + GXS.URL_WEIGHT;
+  assert.equal(ceiling, 274, `上限の前提が変わっている: ${ceiling}`);
+  assert.equal(sawMax, ceiling,
+    `本文の上限まで使えていない（最大 ${sawMax} / 想定 ${ceiling}）＝境界を試せていない`);
+});
+
 test('組み立てた投稿全体を、公式の判定器で280以下と確認する', () => {
   const cases = [
     ['https://github.com/o/r', 'GitHub - o/r: ' + '日'.repeat(400) + ' · GitHub'],

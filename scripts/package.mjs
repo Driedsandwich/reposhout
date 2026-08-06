@@ -10,8 +10,12 @@
  * 同じ入力から必ず同じバイト列が出るようにしている。
  *
  * 注: 圧縮結果は zlib の実装に依存するため、「同じcommit・同じNode」で同一になる。
+ *
+ * 書き出しは「作業用ディレクトリで全部作って検算し、通ったときだけ入れ替える」方式。
+ * 以前は先に dist/ を消してから書いていたので、途中で失敗すると
+ * **前に作った正常な成果物まで失われ、中途半端な dist/ が残った**（第5回監査 R5-002）。
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateRawSync } from 'node:zlib';
@@ -21,6 +25,22 @@ import { PACKAGE_FILES } from './package-files.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = join(ROOT, 'dist');
+
+/*
+ * ファイル操作をここ経由にしておくと、テストから「この書き込みだけ失敗させる」
+ * ことができる。失敗したときに前の成果物が残るかどうかは、実際に失敗させないと
+ * 確かめられない（第5回監査の受入条件）。
+ */
+export const realIo = { writeFileSync, mkdirSync, rmSync, renameSync, readFileSync, existsSync };
+
+/* git への問い合わせも差し替え可能にする（テストで「未コミット無し」の状態を作るため） */
+export const realGit = (args) => {
+  try {
+    return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
+  } catch (e) {
+    return null;
+  }
+};
 
 /* CRC-32（ZIPが要求するもの） */
 const CRC_TABLE = (() => {
@@ -107,7 +127,37 @@ function buildZip(entries) {
   return Buffer.concat([...locals, centralBuf, eocd]);
 }
 
-export function makePackage({ dryRun = false, allowDirty = false } = {}) {
+/*
+ * その成果物をストアへ出してよいかを、作った側で判定して書き残す。
+ *
+ * PRのCIが作るZIPは、GitHubがPR検証のために作る一時的なマージ結果から作られる。
+ * それは main のどのコミットとも一致しないのに、名前は提出候補と同じだった
+ * （第5回監査 R5-003）。名前と記録の両方で区別する。
+ */
+function readCiContext(env) {
+  const eventName = env.GITHUB_ACTIONS ? (env.GITHUB_EVENT_NAME || 'unknown') : 'local';
+  return {
+    eventName,
+    ref: env.GITHUB_REF || null,
+    runId: env.GITHUB_RUN_ID || null,
+    pullRequest: eventName === 'pull_request' ? Number((env.GITHUB_REF || '').split('/')[2]) || null : null,
+    // pull_request では GITHUB_SHA が「PR検証用の一時マージコミット」を指す。
+    // PRの head / base はワークフロー側から明示的に渡す（環境変数に既定では入らない）
+    githubSha: env.GITHUB_SHA || null,
+    prHeadSha: env.PR_HEAD_SHA || null,
+    prBaseSha: env.PR_BASE_SHA || null,
+    isCi: Boolean(env.CI)
+  };
+}
+
+export function makePackage({
+  dryRun = false,
+  allowDirty = false,
+  io = realIo,
+  git = realGit,
+  distDir = DIST,
+  env = process.env
+} = {}) {
   const manifest = JSON.parse(readFileSync(join(ROOT, 'manifest.json'), 'utf8'));
   const entries = PACKAGE_FILES.map((name) => {
     const p = join(ROOT, name);
@@ -117,24 +167,37 @@ export function makePackage({ dryRun = false, allowDirty = false } = {}) {
 
   const zip = buildZip(entries);
   const sha = createHash('sha256').update(zip).digest('hex');
-  const outName = `reposhout-${manifest.version}.zip`;   // dirty のときは後で -dirty を挟む
 
   /*
    * どのコミットから作ったZIPなのかを一緒に残す。
    * ZIP自体はこの情報を含まないので、ハッシュの決定論は壊れない。
    */
-  const git = (args) => {
-    try {
-      return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
-    } catch (e) {
-      return null;
-    }
-  };
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const ci = readCiContext(env);
+  const dirty = git(['status', '--porcelain']) !== '';
+
+  /*
+   * 提出してよい成果物の条件は2つだけ。
+   *   1. 未コミットの変更が無い（履歴と突き合わせられる）
+   *   2. PRの検証ビルドではない（一時マージコミットから作られていない）
+   * 名前にも書く。記録を読まずにファイルだけ拾っても間違えないように。
+   */
+  const isPrBuild = ci.eventName === 'pull_request';
+  const submittable = !dirty && !isPrBuild;
+  const marks = [dirty ? 'dirty' : null, isPrBuild ? 'NON-SUBMITTABLE' : null].filter(Boolean);
+  const finalName = `reposhout-${manifest.version}${marks.map((m) => `-${m}`).join('')}.zip`;
+
   const provenance = {
     version: manifest.version,
     sourceCommit: git(['rev-parse', 'HEAD']),
-    dirty: git(['status', '--porcelain']) !== '',
+    treeSha: git(['rev-parse', 'HEAD^{tree}']),
+    dirty,
+    submittable,
+    notSubmittableBecause: submittable
+      ? null
+      : [dirty ? '未コミットの変更がある' : null, isPrBuild ? 'PRの検証ビルド（一時マージコミット由来）' : null]
+          .filter(Boolean),
+    ci,
     node: process.version,
     generatedFrom: 'scripts/package.mjs',
     files: entries.map((e) => ({
@@ -142,43 +205,110 @@ export function makePackage({ dryRun = false, allowDirty = false } = {}) {
       bytes: e.data.length,
       sha256: createHash('sha256').update(e.data).digest('hex')
     })),
-    zip: { name: outName, bytes: zip.length, sha256: sha },
+    zip: { name: finalName, bytes: zip.length, sha256: sha },
     runtimeDependencies: pkg.dependencies || {},
     testOnlyDependencies: pkg.devDependencies || {}
   };
 
   const report = {
-    provenance: provenance,
+    provenance,
     version: manifest.version,
-    file: join('dist', outName),
+    file: join(distDir, finalName),
     files: entries.map((e) => ({ name: e.name, bytes: e.data.length })),
     zipBytes: zip.length,
     sha256: sha,
+    submittable,
     written: false
   };
 
-  const finalName = provenance.dirty ? `reposhout-${manifest.version}-dirty.zip` : outName;
-  report.file = join('dist', finalName);
+  if (dryRun) return report;
 
-  if (!dryRun) {
-    /*
-     * 未コミットの変更があるまま「提出用」の名前でZIPを作らない。
-     * 手元だけにある変更が入った成果物を、あとから履歴と突き合わせられなくなる。
-     * 試したいときは --allow-dirty を付ける（名前に -dirty が入る）。
-     */
-    if (provenance.dirty && !allowDirty) {
-      throw new Error(
-        '未コミットの変更があります。コミットしてから作るか、--allow-dirty を付けてください。'
-      );
-    }
-    if (existsSync(DIST)) rmSync(DIST, { recursive: true, force: true });
-    mkdirSync(DIST, { recursive: true });
-    writeFileSync(join(DIST, finalName), zip);
-    writeFileSync(join(DIST, `${finalName}.sha256`), `${sha}  ${finalName}\n`);
-    writeFileSync(join(DIST, 'release-manifest.json'), JSON.stringify(provenance, null, 2) + '\n');
-    report.written = true;
+  /*
+   * 未コミットの変更があるまま「提出用」の名前でZIPを作らない。
+   * 手元だけにある変更が入った成果物を、あとから履歴と突き合わせられなくなる。
+   * 試したいときは --allow-dirty を付ける（名前に -dirty が入る）。
+   */
+  if (dirty && !allowDirty) {
+    throw new Error(
+      '未コミットの変更があります。コミットしてから作るか、--allow-dirty を付けてください。'
+    );
   }
+  if (dirty && allowDirty && ci.isCi) {
+    throw new Error('CI では --allow-dirty を使えません（履歴と一致しない成果物を残さないため）。');
+  }
+
+  writeAtomically({ io, distDir, finalName, zip, sha, provenance });
+  report.written = true;
   return report;
+}
+
+/*
+ * 作業用ディレクトリで全部作り、読み直して検算し、通ったときだけ dist/ を置き換える。
+ *
+ * 途中で失敗したら作業用ディレクトリだけ消す。**前の成果物には触らない**。
+ * 入れ替えはディレクトリのリネームで行う。1ファイルずつ置いていくと、
+ * 「ZIPだけ新しくハッシュは古い」という食い違った状態を作りうる。
+ */
+function writeAtomically({ io, distDir, finalName, zip, sha, provenance }) {
+  const shaText = `${sha}  ${finalName}\n`;
+  const manifestText = JSON.stringify(provenance, null, 2) + '\n';
+  const staging = `${distDir}.staging-${process.pid}-${Date.now()}`;
+  const parked = `${distDir}.previous-${process.pid}-${Date.now()}`;
+
+  try {
+    io.mkdirSync(staging, { recursive: true });
+    io.writeFileSync(join(staging, finalName), zip);
+    io.writeFileSync(join(staging, `${finalName}.sha256`), shaText);
+    io.writeFileSync(join(staging, 'release-manifest.json'), manifestText);
+
+    /* 書いたものを読み直して確かめる。書き込みが黙って化けていないか */
+    const backZip = io.readFileSync(join(staging, finalName));
+    if (backZip.length !== zip.length) throw new Error('書き出したZIPの長さが違う');
+    if (createHash('sha256').update(backZip).digest('hex') !== sha) {
+      throw new Error('書き出したZIPのSHA-256が違う');
+    }
+    if (io.readFileSync(join(staging, `${finalName}.sha256`), 'utf8') !== shaText) {
+      throw new Error('書き出したハッシュファイルの中身が違う');
+    }
+    const backManifest = JSON.parse(io.readFileSync(join(staging, 'release-manifest.json'), 'utf8'));
+    if (backManifest.zip.name !== finalName) {
+      throw new Error(`記録のZIP名が実ファイル名と違う: ${backManifest.zip.name} ≠ ${finalName}`);
+    }
+    if (backManifest.zip.sha256 !== sha || backManifest.zip.bytes !== zip.length) {
+      throw new Error('記録のZIPハッシュ・サイズが実物と違う');
+    }
+  } catch (e) {
+    io.rmSync(staging, { recursive: true, force: true });
+    throw e;
+  }
+
+  /*
+   * ここから入れ替え。古い dist/ を退避してから新しいものを置き、最後に退避を消す。
+   *
+   * ディレクトリのリネームは、中身の入ったディレクトリを上書きできない（ENOTEMPTY）。
+   * そのため「退避 → 配置」の2手になり、配置に失敗する瞬間だけ dist/ が無い。
+   * その場合は退避を戻す。戻すことすらできなければ、前の成果物が**どこにあるか**を
+   * 例外に書いて落とす（黙って失われるのが一番まずい）。
+   */
+  let moved = false;
+  try {
+    if (io.existsSync(distDir)) { io.renameSync(distDir, parked); moved = true; }
+    io.renameSync(staging, distDir);
+  } catch (e) {
+    io.rmSync(staging, { recursive: true, force: true });
+    if (moved && !io.existsSync(distDir)) {
+      try {
+        io.renameSync(parked, distDir);
+      } catch (e2) {
+        throw new Error(
+          `配布物の入れ替えに失敗し、元に戻すこともできませんでした。` +
+          `前の成果物は ${parked} に残っています（原因: ${e.message} / 復旧: ${e2.message}）`
+        );
+      }
+    }
+    throw e;
+  }
+  if (moved) io.rmSync(parked, { recursive: true, force: true });
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -191,5 +321,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log(`  ZIP: ${r.zipBytes} B  ${r.written ? r.file : '(未書き込み)'}`);
   console.log(`  SHA-256: ${r.sha256}`);
   console.log(`  コミット: ${r.provenance.sourceCommit || '(不明)'}${r.provenance.dirty ? ' (未コミットの変更あり)' : ''}`);
+  console.log(`  ビルド種別: ${r.provenance.ci.eventName}`);
+  if (r.submittable) {
+    console.log(`  提出可否: 提出候補（ストアへ出せます）`);
+  } else {
+    console.log(`  提出可否: ★ストアへ提出しないでください — ${r.provenance.notSubmittableBecause.join(' / ')}`);
+  }
   console.log(`  除外: test/ store/ scripts/ 文書 dist/（allowlist方式）`);
 }

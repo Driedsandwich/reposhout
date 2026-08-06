@@ -44,7 +44,7 @@ export function findChrome() {
   throw new Error('Chrome が見つからない。CHROME_PATH で実行ファイルを指定してください。');
 }
 
-/* 出荷する9ファイルだけを別ディレクトリへ並べる。E2Eは「配布物そのもの」を読み込む */
+/* 出荷する一覧のファイルだけを別ディレクトリへ並べる。E2Eは「配布物そのもの」を読み込む */
 export function stageExtension() {
   const dir = mkdtempSync(join(tmpdir(), 'reposhout-ext-'));
   for (const rel of PACKAGE_FILES) {

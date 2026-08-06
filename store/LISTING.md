@@ -1,17 +1,17 @@
 # Chrome ウェブストア 提出手順書
 
-更新: 2026-08-05 / 対象: RepoShout **1.1.3**（未提出。ストアで公開中なのは 1.0.1・2026-08-03通過。1.1.0〜1.1.2 はタグのみで提出していない）
+更新: 2026-08-06 / 対象: RepoShout **1.1.4**（未提出。ストアで公開中なのは 1.0.1・2026-08-03通過で、2026-08-06 に配布中のCRXを取得して実測。1.1.0〜1.1.3 はタグのみで提出していない）
 **この文書は原稿と手順です。提出（Submit for review）はあなたが実行します。**
 
 > **提出の前提（2026-08-05 決定）**: 外部監査（ChatGPT の GPT-5.6 Sol Pro）に**合格してから**提出する。
-> 現時点の最新監査は第4回で、判定は `CONDITIONAL_FAIL`／`NOT_READY_FOR_CHROME_WEB_STORE_SUBMISSION`。
+> 現時点の最新監査は第5回で、判定は `CONDITIONAL_FAIL`／`NOT_READY_FOR_CHROME_WEB_STORE_SUBMISSION`。
 > 次の監査で合格が出るまで、この手順は実行しない。
 初回提出と更新提出の両方でこの文書を使います。更新のときは §1 のアップロードと、変えた機能に関わる §2 の掲載文だけを直せば足ります。
 
 デベロッパーダッシュボードの画面順に並べてあります。上から順に進めてください。
 各欄はコードブロックをそのままコピペできます。
 
-- 提出用ZIP: リポジトリで `npm run package` を実行すると `dist/reposhout-<版>.zip` ができます（9ファイル・allowlist方式）。同じ内容なら何度作っても同じZIPになるので、`dist/*.zip.sha256` の値で手元と提出物の一致を確かめられます
+- 提出用ZIP: リポジトリで `npm run package` を実行すると `dist/reposhout-<版>.zip` ができます（収録一覧は `scripts/package-files.mjs`・allowlist方式）。同じ内容なら何度作っても同じZIPになるので、`dist/*.zip.sha256` の値で手元と提出物の一致を確かめられます
 - 公開リポジトリ: https://github.com/Driedsandwich/reposhout
 - ダッシュボード: https://chrome.google.com/webstore/devconsole
 
@@ -29,16 +29,40 @@
 **「新しいアイテムを追加」→ ZIPをドラッグ**
 
 ```
-dist/reposhout-1.1.3.zip
+dist/reposhout-1.1.4.zip
 ```
 
-同梱物は9ファイル（`npm run package` の出力に一覧が出ます）。`store/` `test/` `scripts/` `.github/` と文書は動作に不要なので、収録一覧（allowlist）に入れていません。
+### どのZIPを出すか（2026-08-06 追加・第5回監査 R5-003）
+
+**PRのCIが作ったZIPは使わないでください。** GitHubはPRを検証するとき、そのブランチと main を
+仮に合わせた**一時的なコミット**を作り、CIはそこからZIPを作ります。そのコミットは main のどれとも
+一致しないので、あとから「提出したものはどのコミットか」を辿れません。
+
+1.1.4 からは、機械側でも人間側でも見分けられるようにしてあります。
+
+| 見るところ | 提出してよいもの | 出してはいけないもの |
+|---|---|---|
+| ファイル名 | `reposhout-1.1.4.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty.zip` |
+| `dist/release-manifest.json` の `submittable` | `true` | `false` |
+| 同 `ci.eventName` | `push`（main）または `workflow_dispatch` | `pull_request` |
+| 同 `sourceCommit` | main のコミットと一致 | 一致しない |
+
+PRのCIはそもそも成果物を残しません（作れることの確認だけ）。使うのは、**main へマージしたあとに走った
+CI が残した `reposhout-package-<コミットSHA>`** です。手順は次のとおり。
+
+1. Actions で main の該当 run を開き、成果物 `reposhout-package-<SHA>` をダウンロードする
+2. 展開して `release-manifest.json` を開き、上の表の4点を確かめる
+3. `shasum -a 256 reposhout-1.1.4.zip` の値が、同梱の `.sha256` と一致することを確かめる
+4. その展開物をそのまま「パッケージ化されていない拡張機能」として読み込み、動作を見る
+5. **そのZIPをアップロードする**（手元で作り直したものと差し替えない）
+
+同梱物は `scripts/package-files.mjs` に挙げたファイルだけです（`npm run package` の出力に一覧と件数が出ます）。`store/` `test/` `scripts/` `.github/` と文書は動作に不要なので、収録一覧（allowlist）に入れていません。
 アップロード後、名前は `manifest.json` から自動で入ります（入力欄はありません）。
 
 | 自動で入る値 | 内容 |
 |---|---|
 | Name | `RepoShout — Share GitHub repos, issues & PRs to X`（49文字 / 上限75） |
-| Version | `1.1.3`（manifest の値。前回より大きくないと弾かれます） |
+| Version | `1.1.4`（manifest の値。前回より大きくないと弾かれます） |
 | Short description | 下の §2 と同一（manifest の `description`・117文字 / 上限132） |
 
 ---
@@ -245,19 +269,21 @@ the popup (for example to /i/flow/login when the user is signed out).
 
 ### Data usage
 
-**この欄の判断材料は [STORE_DASHBOARD_CHANGES.md](STORE_DASHBOARD_CHANGES.md) §2 が正本です。** ここには結論だけ置きます。
+**この欄の答えは [DATA_DISCLOSURE.json](DATA_DISCLOSURE.json) が正本です。** 以前はこの表と
+[STORE_DASHBOARD_CHANGES.md](STORE_DASHBOARD_CHANGES.md) で答えが食い違っていて、どちらを見るかで
+申告が変わる状態でした（第5回監査 R5-001）。いまは正本から写した表で、ずれるとテストが落ちます。
 
-| 質問 | 推奨する回答 | 理由 |
+| 質問 | 回答 | 理由 |
 |---|---|---|
-| Web history | **Yes** | 利用者が見ているページのURLが、第三者であるXへ渡るため |
-| Website content | **Yes** | ページのタイトルが、同じくXへ渡るため |
-| Personally identifiable information | No | 扱わない |
+| Personally identifiable information | **Yes** | 共有するURL・タイトルに、GitHubのユーザー名または組織名が入る場合がある（公式FAQはPIIの例に username を挙げている） |
 | Health information | No | 扱わない |
 | Financial and payment information | No | 扱わない |
 | Authentication information | No | 扱わない |
 | Personal communications | No | 扱わない |
 | Location | No | 扱わない |
-| User activity | No | 扱わない |
+| Web history | **Yes** | 利用者が見ているページのURLが、第三者であるXへ渡るため |
+| User activity | No | クリック・スクロール・入力内容は読まない（Escapeの1キーだけ、拡張が自分で開いた画面を閉じるために見ている） |
+| Website content | **Yes** | ページのタイトルが、同じくXへ渡るため |
 
 3つの証明にすべてチェック（該当なし・遵守）:
 
@@ -265,13 +291,14 @@ the popup (for example to /i/flow/login when the user is signed out).
 - [ ] 収集データを第三者に販売しない
 - [ ] 信用力判断・融資目的に使用・転送しない
 
-> **1.0.0 と 1.0.1 は Web history / Website content を No で申告して審査を通っています。**
+> **1.0.0 と 1.0.1 は9項目すべてを No で申告して審査を通っています。**
 > しかしその根拠として書いていた「何も送信しないから」は**事実ではありませんでした**。
 > Shareを押すと、タイトルとURLは投稿画面が開いた時点でXへ渡ります。
 > **通ったという実績は、回答が正確だったことの証明にはなりません。**
 >
-> 最終的な回答は、ダッシュボードの現行の設問文を読んだうえで本人が決めてください。
-> どちらを選ぶにせよ、プライバシーポリシーは用意済みなので要件は満たせます。
+> 送り先の区別: **開発者は何も受け取りません**（サーバーが存在しません）。渡る先はXだけで、
+> タイミングは投稿画面が開いた時点、Postを押すかどうかは利用者が決めます。
+> タイトルとURLは保存しません（`chrome.storage.session` に入るのはウィンドウIDと時刻だけです）。
 
 ### Privacy policy URL
 

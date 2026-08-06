@@ -1,6 +1,8 @@
-# Chrome ウェブストア掲載欄の差分（1.0.1 → 1.1.3）
+# Chrome ウェブストア掲載欄の差分（1.0.1 → 1.1.4）
 
-作成: 2026-08-05 / 対象: 掲載中の 1.0.1 を 1.1.3 へ更新するときに、ダッシュボードのどの欄を何に直すか。
+作成: 2026-08-06 / 対象: 掲載中の 1.0.1 を 1.1.4 へ更新するときに、ダッシュボードのどの欄を何に直すか。
+
+**データの取り扱い欄の答えの正本は [DATA_DISCLOSURE.json](DATA_DISCLOSURE.json) です。** この文書はそこから写しています。
 
 **この文書はAIが書いた下書きです。ダッシュボードの操作はすべて本人が行います。**
 
@@ -67,23 +69,28 @@ and URL of the GitHub page the user is currently viewing.
 | いつ渡るか | 利用者が Share を押し、投稿画面が開いた瞬間。**Postを押す前** |
 | 保存するか | タイトル・URLは保存しない。ウィンドウIDと時刻だけを `chrome.storage.session`（メモリ）へ一時保存 |
 
-これを踏まえた**推奨は次のとおり**です。
+これを踏まえた答えが次の表です。**答えの正本は [DATA_DISCLOSURE.json](DATA_DISCLOSURE.json)** で、この表はそこから写しています。以前はこの表と `LISTING.md` で PII の答えが割れていて、どちらを見るかで申告が変わる状態でした（第5回監査 R5-001）。ずれるとテストが落ちます。
 
-| 設問 | 1.0.1での回答 | 推奨 | 理由 |
+| 設問 | 1.0.1での回答 | 今回 | 理由 |
 |---|---|---|---|
-| Web history | No | **Yes へ変更** | 利用者が見ているページのURLが、第三者（X）へ渡る |
-| Website content | No | **Yes へ変更** | ページのタイトルが、第三者（X）へ渡る |
-| Personally identifiable information | No | **要判断（下記）** | Xへ渡すURLとタイトルに、GitHubのアカウント名が含まれる |
+| Personally identifiable information | No | **Yes へ変更** | 共有するURL・タイトルに、GitHubのユーザー名または組織名が入る場合がある |
+| Health information | No | No | 扱わない |
+| Financial and payment information | No | No | 扱わない |
 | Authentication information | No | No | 扱わない |
 | Personal communications | No | No | 扱わない |
-| Location / Health / Financial / User activity | No | No | 扱わない |
+| Location | No | No | 扱わない |
+| Web history | No | **Yes へ変更** | 利用者が見ているページのURLが、第三者（X）へ渡る |
+| User activity | No | No | クリック・スクロール・マウス位置・入力内容は読まない |
+| Website content | No | **Yes へ変更** | ページのタイトルが、第三者（X）へ渡る |
 
-**個人を識別しうる情報（PII）について**（2026-08-05・第4回監査の指摘）: Xへ渡るURLは `github.com/<アカウント名>/<リポジトリ名>` の形をしており、**GitHubのアカウント名が必ず含まれます**。利用者本人のプロフィールページを共有した場合は、そのアカウント名が本人を指します。タイトル側にも入りえます。
+**個人を識別できる情報（PII）を Yes にする理由**（第5回監査 R5-001）: 公式の User Data FAQ は、PIIの例に **username を明記**しています。RepoShout が共有するURLは `github.com/<ユーザー名>/<リポジトリ名>` の形で、タイトルや `(Issue #12 · owner/repo)` というサフィックスにもユーザー名・組織名が入ります。プロフィールページを共有した場合、そのユーザー名は本人を指します。**handle には transmit が含まれ**、これらはXへ渡ります。
 
-- **Yes 側の根拠**: Google の定義は「単独または他の情報と組み合わせて個人を識別できる情報」。アカウント名はこれに当たりうる
-- **No 側の根拠**: そのアカウント名は元々GitHub上で公開されており、利用者が共有すると決めたページのURLそのもの。拡張が独自に集めているわけではない
+> **⚠️ 以前ここには「URLには必ずアカウント名が入る」と書いていましたが、これは言い過ぎでした。**
+> `github.com/search?q=…`・`github.com/explore`・`github.com/topics/…` は共有できて、
+> アカウント名を含みません（2026-08-06に実測）。正しくは「**入る場合がある**」です。
+> 少なく申告しないのと同じくらい、事実より広く言わないことも大事です。
 
-**推奨は Yes**（少なく申告する方向のリスクを取らない）。最終判断はダッシュボードの現行の設問文を読んだうえで本人が決めてください。
+**1件だけ本人の確認が要る欄** — **User activity**: `x.com` 側で `keydown` を1つ監視していますが、見ているのは Escape かどうかだけで、保存も送信もしません（拡張が自分で開いた投稿画面を閉じるためです）。この欄は「操作の監視（クリック・マウス位置・スクロール・キーロギング等）」を指すので **No と判断**しましたが、コードの事実として上に書いておきます。ダッシュボードの現行の説明文を読んで、最終的には本人が決めてください。
 
 **Web history / Website content を Yes と推奨する理由**: Googleの User Data FAQ は「handle」に collect だけでなく **transmit** を含め、URL やドメインを web browsing activity の例に挙げています。今回のように「機能として第三者へ渡す」場合、No のままにする合理的な根拠がありません。Yes にしても、プライバシーポリシー（`PRIVACY.md`）は既に用意してあり、要件は満たせます。
 
@@ -114,14 +121,14 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 ## 4. アップロードするもの
 
 ```
-dist/reposhout-1.1.3.zip
+dist/reposhout-1.1.4.zip
 ```
 
-`npm run package` で作れます。同じ内容なら何度作っても同じZIPになるので、`dist/reposhout-1.1.3.zip.sha256` の値を控えておけば、提出したものと手元のものが同じかを後から確かめられます。
+`npm run package` で作れます。同じ内容なら何度作っても同じZIPになるので、`dist/reposhout-1.1.4.zip.sha256` の値を控えておけば、提出したものと手元のものが同じかを後から確かめられます。
 
 ---
 
 ## 5. この文書でやらないこと
 
 - ダッシュボードの操作そのもの（拡張機能からウェブストアは操作できません。人の手作業です）
-- 掲載中 1.0.1 の説明文の即時修正（1.1.3 の提出と同時で足りるか、先に文面だけ直すかは本人の判断）
+- 掲載中 1.0.1 の説明文の即時修正（1.1.4 の提出と同時で足りるか、先に文面だけ直すかは本人の判断）
