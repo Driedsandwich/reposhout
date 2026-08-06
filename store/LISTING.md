@@ -1,10 +1,10 @@
 # Chrome ウェブストア 提出手順書
 
-更新: 2026-08-06 / 対象: RepoShout **1.1.4**（未提出。ストアで公開中なのは 1.0.1・2026-08-03通過で、2026-08-06 に配布中のCRXを取得して実測。1.1.0〜1.1.3 はタグのみで提出していない）
+更新: 2026-08-06 / 対象: RepoShout **1.1.5**（未提出。公開状態の正本は [RELEASE_STATUS.md](../RELEASE_STATUS.md)）
 **この文書は原稿と手順です。提出（Submit for review）はあなたが実行します。**
 
 > **提出の前提（2026-08-05 決定）**: 外部監査（ChatGPT の GPT-5.6 Sol Pro）に**合格してから**提出する。
-> 現時点の最新監査は第5回で、判定は `CONDITIONAL_FAIL`／`NOT_READY_FOR_CHROME_WEB_STORE_SUBMISSION`。
+> 現時点の最新監査は第6回で、判定は `NOT READY`（P2が4件・P3が1件）。
 > 次の監査で合格が出るまで、この手順は実行しない。
 初回提出と更新提出の両方でこの文書を使います。更新のときは §1 のアップロードと、変えた機能に関わる §2 の掲載文だけを直せば足ります。
 
@@ -29,7 +29,7 @@
 **「新しいアイテムを追加」→ ZIPをドラッグ**
 
 ```
-dist/reposhout-1.1.4.zip
+dist/reposhout-1.1.5.zip
 ```
 
 ### どのZIPを出すか（2026-08-06 追加・第5回監査 R5-003）
@@ -42,24 +42,23 @@ dist/reposhout-1.1.4.zip
 
 | 見るところ | 提出してよいもの | 出してはいけないもの |
 |---|---|---|
-| ファイル名 | `reposhout-1.1.4.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty-NON-SUBMITTABLE.zip` |
+| ファイル名 | `reposhout-1.1.5.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty-NON-SUBMITTABLE.zip` |
 | `dist/release-manifest.json` の `submittable` | `true` | `false` |
 | 同 `ci.eventName` | `push` | `pull_request` / `workflow_dispatch` / `local` |
 | 同 `ci.ref` | `refs/heads/main` | それ以外 |
 | 同 `sourceCommit` | main のコミットと一致（`ci.githubSha` とも一致） | 一致しない |
 
-**提出候補になるのは「main への push で走ったCI」だけです**（1.1.4 で厳しくしました・第6回監査 R6-001）。
+**提出候補になるのは「main への push で走ったCI」だけです**（1.1.5 で厳しくしました・第6回監査 R6-001）。
 手元で `npm run package` して作ったZIPも、feature ブランチやタグから手で回したCIのZIPも、
 名前に `NON-SUBMITTABLE` が付き、記録の `submittable` は `false` になります。
 PRのCIはそもそも成果物を残しません（作れることの確認だけ）。
 
-使うのは、**main へマージしたあとに走った
-CI が残した `reposhout-package-<コミットSHA>`** です。手順は次のとおり。
+使うのは、**main へマージしたあとに走った CI が残した `reposhout-package-<コミットSHA>`** です。
 
 1. Actions で main の該当 run を開き、成果物 `reposhout-package-<SHA>` をダウンロードする
 2. 展開して `release-manifest.json` を開き、上の表の5点を確かめる
-3. `shasum -a 256 reposhout-1.1.4.zip` の値が、同梱の `.sha256` と一致することを確かめる
-4. **新しい空のフォルダを作り、そこへ `reposhout-1.1.4.zip` を展開する**
+3. `shasum -a 256 reposhout-1.1.5.zip` の値が、同梱の `.sha256` と一致することを確かめる
+4. **新しい空のフォルダを作り、そこへ `reposhout-1.1.5.zip` を展開する**
    （ダウンロードした成果物のフォルダには `release-manifest.json` とZIPとハッシュしか入っておらず、
    `manifest.json` がありません。そのまま読み込もうとしても拡張として認識されません）
 5. 展開したフォルダの直下に `manifest.json` があること、その `version` が上げた版であることを確かめる
@@ -75,7 +74,7 @@ CI が残した `reposhout-package-<コミットSHA>`** です。手順は次の
 | 自動で入る値 | 内容 |
 |---|---|
 | Name | `RepoShout — Share GitHub repos, issues & PRs to X`（49文字 / 上限75） |
-| Version | `1.1.4`（manifest の値。前回より大きくないと弾かれます） |
+| Version | `1.1.5`（manifest の値。前回より大きくないと弾かれます） |
 | Short description | 下の §2 と同一（manifest の `description`・117文字 / 上限132） |
 
 ---
