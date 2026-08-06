@@ -15,6 +15,7 @@
     "test:conformance": "node --test test/conformance.test.mjs",
     "test:package": "node --test test/package.test.mjs",
     "release:status": "node scripts/release-status.mjs",
+    "verify:store-readiness": "node scripts/verify-store-readiness.mjs",
     "package": "node scripts/package.mjs",
     "package:dry": "node scripts/package.mjs --dry-run"
   },

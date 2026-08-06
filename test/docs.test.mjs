@@ -305,7 +305,7 @@ test('ストア文書のデータ申告が、正本と1つ残らず一致する'
        * 第7回監査 R7-002。本人の確認が要る欄を、文書側では確定した No として
        * 見せていた。貼る人は文書しか見ないので、確認待ちのものを確定値で出さない。
        */
-      if (cat.ownerMustConfirm) {
+      if (cat.requiresOwnerConfirmation && cat.confirmationStatus !== 'confirmed') {
         assert.equal(cat.answer, null, `${cat.label}: 確認待ちなのに正本が答えを持っている`);
         assert.ok(['Yes', 'No'].includes(cat.proposedAnswer),
           `${cat.label}: 案（proposedAnswer）が無い`);
@@ -323,7 +323,7 @@ test('ストア文書のデータ申告が、正本と1つ残らず一致する'
 });
 
 test('確認待ちの欄に、確認結果を書く場所が用意してある', () => {
-  const pending = DISCLOSURE.categories.filter((c) => c.ownerMustConfirm);
+  const pending = DISCLOSURE.categories.filter((c) => c.requiresOwnerConfirmation);
   assert.ok(pending.length >= 1, '確認待ちの欄が1つも無い');
   for (const c of pending) {
     const oc = c.ownerConfirmation;
@@ -339,7 +339,11 @@ test('データ申告の欄が9つそろっている', () => {
   assert.equal(labels.length, 9, `欄の数が違う: ${labels.length}`);
   assert.equal(new Set(labels).size, 9, '同じ欄が二重に入っている');
   for (const c of DISCLOSURE.categories) {
-    if (c.ownerMustConfirm) {
+    assert.ok(['pending', 'confirmed', 'not_required'].includes(c.confirmationStatus),
+      `${c.label}: confirmationStatus が想定外: ${c.confirmationStatus}`);
+    assert.equal(c.requiresOwnerConfirmation, c.confirmationStatus !== 'not_required',
+      `${c.label}: 確認の要否と状態が食い違っている`);
+    if (c.confirmationStatus === 'pending') {
       assert.equal(c.answer, null, `${c.label}: 確認待ちなら答えは持たない`);
       assert.ok(['Yes', 'No'].includes(c.proposedAnswer), `${c.label} の案が Yes / No でない`);
     } else {
