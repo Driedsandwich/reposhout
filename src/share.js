@@ -173,15 +173,39 @@
    * デコードしてから判定する。デコードできない・区切り文字や制御文字が
    * 出てくる場合は判定不能として null を返し、呼び出し側で共有しない側へ倒す。
    */
+  var MAX_DECODE_ROUNDS = 5;
+
   function pathSegments(u) {
     var raw = u.pathname.split('/').filter(Boolean);
     var out = [];
     for (var i = 0; i < raw.length; i++) {
-      var d;
-      try {
-        d = decodeURIComponent(raw[i]);
-      } catch (e) {
-        return null;
+      /*
+       * 1回だけデコードしていたため、`/%2573ettings/tokens`（二重エンコード）が
+       * `%73ettings` までしか戻らず、機微ページの拒否を素通りしていた
+       * （2026-08-05の第4回監査で再現）。変化がなくなるまで解く。
+       * 何度解いても終わらないものは、判定できないものとして扱う。
+       */
+      var d = raw[i];
+      // 壊れたエンコード（%ZZ など）は、解ける形になっていない＝判定できない
+      if (d.indexOf('%') !== -1) {
+        try {
+          decodeURIComponent(d);
+        } catch (e) {
+          return null;
+        }
+      }
+      var rounds = 0;
+      while (/%[0-9A-Fa-f]{2}/.test(d)) {
+        if (rounds >= MAX_DECODE_ROUNDS) return null;
+        var next;
+        try {
+          next = decodeURIComponent(d);
+        } catch (e) {
+          return null;
+        }
+        if (next === d) break;
+        d = next;
+        rounds++;
       }
       if (/[\u0000-\u001F\u007F\/\\]/.test(d)) return null;
       out.push(d);
