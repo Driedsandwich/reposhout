@@ -1,8 +1,13 @@
 /*
  * package.mjs — 提出用ZIPを決定論的に作る
  *
- * 実行: npm run package        → dist/reposhout-<version>.zip と .sha256 を作る
+ * 実行: npm run package        → dist/ にZIPと .sha256 と release-manifest.json を作る
  *       npm run package:dry    → 収録物だけ表示して何も書かない
+ *
+ * ⚠️ 手元で走らせて出来るのは `reposhout-<version>-NON-SUBMITTABLE.zip` である。
+ * 提出してよい名前（`reposhout-<version>.zip`）になるのは、main への push で走った
+ * CI のときだけ（第6回監査 R6-001・第7回監査 R7-005）。中身のバイト列は同じで、
+ * 違うのは名前と release-manifest.json の記録だけ。
  *
  * ZIPを手で組み立てているのは、zip コマンドがファイルの更新時刻を書き込むため。
  * 同じ内容でも作るたびにバイト列が変わり、「提出したZIPと手元のZIPが同じか」を
@@ -176,6 +181,7 @@ export function makePackage({
   const ci = readCiContext(env);
   const dirty = git(['status', '--porcelain']) !== '';
   const sourceCommit = git(['rev-parse', 'HEAD']);
+  const treeSha = git(['rev-parse', 'HEAD^{tree}']);
 
   /*
    * 提出してよい成果物の条件を「満たすべきものを並べて全部通ったときだけ true」にする。
@@ -192,8 +198,24 @@ export function makePackage({
   } else if (ci.ref !== 'refs/heads/main') {
     notSubmittableBecause.push(`main 以外の ref から作られている（${ci.ref}）`);
   }
-  if (ci.githubSha && sourceCommit !== ci.githubSha) {
-    notSubmittableBecause.push('取り出したコミットと GITHUB_SHA が一致しない');
+  /*
+   * 第7回監査 R7-005。`ci.githubSha &&` で守っていたので、GITHUB_SHA が空や欠落だと
+   * 突き合わせを飛ばして提出可のままになっていた（無いものは無条件で通る＝fail-open）。
+   * 揃っていることを条件にする。分からないなら提出しない側へ倒す。
+   */
+  const HEX40 = /^[0-9a-f]{40}$/;
+  if (!HEX40.test(sourceCommit || '')) {
+    notSubmittableBecause.push('取り出したコミットが分からない');
+  }
+  if (!HEX40.test(treeSha || '')) {
+    notSubmittableBecause.push('ツリーが分からない');
+  }
+  if (ci.eventName !== 'local') {
+    if (!HEX40.test(ci.githubSha || '')) {
+      notSubmittableBecause.push('GITHUB_SHA が無い');
+    } else if (sourceCommit !== ci.githubSha) {
+      notSubmittableBecause.push('取り出したコミットと GITHUB_SHA が一致しない');
+    }
   }
   if (dirty) notSubmittableBecause.push('未コミットの変更がある');
   const submittable = notSubmittableBecause.length === 0;
@@ -208,7 +230,7 @@ export function makePackage({
   const provenance = {
     version: manifest.version,
     sourceCommit,
-    treeSha: git(['rev-parse', 'HEAD^{tree}']),
+    treeSha,
     dirty,
     submittable,
     notSubmittableBecause: submittable ? null : notSubmittableBecause,

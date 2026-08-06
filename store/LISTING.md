@@ -12,7 +12,7 @@
 デベロッパーダッシュボードの画面順に並べてあります。上から順に進めてください。
 各欄はコードブロックをそのままコピペできます。
 
-- 提出用ZIP: リポジトリで `npm run package` を実行すると `dist/reposhout-<版>.zip` ができます（収録一覧は `scripts/package-files.mjs`・allowlist方式）。同じ内容なら何度作っても同じZIPになるので、`dist/*.zip.sha256` の値で手元と提出物の一致を確かめられます
+- 提出用ZIP: **手元で `npm run package` して作ったものは提出しません**（名前に `NON-SUBMITTABLE` が付きます）。使うのは main への push で走ったCIが残した成果物だけです（→ §1「どのZIPを出すか」）。収録一覧は `scripts/package-files.mjs`・allowlist方式で、同じ内容なら何度作っても同じZIPになります
 - 公開リポジトリ: https://github.com/Driedsandwich/reposhout
 - ダッシュボード: https://chrome.google.com/webstore/devconsole
 

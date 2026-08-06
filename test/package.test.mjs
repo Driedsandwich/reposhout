@@ -295,6 +295,18 @@ for (const [label, env, expectReason] of [
     CI: 'true', GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'push',
     GITHUB_REF: 'refs/heads/main', GITHUB_SHA: 'f'.repeat(40)
   }, /GITHUB_SHA が一致しない/],
+  /*
+   * 第7回監査 R7-005。`ci.githubSha &&` で守っていたので、GITHUB_SHA が無いときは
+   * 突き合わせを飛ばして提出可のままだった。無いものは無条件で通る＝fail-open。
+   */
+  ['GITHUB_SHA が無い', {
+    CI: 'true', GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'push',
+    GITHUB_REF: 'refs/heads/main'
+  }, /GITHUB_SHA が無い/],
+  ['GITHUB_SHA が空', {
+    CI: 'true', GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'push',
+    GITHUB_REF: 'refs/heads/main', GITHUB_SHA: ''
+  }, /GITHUB_SHA が無い/]
 ]) {
   test(`${label} は提出候補にならない`, () => {
     const distDir = freshDist();
