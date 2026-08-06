@@ -251,11 +251,30 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
     // 表示言語が英語なら、英語の文字列で出ていることまで言える
     if (locale === 'en') assert.equal(shown.title, 'Post this page to X');
 
-    await cdp.send('Runtime.evaluate',
-      { expression: 'document.getElementById("gxs-share-btn").click()', userGesture: true }, sessionId);
-
     const isNewShareWindow = (t) =>
       t.type === 'page' && t.url.startsWith('https://x.com/intent/') && !before.has(t.targetId);
+
+    /*
+     * まず合成クリック（ページ側スクリプトからの .click()）では動かないことを確かめる。
+     * ここが動いてしまうと、利用者の操作を起点にする設計が崩れる。
+     */
+    await cdp.send('Runtime.evaluate',
+      { expression: 'document.getElementById("gxs-share-btn").click()', userGesture: true }, sessionId);
+    await sleep(1500);
+    assert.equal((await targets()).filter(isNewShareWindow).length, 0,
+      '合成クリックで投稿画面が開いた');
+
+    // 本物のマウス入力で押す（isTrusted が true になる経路）
+    const boxRes = await cdp.send('Runtime.evaluate', {
+      expression: `(() => { const r = document.getElementById('gxs-share-btn').getBoundingClientRect();
+        return JSON.stringify({ x: r.x + r.width / 2, y: r.y + r.height / 2 }); })()`,
+      returnByValue: true
+    }, sessionId);
+    const at = JSON.parse(boxRes.result.value);
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await cdp.send('Input.dispatchMouseEvent',
+        { type, x: at.x, y: at.y, button: 'left', clickCount: 1 }, sessionId);
+    }
 
     const win = await waitFor('共有ウィンドウが開く', async () => (await targets()).find(isNewShareWindow));
 
