@@ -1,88 +1,89 @@
 /*
- * verify-store-readiness.mjs — ストアへ出す前の一括確認
+ * verify-store-readiness.mjs — ストアへ出す前の確認（表示だけを担当する）
  *
- * 実行: npm run verify:store-readiness
+ * 実行:
+ *   npm run verify:store-readiness
+ *   npm run verify:store-readiness -- --artifact <ダウンロードした成果物.zip>
  *
- * 「出してよい状態か」を1つのコマンドで見る。1件でも欠けていれば終了コードは0でない。
- * 提出そのものは人が行う（この本は何も送らない・何も変えない）。
+ * 判定そのものは scripts/store-readiness.mjs の純粋な関数が持つ（第10回監査 R10-002）。
+ * ここはファイルを読んで渡し、結果を出すだけ。1件でも欠けていれば終了コードは0でない。
  *
- * ここで見るのは、テストでは見きれない**本人の作業待ち**を含む項目。
- * 第9回監査 R9-002 で、確認待ちのまま提出へ進める状態だと指摘された。
+ * **通っても「提出してよい」ではない。** ここで見られるのはリポジトリ側の材料だけで、
+ * 外部監査の判定と、ダッシュボードの現行の設問文を本人が読んで確定する作業は別に要る。
  */
 import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import { validateStoreReadiness } from './store-readiness.mjs';
+import { readZip } from './zip-read.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (f) => readFileSync(join(ROOT, f), 'utf8').replace(/\r\n/g, '\n');
+const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
 
-const problems = [];
-const ok = [];
-const check = (label, condition, detail) => {
-  (condition ? ok : problems).push(condition ? label : `${label} — ${detail}`);
-};
-
-const disclosure = JSON.parse(read('store/DATA_DISCLOSURE.json'));
-const manifest = JSON.parse(read('manifest.json'));
-
-/* 1. データ申告が全欄そろって確定しているか */
-for (const c of disclosure.categories) {
-  if (c.confirmationStatus === 'not_required') {
-    check(`申告 ${c.label}`, ['Yes', 'No'].includes(c.answer), `答えが Yes / No でない: ${c.answer}`);
-    continue;
+const argv = process.argv.slice(2);
+const artifactAt = argv.indexOf('--artifact');
+let artifact = null;
+if (artifactAt !== -1) {
+  const path = argv[artifactAt + 1];
+  if (!path) {
+    console.error('--artifact のあとにファイルのパスが要ります');
+    process.exit(2);
   }
-  check(`申告 ${c.label}`, c.confirmationStatus === 'confirmed',
-    '本人の確認がまだ（ダッシュボードの設問文を読んで確定してください）');
-  if (c.confirmationStatus !== 'confirmed') continue;
-
-  const oc = c.ownerConfirmation || {};
-  check(`申告 ${c.label} の答え`, ['Yes', 'No'].includes(c.answer), `答えが Yes / No でない: ${c.answer}`);
-  check(`申告 ${c.label} の一致`, c.answer === oc.chosen,
-    `answer(${c.answer}) と ownerConfirmation.chosen(${oc.chosen}) が違う`);
-  for (const [k, why] of Object.entries({
-    dashboardQuestionText: '読んだ設問文',
-    confirmedOn: '確認した日',
-    chosen: '選んだ答え',
-    reason: '理由'
-  })) {
-    check(`申告 ${c.label} の${why}`, Boolean(oc[k]), '空のまま');
-  }
+  /*
+   * 外側の成果物ZIPは GitHub が書くもので、data descriptor 付きで来る（実測）。
+   * 容れ物としてはそれを許し、**中身の配布ZIPは自分たちが作ったものなので
+   * 厳しいまま**読む（下の readZipStrict）。
+   */
+  artifact = {
+    outerName: basename(path).replace(/\.zip$/i, ''),
+    files: readZip(readFileSync(path), { allowDataDescriptor: true })
+  };
 }
 
-/* 2. 版が揃っているか */
-const pkg = JSON.parse(read('package.json'));
-check('版の一致', pkg.version === manifest.version && disclosure.version === manifest.version,
-  `manifest=${manifest.version} package=${pkg.version} disclosure=${disclosure.version}`);
+/* 外部監査の申告は、あれば読む（無ければ「未確認」として扱う） */
+let audit = null;
+try {
+  audit = JSON.parse(read('store/EXTERNAL_AUDIT.json'));
+} catch { /* 無くてよい */ }
 
-/* 3. プライバシーポリシーに Limited Use の遵守声明があるか */
-const privacy = read('PRIVACY.md');
-check('Limited Use の遵守声明（英語）', /adheres to the Chrome Web Store User Data Policy/i.test(privacy),
-  'PRIVACY.md に英語の遵守声明が無い');
-check('Limited Use の遵守声明（日本語）', /ユーザーデータポリシー（Limited Use の要件を含む）に従います/.test(privacy),
-  'PRIVACY.md に日本語の遵守声明が無い');
+const result = validateStoreReadiness({
+  disclosure: JSON.parse(read('store/DATA_DISCLOSURE.json')),
+  candidate: JSON.parse(read('store/SUBMISSION_CANDIDATE.json')),
+  manifestVersion: JSON.parse(read('manifest.json')).version,
+  packageVersion: JSON.parse(read('package.json')).version,
+  privacy: read('PRIVACY.md'),
+  listing: read('store/LISTING.md'),
+  dashboardChanges: read('store/STORE_DASHBOARD_CHANGES.md'),
+  today: new Date().toISOString().slice(0, 10),
+  artifact,
+  audit,
+  sha256,
+  readZipStrict: (buf) => readZip(buf)
+});
 
-/* 4. 提出手順が「既存アイテムの差し替え」になっているか */
-const listing = read('store/LISTING.md');
-check('更新の手順', listing.includes('Upload New Package'), 'store/LISTING.md が新規登録のままになっている');
-check('提出する成果物の指定', /成果物 : reposhout-package-[0-9a-f]{40}/.test(listing),
-  'どの成果物を出すかが一意に書かれていない');
-check('提出するZIPのハッシュ', /SHA-256 : [0-9a-f]{64}/.test(listing),
-  '提出するZIPのSHA-256が書かれていない');
-
-/* 5. 手元ビルドを提出用として案内していないか */
-for (const f of ['store/LISTING.md', 'store/STORE_DASHBOARD_CHANGES.md']) {
-  check(`${f} の案内`, !/`npm run package` で作れます/.test(read(f)),
-    '手元ビルドを提出用として案内している');
-}
-
-console.log('ストア提出前の確認\n');
-for (const line of ok) console.log(`  ✅ ${line}`);
-for (const line of problems) console.log(`  ❌ ${line}`);
+console.log('ストア提出前の確認（リポジトリ側）\n');
+for (const line of result.ok) console.log(`  ✅ ${line}`);
+for (const line of result.problems) console.log(`  ❌ ${line}`);
 console.log();
 
-if (problems.length) {
-  console.log(`${problems.length} 件そろっていません。ここが埋まるまで提出しないでください。`);
+if (!result.artifactChecked) {
+  console.log('※ 実物の成果物は見ていません（--artifact <成果物.zip> を付けると中身まで確かめます）');
+}
+if (!result.auditChecked) {
+  console.log('※ 外部監査の判定は見ていません（store/EXTERNAL_AUDIT.json がありません）');
+}
+
+if (result.problems.length) {
+  console.log(`\n${result.problems.length} 件そろっていません。ここが埋まるまで提出しないでください。`);
   console.log('（データ申告の欄は本人がダッシュボードで確認して埋めるところです）');
   process.exit(1);
 }
-console.log('すべてそろっています。提出そのものは本人が行ってください。');
+
+console.log('\nリポジトリ側の材料はそろっています。');
+console.log('**これは「提出してよい」という意味ではありません。** このあと、');
+console.log('  ① 外部監査の判定（合格していること）');
+console.log('  ② 本人がダッシュボードの現行の設問文を読んで確定すること');
+console.log('  ③ 出す成果物を --artifact で実物ごと確かめること');
+console.log('が要ります。提出そのものは本人が行ってください。');

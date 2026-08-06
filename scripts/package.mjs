@@ -233,6 +233,13 @@ export function makePackage({
     treeSha,
     dirty,
     submittable,
+    /*
+     * submittable が見ているのは「この成果物の素性」だけ——main への push で走った
+     * CIが、未コミットの変更が無い状態で作ったか。**ストアへ出してよいかではない**
+     * （第10回監査 R10-002）。掲載文・データ申告・外部監査・本人の確認は
+     * npm run verify:store-readiness の側で見る。
+     */
+    submittableMeans: 'artifact provenance eligibility only — not Chrome Web Store submission readiness',
     notSubmittableBecause: submittable ? null : notSubmittableBecause,
     ci,
     node: process.version,
@@ -369,7 +376,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   console.log(`  コミット: ${r.provenance.sourceCommit || '(不明)'}${r.provenance.dirty ? ' (未コミットの変更あり)' : ''}`);
   console.log(`  ビルド種別: ${r.provenance.ci.eventName}`);
   if (r.submittable) {
-    console.log(`  提出可否: 提出候補（ストアへ出せます）`);
+    console.log(`  提出可否: 技術的には提出候補（素性は問題なし）`);
+    console.log(`           ※ ストアへ出してよいかは別です。npm run verify:store-readiness で確かめてください`);
   } else {
     console.log(`  提出可否: ★ストアへ提出しないでください — ${r.provenance.notSubmittableBecause.join(' / ')}`);
   }
