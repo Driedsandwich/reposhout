@@ -170,6 +170,46 @@ test('現行版の文書に「公式コーパスを走らせていない」が�
   }
 });
 
+/*
+ * 提出物のQA手順。ダウンロードした成果物のフォルダには manifest.json が無く、
+ * そのままでは拡張として読み込めない。内側のZIPを展開する工程が要る（第6回監査 R6-004）。
+ * ここでは手順書に必要な工程が、必要な順で書いてあることを見る。
+ * 「本当に manifest.json が無い」ことは test/package.test.mjs が実物で確かめる。
+ */
+test('提出物のQA手順に、内側のZIPを展開する工程がある', () => {
+  const body = read('store/LISTING.md');
+  const i = body.indexOf('### どのZIPを出すか');
+  assert.ok(i > 0, 'どのZIPを出すかの節が無い');
+  const section = body.slice(i, body.indexOf('\n同梱物は', i));
+
+  const order = [
+    'ダウンロード',
+    'release-manifest.json',
+    '.sha256',
+    '新しい空のフォルダ',
+    '展開',
+    'manifest.json',
+    'パッケージ化されていない拡張機能',
+    'アップロード'
+  ];
+  let at = 0;
+  for (const step of order) {
+    const found = section.indexOf(step, at);
+    assert.ok(found >= 0, `QA手順に「${step}」が無い（または順序が違う）`);
+    at = found;
+  }
+  assert.ok(section.includes('そのまま読み込'),
+    '「そのまま読み込んではいけない」という注意が無い');
+});
+
+test('QA手順の検査が効いているかの対照', () => {
+  // 内側ZIPの展開工程が無い旧手順は、同じ検査を通らない
+  const old = 'ダウンロードする / release-manifest.json を確かめる / .sha256 を確かめる / ' +
+              'その展開物をそのままパッケージ化されていない拡張機能として読み込む / アップロードする';
+  assert.ok(!old.includes('新しい空のフォルダ'),
+    '対照が成立していない＝旧手順でも通ってしまう');
+});
+
 test('公式コーパスを走らせている範囲が、READMEに書いてある', () => {
   for (const [f, needles] of Object.entries({
     'README.md': ['validate.yml', 'counting sections', 'pinned upstream commit'],

@@ -18,6 +18,7 @@ import { mkdtempSync, readdirSync, readFileSync, existsSync, writeFileSync, mkdi
 import { tmpdir } from 'node:os';
 import { join, basename, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
+import { inflateRawSync } from 'node:zlib';
 import { makePackage, realIo } from '../scripts/package.mjs';
 
 /* 「未コミットの変更なし・既知のコミット」を装う git */
@@ -323,6 +324,91 @@ test('同じ入力からは同じZIPが出来る（決定論）', () => {
   const b = makePackage({ distDir: freshDist(), git: fakeGit(), env: {} });
   assert.equal(a.sha256, b.sha256);
   assert.equal(a.zipBytes, b.zipBytes);
+});
+
+/*
+ * ZIPを読む最小限の実装。書く側（scripts/package.mjs）と別に用意して、
+ * 「書いたものが本当に読めるか」を独立に確かめる。
+ */
+function readZip(buf) {
+  const eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  assert.ok(eocd >= 0, 'ZIPの終端レコードが見つからない');
+  const count = buf.readUInt16LE(eocd + 10);
+  let p = buf.readUInt32LE(eocd + 16);
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    assert.equal(buf.readUInt32LE(p), 0x02014b50, '中央ディレクトリの署名が違う');
+    const method = buf.readUInt16LE(p + 10);
+    const compSize = buf.readUInt32LE(p + 20);
+    const rawSize = buf.readUInt32LE(p + 24);
+    const nameLen = buf.readUInt16LE(p + 28);
+    const extraLen = buf.readUInt16LE(p + 30);
+    const commentLen = buf.readUInt16LE(p + 32);
+    const offset = buf.readUInt32LE(p + 42);
+    const name = buf.subarray(p + 46, p + 46 + nameLen).toString('utf8');
+
+    assert.equal(buf.readUInt32LE(offset), 0x04034b50, 'ローカルヘッダの署名が違う');
+    const lNameLen = buf.readUInt16LE(offset + 26);
+    const lExtraLen = buf.readUInt16LE(offset + 28);
+    const dataAt = offset + 30 + lNameLen + lExtraLen;
+    const body = buf.subarray(dataAt, dataAt + compSize);
+    const data = method === 0 ? Buffer.from(body) : inflateRawSync(body);
+    assert.equal(data.length, rawSize, `展開後の長さが違う: ${name}`);
+    out.push({ name, data });
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  return out;
+}
+
+/*
+ * 提出物のQAで実際に起きる形を、そのまま再現する。
+ *
+ * Actions からダウンロードして展開したフォルダには release-manifest.json と
+ * ZIP とハッシュしか入っておらず、manifest.json が無い。そのフォルダを
+ * 「パッケージ化されていない拡張機能」として読み込むことはできない。
+ * 内側のZIPを別のフォルダへ展開して初めて読み込める（第6回監査 R6-004）。
+ */
+test('成果物のフォルダには manifest.json が無く、内側のZIPを展開して初めて読み込める', () => {
+  const distDir = freshDist();
+  const r = buildOnce(distDir);
+
+  // ① ダウンロードして展開したのと同じ中身
+  const outer = readdirSync(distDir).sort();
+  assert.deepEqual(outer, [
+    'release-manifest.json',
+    `reposhout-${r.version}.zip`,
+    `reposhout-${r.version}.zip.sha256`
+  ].sort());
+  assert.equal(existsSync(join(distDir, 'manifest.json')), false,
+    '成果物の直下に manifest.json がある＝この検査の前提が崩れている');
+
+  // ② 内側のZIPを展開すると、直下に manifest.json がある
+  const zip = readFileSync(join(distDir, `reposhout-${r.version}.zip`));
+  const entries = readZip(zip);
+  const names = entries.map((e) => e.name);
+  assert.ok(names.includes('manifest.json'), `内側のZIPに manifest.json が無い: ${names}`);
+  assert.equal(names.length, r.files.length, '収録件数が記録と違う');
+
+  const extracted = join(dirname(distDir), 'unpacked');
+  for (const e of entries) {
+    const dest = join(extracted, e.name);
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, e.data);
+  }
+  assert.ok(existsSync(join(extracted, 'manifest.json')),
+    '展開したフォルダの直下に manifest.json が無い');
+  const mf = JSON.parse(readFileSync(join(extracted, 'manifest.json'), 'utf8'));
+  assert.equal(mf.version, r.version, '展開した manifest の版が違う');
+  assert.equal(mf.manifest_version, 3);
+
+  // ③ 展開したものが、記録のper-fileハッシュと1件残らず一致する
+  const m = JSON.parse(readFileSync(join(distDir, 'release-manifest.json'), 'utf8'));
+  for (const rec of m.files) {
+    const e = entries.find((x) => x.name === rec.name);
+    assert.ok(e, `記録にあるファイルがZIPに無い: ${rec.name}`);
+    assert.equal(createHash('sha256').update(e.data).digest('hex'), rec.sha256,
+      `中身が記録と違う: ${rec.name}`);
+  }
 });
 
 test('収録するのは allowlist のファイルだけ', () => {
