@@ -1,6 +1,6 @@
 # Chrome ウェブストア 提出手順書
 
-更新: 2026-08-06 / 対象: RepoShout **1.1.5**（未提出。公開状態の正本は [RELEASE_STATUS.md](../RELEASE_STATUS.md)）
+更新: 2026-08-06 / 対象: RepoShout **1.1.6**（未提出。公開状態の正本は [RELEASE_STATUS.md](../RELEASE_STATUS.md)）
 **この文書は原稿と手順です。提出（Submit for review）はあなたが実行します。**
 
 > **提出の前提（2026-08-05 決定）**: 外部監査（ChatGPT の GPT-5.6 Sol Pro）に**合格してから**提出する。
@@ -30,7 +30,7 @@
 **「新しいアイテムを追加」→ ZIPをドラッグ**
 
 ```
-dist/reposhout-1.1.5.zip
+dist/reposhout-1.1.6.zip
 ```
 
 ### どのZIPを出すか（2026-08-06 追加・第5回監査 R5-003）
@@ -43,7 +43,7 @@ dist/reposhout-1.1.5.zip
 
 | 見るところ | 提出してよいもの | 出してはいけないもの |
 |---|---|---|
-| ファイル名 | `reposhout-1.1.5.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty-NON-SUBMITTABLE.zip` |
+| ファイル名 | `reposhout-1.1.6.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty-NON-SUBMITTABLE.zip` |
 | `dist/release-manifest.json` の `submittable` | `true` | `false` |
 | 同 `ci.eventName` | `push` | `pull_request` / `workflow_dispatch` / `local` |
 | 同 `ci.ref` | `refs/heads/main` | それ以外 |
@@ -58,8 +58,8 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 
 1. Actions で main の該当 run を開き、成果物 `reposhout-package-<SHA>` をダウンロードする
 2. 展開して `release-manifest.json` を開き、上の表の5点を確かめる
-3. `shasum -a 256 reposhout-1.1.5.zip` の値が、同梱の `.sha256` と一致することを確かめる
-4. **新しい空のフォルダを作り、そこへ `reposhout-1.1.5.zip` を展開する**
+3. `shasum -a 256 reposhout-1.1.6.zip` の値が、同梱の `.sha256` と一致することを確かめる
+4. **新しい空のフォルダを作り、そこへ `reposhout-1.1.6.zip` を展開する**
    （ダウンロードした成果物のフォルダには `release-manifest.json` とZIPとハッシュしか入っておらず、
    `manifest.json` がありません。そのまま読み込もうとしても拡張として認識されません）
 5. 展開したフォルダの直下に `manifest.json` があること、その `version` が上げた版であることを確かめる
@@ -75,7 +75,7 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 | 自動で入る値 | 内容 |
 |---|---|
 | Name | `RepoShout — Share GitHub repos, issues & PRs to X`（49文字 / 上限75） |
-| Version | `1.1.5`（manifest の値。前回より大きくないと弾かれます） |
+| Version | `1.1.6`（manifest の値。前回より大きくないと弾かれます） |
 | Short description | 下の §2 と同一（manifest の `description`・117文字 / 上限132） |
 
 ---
