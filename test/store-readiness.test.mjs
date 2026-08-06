@@ -582,3 +582,16 @@ test('preflight では、リモートやCIを見ないまま通る（最終関�
   assert.deepEqual(r.problems, [], r.problems.join('\n'));
 });
 
+/* ---- 日付（第12回監査 R12-004） ---------------------------------------- */
+
+test('基準日そのものが日付でなければ落ちる', () => {
+  failsWith(strictInputs({ today: 'not-a-date' }), '基準日');
+  failsWith(strictInputs({ today: '2026-02-30' }), '基準日');
+});
+
+test('外部監査の日付が未来なら落ちる', () => {
+  const cand = readyCandidate();
+  const audit = goodAudit(cand);
+  audit.auditDate = '2026-08-08';
+  failsWith(strictInputs({ candidate: cand, audit, today: '2026-08-07' }), '外部監査の日付が未来でない');
+});

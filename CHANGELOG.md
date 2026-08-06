@@ -34,6 +34,10 @@
   strict で `origin` が対象のリポジトリか、`HEAD` が `origin/main` と同じか、
   そのコミットの CI が **test と windows の両方 success** かを、GitHub の API を
   read-only で引いて確かめる。取れなかったら**通さない**（警告で流さない）
+- **`--today not-a-date` で未来日の検査を飛ばせた（R12-004・P3）** —
+  基準日そのものを実在する日として要求し、CLI も知らない指定・二度書き・値なし・
+  読めない時間帯・読めない申告JSONを終了コード2で止める。子プロセスで終了コードを
+  見る統合テストを追加
 - あわせて、ツールチップ等の文言を実際の動作へ寄せた
   （`Post this page to X` → `Send this page's title and URL to X's composer`）
 

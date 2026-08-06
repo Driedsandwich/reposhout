@@ -65,6 +65,13 @@ export function validateStoreReadiness(input) {
     sha256, readZipStrict = null
   } = input;
 
+  /*
+   * 「今日」そのものが実在する日でなければ、未来日の判定ができない
+   * （第12回監査 R12-004。--today not-a-date で検査を飛ばせた）。
+   */
+  if (!isRealDate(today)) {
+    problems.push(`基準日 — YYYY-MM-DD の実在する日でない: ${today}`);
+  }
 
   const strict = mode === 'strict';
   const pending = candidate.status === 'pending_main_ci';
@@ -368,6 +375,10 @@ export function validateStoreReadiness(input) {
       `${audit.runtimeVersion} ≠ ${candidate.version}`);
     check('外部監査の日付', isRealDate(audit.auditDate || ''),
       `YYYY-MM-DD の実在する日でない: ${audit.auditDate}`);
+    if (isRealDate(audit.auditDate || '') && isRealDate(today)) {
+      check('外部監査の日付が未来でない', audit.auditDate <= today,
+        `${audit.auditDate} が今日 ${today} より後`);
+    }
     check('外部監査の実施者', !blank(audit.auditor), '空欄');
     /*
      * 報告書は書式ではなく**実体のハッシュ**で結び付ける。呼び出し側が
