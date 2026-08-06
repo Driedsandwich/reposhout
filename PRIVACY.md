@@ -30,7 +30,7 @@ RepoShout makes no background network requests, and contacts no server of its ow
 
 X, and your browser, then handle those values under their own policies.
 
-**A caution.** If a GitHub page is private or confidential, do not press Share on it unless you intend its title and URL to reach X. From version 1.1.1 the extension refuses to share GitHub's authentication, account, settings and organisation-administration pages at all, but it cannot tell whether an ordinary repository is public or private from the URL alone.
+**A caution.** The URL always contains a GitHub account name — `github.com/<account>/<repository>` — and so does the title of a profile page. If a GitHub page is private or confidential, do not press Share on it unless you intend its title and URL, including that account name, to reach X. From version 1.1.1 the extension refuses to share GitHub's authentication, account, settings and organisation-administration pages at all, but it cannot tell whether an ordinary repository is public or private from the URL alone. From version 1.1.1 the extension refuses to share GitHub's authentication, account, settings and organisation-administration pages at all, but it cannot tell whether an ordinary repository is public or private from the URL alone.
 
 ### Storage
 
@@ -98,7 +98,7 @@ RepoShout はバックグラウンドでの通信を行わず、独自のサー�
 
 渡ったあとの取り扱いには、X およびブラウザそれぞれのポリシーが適用されます。
 
-**注意。** 非公開・機密のGitHubページでは、そのタイトルとURLをXへ送る意図がある場合だけShareを押してください。バージョン1.1.1 から、GitHubの認証・アカウント・設定・組織管理の画面では拡張が共有そのものを拒否しますが、**通常のリポジトリが公開か非公開かはURLだけでは判別できません**。
+**注意。** 共有するURLには必ずGitHubのアカウント名が入ります（`github.com/<アカウント名>/<リポジトリ名>`）。プロフィールページではタイトルにも入ります。非公開・機密のGitHubページでは、そのアカウント名を含むタイトルとURLをXへ送る意図がある場合だけShareを押してください。バージョン1.1.1 から、GitHubの認証・アカウント・設定・組織管理の画面では拡張が共有そのものを拒否しますが、**通常のリポジトリが公開か非公開かはURLだけでは判別できません**。バージョン1.1.1 から、GitHubの認証・アカウント・設定・組織管理の画面では拡張が共有そのものを拒否しますが、**通常のリポジトリが公開か非公開かはURLだけでは判別できません**。
 
 ### 保存
 

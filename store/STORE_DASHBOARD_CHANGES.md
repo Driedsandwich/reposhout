@@ -73,12 +73,19 @@ and URL of the GitHub page the user is currently viewing.
 |---|---|---|---|
 | Web history | No | **Yes へ変更** | 利用者が見ているページのURLが、第三者（X）へ渡る |
 | Website content | No | **Yes へ変更** | ページのタイトルが、第三者（X）へ渡る |
-| Personally identifiable information | No | No | 扱わない |
+| Personally identifiable information | No | **要判断（下記）** | Xへ渡すURLとタイトルに、GitHubのアカウント名が含まれる |
 | Authentication information | No | No | 扱わない |
 | Personal communications | No | No | 扱わない |
 | Location / Health / Financial / User activity | No | No | 扱わない |
 
-**推奨する理由**: Googleの User Data FAQ は「handle」に collect だけでなく **transmit** を含め、URL やドメインを web browsing activity の例に挙げています。今回のように「機能として第三者へ渡す」場合、No のままにする合理的な根拠がありません。Yes にしても、プライバシーポリシー（`PRIVACY.md`）は既に用意してあり、要件は満たせます。
+**個人を識別しうる情報（PII）について**（2026-08-05・第4回監査の指摘）: Xへ渡るURLは `github.com/<アカウント名>/<リポジトリ名>` の形をしており、**GitHubのアカウント名が必ず含まれます**。利用者本人のプロフィールページを共有した場合は、そのアカウント名が本人を指します。タイトル側にも入りえます。
+
+- **Yes 側の根拠**: Google の定義は「単独または他の情報と組み合わせて個人を識別できる情報」。アカウント名はこれに当たりうる
+- **No 側の根拠**: そのアカウント名は元々GitHub上で公開されており、利用者が共有すると決めたページのURLそのもの。拡張が独自に集めているわけではない
+
+**推奨は Yes**（少なく申告する方向のリスクを取らない）。最終判断はダッシュボードの現行の設問文を読んだうえで本人が決めてください。
+
+**Web history / Website content を Yes と推奨する理由**: Googleの User Data FAQ は「handle」に collect だけでなく **transmit** を含め、URL やドメインを web browsing activity の例に挙げています。今回のように「機能として第三者へ渡す」場合、No のままにする合理的な根拠がありません。Yes にしても、プライバシーポリシー（`PRIVACY.md`）は既に用意してあり、要件は満たせます。今回のように「機能として第三者へ渡す」場合、No のままにする合理的な根拠がありません。Yes にしても、プライバシーポリシー（`PRIVACY.md`）は既に用意してあり、要件は満たせます。
 
 **推奨に反対する材料**: 過去2回 No で通っている。Yes へ変えると掲載ページの「データの取り扱い」表示が変わり、審査が長くなる可能性がある。ただし**「前に通ったから」は正確さの根拠にはなりません**。
 
