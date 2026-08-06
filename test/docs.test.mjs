@@ -331,6 +331,22 @@ test('content script の表が、押されたときに読む2つを書いてい�
   assert.ok(rows.some((r) => r.includes('利用者の操作によるクリック')), '日本語の行に同じ説明が無い');
 });
 
+/*
+ * 第10回監査 R10-004。冒頭に「更新なら §1 と §2 だけを直せば足ります」と書いてあった。
+ * 今回の 1.0.1 → 1.1.7 では §3（Privacy practices）も必須で、掲載中の申告は
+ * 9項目すべて No のままなので、飛ばすと事実と違う申告を残して提出することになる。
+ */
+test('更新の手順が、Privacy practices まで必須と書いてある', () => {
+  const listing = read('store/LISTING.md');
+  assert.ok(/§0[^\n]*§3/.test(listing), 'store/LISTING.md が §3 まで必須と書いていない');
+  assert.ok(/すべて No/.test(listing), '掲載中の古い申告（すべてNo）を直す指示が無い');
+  assert.ok(!/§1 と §2 だけを直せば足ります/.test(listing),
+    '「§1と§2だけで足りる」が残っている');
+  // 対照: 旧文面は同じ判定を通らない
+  const old = 'ページの手順。更新のときは §1 のアップロードと §2 の掲載文だけを直せば足ります。';
+  assert.ok(!/§0[^\n]*§3/.test(old), '対照が成立していない＝旧文面でも通ってしまう');
+});
+
 test('ストア文書が、手元ビルドを提出用として案内していない', () => {
   for (const f of ['store/LISTING.md', 'store/STORE_DASHBOARD_CHANGES.md']) {
     const body = read(f);
