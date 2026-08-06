@@ -22,7 +22,7 @@
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { deflateRawSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -348,7 +348,16 @@ function writeAtomically({ io, distDir, finalName, zip, sha, provenance }) {
   if (moved) io.rmSync(parked, { recursive: true, force: true });
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+/*
+ * 直接実行されたときだけ動かす。
+ *
+ * `file://${process.argv[1]}` と比べていたが、**Windows では絶対に一致しない**
+ * （argv[1] は D:\a\... で、import.meta.url は file:///D:/a/... になる）。
+ * そのため Windows のCIでは「配布物を作れること」のステップが、何も作らないまま
+ * 成功していた。走らなかったのか成功したのかを、出力から見分けられなかった。
+ * pathToFileURL で正しく比べる（2026-08-06・第7回監査の作業中にCIで発覚）。
+ */
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dryRun = process.argv.includes('--dry-run');
   const allowDirty = process.argv.includes('--allow-dirty');
   const r = makePackage({ dryRun, allowDirty });
