@@ -245,19 +245,21 @@ the popup (for example to /i/flow/login when the user is signed out).
 
 ### Data usage
 
-**この欄の判断材料は [STORE_DASHBOARD_CHANGES.md](STORE_DASHBOARD_CHANGES.md) §2 が正本です。** ここには結論だけ置きます。
+**この欄の答えは [DATA_DISCLOSURE.json](DATA_DISCLOSURE.json) が正本です。** 以前はこの表と
+[STORE_DASHBOARD_CHANGES.md](STORE_DASHBOARD_CHANGES.md) で答えが食い違っていて、どちらを見るかで
+申告が変わる状態でした（第5回監査 R5-001）。いまは正本から写した表で、ずれるとテストが落ちます。
 
-| 質問 | 推奨する回答 | 理由 |
+| 質問 | 回答 | 理由 |
 |---|---|---|
-| Web history | **Yes** | 利用者が見ているページのURLが、第三者であるXへ渡るため |
-| Website content | **Yes** | ページのタイトルが、同じくXへ渡るため |
-| Personally identifiable information | No | 扱わない |
+| Personally identifiable information | **Yes** | 共有するURL・タイトルに、GitHubのユーザー名または組織名が入る場合がある（公式FAQはPIIの例に username を挙げている） |
 | Health information | No | 扱わない |
 | Financial and payment information | No | 扱わない |
 | Authentication information | No | 扱わない |
 | Personal communications | No | 扱わない |
 | Location | No | 扱わない |
-| User activity | No | 扱わない |
+| Web history | **Yes** | 利用者が見ているページのURLが、第三者であるXへ渡るため |
+| User activity | No | クリック・スクロール・入力内容は読まない（Escapeの1キーだけ、拡張が自分で開いた画面を閉じるために見ている） |
+| Website content | **Yes** | ページのタイトルが、同じくXへ渡るため |
 
 3つの証明にすべてチェック（該当なし・遵守）:
 
@@ -265,13 +267,14 @@ the popup (for example to /i/flow/login when the user is signed out).
 - [ ] 収集データを第三者に販売しない
 - [ ] 信用力判断・融資目的に使用・転送しない
 
-> **1.0.0 と 1.0.1 は Web history / Website content を No で申告して審査を通っています。**
+> **1.0.0 と 1.0.1 は9項目すべてを No で申告して審査を通っています。**
 > しかしその根拠として書いていた「何も送信しないから」は**事実ではありませんでした**。
 > Shareを押すと、タイトルとURLは投稿画面が開いた時点でXへ渡ります。
 > **通ったという実績は、回答が正確だったことの証明にはなりません。**
 >
-> 最終的な回答は、ダッシュボードの現行の設問文を読んだうえで本人が決めてください。
-> どちらを選ぶにせよ、プライバシーポリシーは用意済みなので要件は満たせます。
+> 送り先の区別: **開発者は何も受け取りません**（サーバーが存在しません）。渡る先はXだけで、
+> タイミングは投稿画面が開いた時点、Postを押すかどうかは利用者が決めます。
+> タイトルとURLは保存しません（`chrome.storage.session` に入るのはウィンドウIDと時刻だけです）。
 
 ### Privacy policy URL
 
