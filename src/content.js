@@ -161,14 +161,24 @@
      */
     var share = null;
     var threw = false;
+    var reason = null;
     try {
-      share = window.GXS && window.GXS.buildShare(location.href, document.title);
+      var res = window.GXS && window.GXS.buildShareResult(location.href, document.title);
+      if (res && res.ok) share = res.share;
+      else if (res) reason = res.reason;
     } catch (e) {
       threw = true;
     }
-    // 対象外ページ（buildShareがnullを返した）なら何もしない。
-    // 認証・設定・管理画面もここで止まる。
-    if (!share && !threw) return;
+    /*
+     * 対象外・機微・資格情報の疑いで開かなかったときは、**理由だけ**を
+     * 伝える（第12回監査 R12-002）。以前は黙って何も起きず、利用者には
+     * 壊れているのか意図的なのか分からなかった。
+     * 表示するのは決まった文だけで、URLも値も出さない。
+     */
+    if (!share && !threw) {
+      showNotice(reason);
+      return;
+    }
     /*
      * 例外が出た場合だけ、URLだけの共有にフォールバックする（URL方針は本体と同じものを使う）。
      * 方針が使えない・機微ページと判定された場合は何も開かない。
@@ -181,6 +191,58 @@
     }
 
     openShareWindow(share.intentUrl);
+  }
+
+  /* ------------------------------------------------------------
+   * 開かなかった理由を、値を出さずに伝える（第12回監査 R12-002）
+   * ------------------------------------------------------------
+   * ・出すのは決まった文だけ。URL・パラメータ名・値は出さない
+   * ・role="status" で読み上げに乗せ、focus は奪わない
+   * ・数秒で消す
+   */
+  var NOTICE_ID = 'gxs-notice';
+  var NOTICE_MS = 6000;
+
+  function noticeTextFor(reason) {
+    if (reason === 'credential_like') {
+      return t('noticeCredential',
+        'This URL may contain sensitive credentials, so the X composer was not opened. ' +
+        'Nothing was sent to X.');
+    }
+    return t('noticeUnsupported', 'This page cannot be shared. Nothing was sent to X.');
+  }
+
+  function showNotice(reason) {
+    var text = noticeTextFor(reason);
+    var el = document.getElementById(NOTICE_ID);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = NOTICE_ID;
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      el.style.cssText = [
+        'position:fixed', 'z-index:2147483647', 'right:16px', 'bottom:16px',
+        'max-width:min(92vw,380px)', 'padding:10px 14px', 'border-radius:8px',
+        'font:13px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+        'background:#1f2328', 'color:#fff', 'box-shadow:0 4px 16px rgba(0,0,0,.3)'
+      ].join(';');
+      document.body.appendChild(el);
+    }
+    el.textContent = text;          // 文字列として入れる（HTMLとして解釈させない）
+    if (el.gxsTimer) clearTimeout(el.gxsTimer);
+    el.gxsTimer = setTimeout(function () {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }, NOTICE_MS);
+  }
+
+  /*
+   * ツールバー・ショートカットから開けなかったときも、同じ案内を出す。
+   * service worker からは**理由の語だけ**を送る（値は送らない）。
+   */
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener(function (msg) {
+      if (msg && msg.type === 'gxs-notice') showNotice(msg.reason);
+    });
   }
 
   /*

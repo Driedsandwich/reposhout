@@ -344,14 +344,29 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
     return { pageId, opened };
   };
 
-  it('資格情報の形をしたクエリでは、投稿画面を開かない（R11-001）', async () => {
-    const bad = await clickShareOn('https://github.com/o/r/issues?q=access_token%3Adummy-secret');
+  it('資格情報の形をしたパスでは投稿画面を開かず、理由を表示する（R12-001・R12-002）', async () => {
+    const bad = await clickShareOn('https://github.com/o/r/blob/main/access_token=dummy-secret');
     assert.equal(bad.opened.length, 0,
       `投稿画面が開いた: ${bad.opened.map((t) => t.url).join(' | ')}`);
+
+    /* 黙って何も起きないのではなく、値を出さない案内が出ること */
+    const sid = await attach(bad.pageId);
+    await cdp.send('Runtime.enable', {}, sid);
+    const noticeRes = await cdp.send('Runtime.evaluate', {
+      expression: `(() => { const el = document.getElementById('gxs-notice');
+        return JSON.stringify(el ? { text: el.textContent, role: el.getAttribute('role') } : null); })()`,
+      returnByValue: true
+    }, sid);
+    const notice = JSON.parse(noticeRes.result.value);
+    assert.ok(notice, '案内が表示されていない');
+    assert.equal(notice.role, 'status', '読み上げ用の role が付いていない');
+    assert.ok(notice.text.length > 0, '案内が空');
+    assert.ok(!notice.text.includes('dummy-secret'), '案内に値が出ている');
+    assert.ok(!notice.text.includes('github.com'), '案内にURLが出ている');
     await cdp.send('Target.closeTarget', { targetId: bad.pageId });
 
-    // 対照: 同じ経路・同じ押し方で、普通のクエリなら開く
-    const ok = await clickShareOn('https://github.com/o/r/issues?q=is%3Aopen');
+    // 対照: 同じ経路・同じ押し方で、普通のページなら開く
+    const ok = await clickShareOn('https://github.com/o/r/issues?state=open');
     assert.equal(ok.opened.length, 1,
       `対照が成立していない（この経路自体が動いていない）: ${ok.opened.length} 個`);
     assert.ok(!decodeURIComponent(ok.opened[0].url).includes('dummy-secret'),
@@ -359,6 +374,17 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
     await waitLoaded(ok.opened[0].targetId);
     assert.ok(await escapeUntilClosed(ok.opened[0].targetId), '対照の窓が閉じない');
     await cdp.send('Target.closeTarget', { targetId: ok.pageId });
+  });
+
+  it('自由文の検索語は、共有URLに残らない（R12-001）', async () => {
+    const r = await clickShareOn('https://github.com/o/r/issues?q=hello+world&state=open');
+    assert.equal(r.opened.length, 1, '共有できなくなっている');
+    const shared = decodeURIComponent(r.opened[0].url);
+    assert.ok(!shared.includes('hello'), `検索語が共有された: ${shared}`);
+    assert.ok(shared.includes('state=open'), `型に合う値まで落ちている: ${shared}`);
+    await waitLoaded(r.opened[0].targetId);
+    assert.ok(await escapeUntilClosed(r.opened[0].targetId), '窓が閉じない');
+    await cdp.send('Target.closeTarget', { targetId: r.pageId });
   });
 
   it('ウィンドウを閉じると記録が消える（ID再利用への備え）', async () => {

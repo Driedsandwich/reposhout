@@ -1,10 +1,10 @@
 {
   "actionTitle": {
-    "message": "RepoShout — share this GitHub page to X",
+    "message": "RepoShout — send this GitHub page's title and URL to X's composer",
     "description": "Tooltip on the toolbar icon."
   },
   "commandShareToX": {
-    "message": "Share the current GitHub page to X",
+    "message": "Send the current GitHub page's title and URL to X's composer",
     "description": "Shown on chrome://extensions/shortcuts."
   },
   "shareButtonLabel": {
@@ -12,11 +12,19 @@
     "description": "Text on the button added to GitHub pages. Keep it short; it sits next to Fork and Star."
   },
   "shareButtonTooltip": {
-    "message": "Post this page to X",
+    "message": "Send this page's title and URL to X's composer",
     "description": "Tooltip on the in-page Share button."
   },
   "shareButtonAria": {
     "message": "Share on X",
     "description": "Accessible name of the in-page Share button."
+  },
+  "noticeCredential": {
+    "message": "This URL may contain sensitive credentials, so the X composer was not opened. Nothing was sent to X.",
+    "description": "Shown when sharing is refused because the URL looks like it carries a credential. Must not include the URL or any value."
+  },
+  "noticeUnsupported": {
+    "message": "This page cannot be shared. Nothing was sent to X.",
+    "description": "Shown when the page is out of scope (settings, authentication, non-GitHub). Must not include the URL."
   }
 }

@@ -1,10 +1,10 @@
 {
   "actionTitle": {
-    "message": "RepoShout — このGitHubページをXで共有する",
+    "message": "RepoShout — このGitHubページのタイトルとURLをXの投稿画面へ送ります",
     "description": "ツールバーアイコンのツールチップ。"
   },
   "commandShareToX": {
-    "message": "いま見ているGitHubページをXで共有する",
+    "message": "いま見ているGitHubページのタイトルとURLをXの投稿画面へ送ります",
     "description": "chrome://extensions/shortcuts に出る説明。"
   },
   "shareButtonLabel": {
@@ -12,11 +12,19 @@
     "description": "GitHubの画面に足すボタンの文字。Fork や Star の隣に並ぶので短くする。"
   },
   "shareButtonTooltip": {
-    "message": "このページをXに投稿する",
+    "message": "このページのタイトルとURLをXの投稿画面へ送ります",
     "description": "画面内Shareボタンのツールチップ。"
   },
   "shareButtonAria": {
     "message": "Share on X",
     "description": "画面内Shareボタンの読み上げ名。"
+  },
+  "noticeCredential": {
+    "message": "このURLには機微な認証情報が含まれる可能性があるため、Xの投稿画面を開きませんでした。Xへは何も送っていません。",
+    "description": "Same as noticeCredential (Japanese)."
+  },
+  "noticeUnsupported": {
+    "message": "このページは共有できません。Xへは何も送っていません。",
+    "description": "Same as noticeUnsupported (Japanese)."
   }
 }

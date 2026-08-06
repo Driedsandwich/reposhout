@@ -612,6 +612,28 @@ test('深くエンコードしたパスは、ほどききれないので断る�
   }
 });
 
+test('判定の理由が、値を含まない決まった語で返る（R12-002）', () => {
+  const REASONS = ['credential_like', 'sensitive_route', 'unsupported', 'malformed_url'];
+  const cases = [
+    ['https://github.com/settings/tokens', 'sensitive_route'],
+    ['https://example.com/a', 'unsupported'],
+    ['not a url', 'malformed_url'],
+    [`https://github.com/o/r/blob/main/access_token=${DUMMY}`, 'credential_like']
+  ];
+  for (const [url, want] of cases) {
+    const r = GXS.canonicalResult(url);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, want, `理由が違う: ${r.reason}`);
+    assert.ok(REASONS.includes(r.reason), '決まった語でない');
+    /* 理由に値やURLを混ぜない（表示に流用するため） */
+    assert.ok(!JSON.stringify(r).includes(DUMMY), '理由に値が混ざっている');
+    assert.ok(!JSON.stringify(r).includes('github.com'), '理由にURLが混ざっている');
+  }
+  const ok = GXS.buildShareResult('https://github.com/o/r', 'T');
+  assert.equal(ok.ok, true);
+  assert.ok(ok.share.intentUrl.startsWith('https://x.com/intent/post?'));
+});
+
 test('資格情報の判定は、ほどける段数に上限がある（止まらなくならない）', () => {
   let deep = 'plain-text';
   for (let i = 0; i < 40; i++) deep = encodeURIComponent(deep);
