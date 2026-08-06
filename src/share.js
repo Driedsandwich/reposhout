@@ -160,7 +160,23 @@
     } catch (e) {
       return '';                                  // 壊れたエンコードは判定できない＝載せない
     }
-    if (/[\u0000-\u001F\u007F]/.test(decoded)) return '';
+    /*
+     * 第7回監査 R7-001。1回解いた形だけで判定していたため、
+     * `#client_secret%253Ddummy`（二重エンコード）は解いても `%3D` のままで、
+     * 「= を含まない」と判定されてそのままXへ渡っていた。
+     *
+     * 解いた結果が**まだ解ける形**なら、中身が何なのかこちらでは判定できない。
+     * 判定できないものは載せない。何重にエンコードされていても、この1つの規則で落ちる。
+     * （パス側は同じ問題を第4回で塞いだのに、フラグメント側が残っていた）
+     */
+    if (decoded.indexOf('%') !== -1) {
+      try {
+        if (decodeURIComponent(decoded) !== decoded) return '';
+      } catch (e) {
+        return '';
+      }
+    }
+    if (/[\u0000-\u001F\u007F\s]/.test(decoded)) return '';
     if (raw.indexOf('=') !== -1 || decoded.indexOf('=') !== -1) return '';
     return '#' + raw;
   }
