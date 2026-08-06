@@ -353,15 +353,41 @@ test('更新の手順が、Privacy practices まで必須と書いてある', ()
  */
 test('ストア文書が、正本の成果物と一致していて、可変な main を書いていない', () => {
   const cand = JSON.parse(read('store/SUBMISSION_CANDIDATE.json'));
-  const known = [cand.sourceCommit, cand.treeSha, cand.innerSha256];
+  /* 履歴に残した過去の版の値も「正本の一部」として許す */
+  const known = [cand, ...(cand.history || [])]
+    .flatMap((o) => [o.sourceCommit, o.treeSha, o.innerSha256])
+    .filter(Boolean);
+  const pending = cand.status === 'pending_main_ci';
+
   for (const f of ['store/LISTING.md', 'store/STORE_DASHBOARD_CHANGES.md']) {
     const body = read(f);
-    assert.ok(body.includes(cand.artifactName), `${f} に正本の成果物名が無い`);
-    assert.ok(body.includes(cand.innerSha256), `${f} に正本のSHA-256が無い`);
+    if (pending) {
+      /*
+       * まだ main の CI が作っていない版では、成果物名もハッシュも存在しない。
+       * ここで「それらしい値」を書かせない——書けば必ず作り話になる。
+       */
+      assert.ok(body.includes('pending_main_ci'),
+        `${f} に「成果物がまだ無い」ことが書いていない`);
+      assert.ok(!/成果物名 : reposhout-package-[0-9a-f]{40}/.test(body),
+        `${f} に、まだ存在しない成果物名が書いてある`);
+    } else {
+      assert.ok(body.includes(cand.artifactName), `${f} に正本の成果物名が無い`);
+      assert.ok(body.includes(cand.innerSha256), `${f} に正本のSHA-256が無い`);
+    }
     const strays = [...new Set((body.match(/\b[0-9a-f]{7,40}\b/g) || [])
       .filter((h) => !known.some((k) => k && k.startsWith(h))))];
     assert.deepEqual(strays, [], `${f} に、正本に無いコミットが書いてある: ${strays.join(', ')}`);
   }
+});
+
+test('正本が pending のときは、成果物の欄が空のまま', () => {
+  const cand = JSON.parse(read('store/SUBMISSION_CANDIDATE.json'));
+  if (cand.status !== 'pending_main_ci') return;   // 確定後はこの検査の対象外
+  for (const k of ['sourceCommit', 'treeSha', 'runId', 'artifactName', 'innerSha256', 'innerBytes']) {
+    assert.equal(cand[k], null, `${k} に推測の値が入っている: ${cand[k]}`);
+  }
+  // 過去の版は履歴として残っていること（何を出さないことにしたのかが分かるように）
+  assert.ok((cand.history || []).length >= 1, '履歴が空');
 });
 
 /*
@@ -437,14 +463,17 @@ test('ストア文書が、手元ビルドを提出用として案内してい�
     const body = read(f);
     assert.ok(!body.includes('`npm run package` で作れます'),
       `${f} が手元ビルドを提出用として案内している`);
-    assert.ok(body.includes('reposhout-package-'),
-      `${f} に、どの成果物を出すかが書いていない`);
+    assert.ok(body.includes('reposhout-package-') || body.includes('pending_main_ci'),
+      `${f} に、どの成果物を出すか（または、まだ無いこと）が書いていない`);
   }
-  // 出す正本が一意に決まっていること
-  assert.match(read('store/LISTING.md'), /成果物 : reposhout-package-[0-9a-f]{40}/,
-    '提出する成果物が一意に指定されていない');
-  assert.match(read('store/LISTING.md'), /SHA-256 : [0-9a-f]{64}/,
-    '提出するZIPのSHA-256が書いていない');
+  // 出す正本が一意に決まっていること（成果物が確定してから）
+  const cand = JSON.parse(read('store/SUBMISSION_CANDIDATE.json'));
+  if (cand.status !== 'pending_main_ci') {
+    assert.match(read('store/LISTING.md'), /成果物 : reposhout-package-[0-9a-f]{40}/,
+      '提出する成果物が一意に指定されていない');
+    assert.match(read('store/LISTING.md'), /SHA-256 : [0-9a-f]{64}/,
+      '提出するZIPのSHA-256が書いていない');
+  }
 });
 
 test('公式コーパスを走らせている範囲が、READMEに書いてある', () => {

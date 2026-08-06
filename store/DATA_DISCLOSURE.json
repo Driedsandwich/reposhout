@@ -20,7 +20,7 @@
     "ownerConfirmation の4欄（読んだ設問文・確認日・選んだ答え・理由）をすべて埋める。",
     "提出前に npm run verify:store-readiness で確かめる。"
   ],
-  "version": "1.1.7",
+  "version": "1.1.8",
   "dashboardSection": "Privacy practices › Data usage",
   "policyReference": {
     "url": "https://developer.chrome.com/docs/webstore/program-policies/user-data-faq",
@@ -74,7 +74,7 @@
       "id": "authentication_information",
       "label": "Authentication information",
       "labelJa": "認証情報",
-      "codeFact": "cookie・フォームの入力値を読まず、資格情報を取り出したり保存したり送ったりしない。ただし操作されたときは現在のタブのURL全体をいったん受け取る（ツールバー/ショートカットは activeTab 経由）。認証・設定・組織管理の画面は、Xの投稿画面を開く前に拒否する。URLの断片に = を含むもの（#client_secret=… 等）も落とす",
+      "codeFact": "cookie・フォームの入力値は読まない。1.1.8 で、共有URLに残るクエリの値も検査し、資格情報の形（access_token= / client_secret: / JSON / Bearer / ghp_ 等）が入っていればURLごと共有しない（第11回監査 R11-001。1.1.7 までは名前しか見ておらず、q・body・title の値に入った資格情報がXへ渡っていた）。認証・設定・組織管理の画面は、Xの投稿画面を開く前に拒否する。URLの断片に = を含むもの（#client_secret=… 等）も落とす。**ただし、拒否の判定をする前に、操作されたときは現在のタブのURL全体をいったん受け取る**（ツールバー/ショートカットは activeTab 経由）",
       "policyBasis": "資格情報そのものは扱わないと判断した。ただし handle には use が含まれ、拒否の前段でURL全体を受け取ってはいるので、現行の設問文で最終確認が要る",
       "proposedAnswer": "No",
       "answer": null,
@@ -121,8 +121,8 @@
       "id": "user_activity",
       "label": "User activity",
       "labelJa": "ユーザーの操作",
-      "codeFact": "x.com で keydown を1つ監視しているが、見ているのは Escape かどうかだけで、保存も送信もしない（拡張が自分で開いた投稿画面を閉じるため）。クリック・スクロール・マウス位置・入力内容は読まない",
-      "policyBasis": "この欄は『操作の監視（クリック・マウス位置・スクロール・キーロギング等）』を指す。自分で開いた画面を閉じるための1キー判定は監視にあたらないと判断した",
+      "codeFact": "x.com で capture phase の keydown listener を1つ登録し、**すべての keydown の key を見る**。未修飾の Escape 以外は直ちに無視する（Escape のときだけ修飾キー・IME状態・keyCode も確認する）。入力欄の値やページの中身は読まず、eventを保存も集計も外部送信もしない（拡張が自分で開いた投稿画面を閉じるため）。クリック・スクロール・マウス位置・入力内容は読まない",
+      "policyBasis": "この欄は『操作の監視（クリック・マウス位置・スクロール・キーロギング等）』を指す。自分で開いた画面を閉じるための1キー判定は監視にあたらないと判断した。ただし『Escapeだけを聞いている』という書き方は技術的に狭い——listener はすべての keydown を受け取り、key を見てから捨てている（第11回監査 R11-003）",
       "proposedAnswer": "No",
       "answer": null,
       "ownerConfirmation": {

@@ -301,6 +301,66 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
     await cdp.send('Target.closeTarget', { targetId: ghId });
   });
 
+  /*
+   * 第11回監査 R11-001。許可したクエリの値に資格情報の形が入っていたら、
+   * 実際の拡張でも投稿画面を開かないこと。
+   *
+   * ツールバー経路は activeTab 権限が実際のツールバー操作でしか付かず、
+   * service worker から shareActiveTab() を呼んでも tab.url が取れない
+   * （この harness で実測。tab.url = null）。そこで画面内ボタンを
+   * **本物のマウス入力**で押す経路で見る。
+   *
+   * 「開かない」だけでは経路が壊れていても通るので、同じ経路・同じ押し方で
+   * 普通のクエリなら1つ開くことを対照として必ず見る。
+   */
+  const clickShareOn = async (pageUrl) => {
+    const before = new Set((await targets()).map((t) => t.targetId));
+    const { targetId: pageId } = await cdp.send('Target.createTarget', { url: pageUrl });
+    const sessionId = await attach(pageId);
+    await cdp.send('Runtime.enable', {}, sessionId);
+    await waitFor('Shareボタンが差し込まれる', async () => {
+      const r = await cdp.send('Runtime.evaluate',
+        { expression: '!!document.getElementById("gxs-share-btn")', returnByValue: true }, sessionId);
+      return r.result.value === true;
+    });
+    const boxRes = await cdp.send('Runtime.evaluate', {
+      expression: `(() => { const r = document.getElementById('gxs-share-btn').getBoundingClientRect();
+        return JSON.stringify({ x: r.x + r.width / 2, y: r.y + r.height / 2 }); })()`,
+      returnByValue: true
+    }, sessionId);
+    const at = JSON.parse(boxRes.result.value);
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await cdp.send('Input.dispatchMouseEvent',
+        { type, x: at.x, y: at.y, button: 'left', clickCount: 1 }, sessionId);
+    }
+    const isNew = (t) =>
+      t.type === 'page' && t.url.startsWith('https://x.com/intent/') && !before.has(t.targetId);
+    let opened = [];
+    for (let i = 0; i < 20; i++) {
+      opened = (await targets()).filter(isNew);
+      if (opened.length) break;
+      await sleep(200);
+    }
+    return { pageId, opened };
+  };
+
+  it('資格情報の形をしたクエリでは、投稿画面を開かない（R11-001）', async () => {
+    const bad = await clickShareOn('https://github.com/o/r/issues?q=access_token%3Adummy-secret');
+    assert.equal(bad.opened.length, 0,
+      `投稿画面が開いた: ${bad.opened.map((t) => t.url).join(' | ')}`);
+    await cdp.send('Target.closeTarget', { targetId: bad.pageId });
+
+    // 対照: 同じ経路・同じ押し方で、普通のクエリなら開く
+    const ok = await clickShareOn('https://github.com/o/r/issues?q=is%3Aopen');
+    assert.equal(ok.opened.length, 1,
+      `対照が成立していない（この経路自体が動いていない）: ${ok.opened.length} 個`);
+    assert.ok(!decodeURIComponent(ok.opened[0].url).includes('dummy-secret'),
+      '対照側に資格情報が混ざっている');
+    await waitLoaded(ok.opened[0].targetId);
+    assert.ok(await escapeUntilClosed(ok.opened[0].targetId), '対照の窓が閉じない');
+    await cdp.send('Target.closeTarget', { targetId: ok.pageId });
+  });
+
   it('ウィンドウを閉じると記録が消える（ID再利用への備え）', async () => {
     const { windowId } = await openShareWindowFromSw();
     assert.equal(await evalInSw(`self.GXS_BG.isShareWindow(${windowId})`), true);

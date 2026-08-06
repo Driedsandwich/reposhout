@@ -1,6 +1,6 @@
 {
   "name": "reposhout",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "private": true,
   "description": "Share GitHub repos, issues and PRs to X with a pre-filled post. Chrome extension, MIT.",
   "license": "MIT",
@@ -15,7 +15,8 @@
     "test:conformance": "node --test test/conformance.test.mjs",
     "test:package": "node --test test/package.test.mjs",
     "release:status": "node scripts/release-status.mjs",
-    "verify:store-readiness": "node scripts/verify-store-readiness.mjs",
+    "verify:store-preflight": "node scripts/verify-store-readiness.mjs",
+    "verify:submission-ready": "node scripts/verify-store-readiness.mjs --strict",
     "package": "node scripts/package.mjs",
     "package:dry": "node scripts/package.mjs --dry-run"
   },

@@ -591,6 +591,118 @@
     return allow.indexOf(name) !== -1;
   }
 
+  /* ------------------------------------------------------------
+   * 許可したクエリの「値」に資格情報が入っていないか
+   * ------------------------------------------------------------
+   *
+   * 第11回監査 R11-001。ここまでの判定はクエリの**名前**だけを見ていた。
+   * 名前が allowlist に載っていれば（q・body・title など）値は中身を見ずに
+   * そのまま残していたので、次がXへ渡っていた（1.1.7の配布ZIPで再現）。
+   *
+   *   /search?q=client_secret%3Ddummy-secret&type=code
+   *   /compare/main...feature?quick_pull=1&body=access_token%3Ddummy-secret
+   *   /issues?q=access_token%3Adummy-secret
+   *
+   * 値も境界として検査する。1つでも見つかったらそのURLは共有しない。
+   * そのパラメータだけ黙って消す案は採らない——利用者が見ている画面と
+   * 共有されるURLが別物になり、消したことにも気づけないため。
+   */
+
+  /* 「名前 = 値」「名前 : 値」の形になっているときだけ資格情報とみなす名前 */
+  var CREDENTIAL_KEYS = [
+    'access_token', 'refresh_token', 'id_token', 'oauth_token', 'auth_token',
+    'client_secret', 'api_key', 'apikey', 'secret', 'password', 'passwd', 'pwd',
+    'session_token', 'sessionid', 'authorization', 'credential', 'credentials',
+    'private_key', 'privatekey', 'token'
+  ];
+
+  /*
+   * 代入の形を見る。前後を区切るので `passwordless` のような語の一部では
+   * 当たらない。値が1文字以上あるものだけを拾う。
+   * JSON（"access_token":"..."）・コロン・イコール・空白ありをまとめて見る。
+   */
+  var CREDENTIAL_ASSIGN_RE = new RegExp(
+    '(?:^|[^A-Za-z0-9_])["\']?(' + CREDENTIAL_KEYS.join('|') +
+    ')["\']?\\s*[:=]\\s*["\']?[^\\s"\',&]',
+    'i'
+  );
+
+  /* 値そのものが資格情報の形をしているもの（名前が無くても分かる） */
+  var CREDENTIAL_TOKEN_RE =
+    /(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,}|Bearer\s+[A-Za-z0-9\-._~+\/]{16,})/i;
+
+  /* 制御文字。普通のクエリには入らない */
+  var CONTROL_RE = /[\u0000-\u001F\u007F]/;
+
+  /*
+   * 多重エンコードをほどきながら各段階で見る。何回でもほどくのではなく
+   * 上限を決める（決めないと入力次第で止まらない）。
+   */
+  var MAX_DECODE_ROUNDS = 3;
+
+  function credentialLikeValue(value) {
+    if (typeof value !== 'string' || !value) return false;
+
+    var layer = value;
+    for (var i = 0; i <= MAX_DECODE_ROUNDS; i++) {
+      /*
+       * '+' は form-urlencoded の空白だが、URLSearchParams が解いた時点で
+       * 空白になっているので、ここで読み替える枝は要らない（外して変異させても
+       * どのテストも落ちなかったので置かない）。
+       */
+      if (CONTROL_RE.test(layer)) return true;
+      if (CREDENTIAL_ASSIGN_RE.test(layer)) return true;
+      if (CREDENTIAL_TOKEN_RE.test(layer)) return true;
+      if (layer.indexOf('%') === -1) break;
+      var next;
+      try {
+        next = decodeURIComponent(layer);
+      } catch (e) {
+        /*
+         * ほどけない % が残っている＝これ以上は判定できない。
+         * 判定できないものを共有できる側に置かない（fragment と同じ方針）。
+         */
+        return true;
+      }
+      if (next === layer) break;
+      layer = next;
+    }
+    return false;
+  }
+
+  /*
+   * 「共有するURLに残るクエリ」の中に、資格情報の形をした値が無いか。
+   *
+   * 見るのは **残す側** のパラメータだけにする。名前で落とすもの
+   * （SENSITIVE_PARAM_RE・allowlist外・追跡系）は共有URLに入らないので、
+   * それを理由にURLごと拒否すると、これまで安全に共有できていたページまで
+   * 共有できなくなる。**残す値に資格情報が入っていたときだけ**、
+   * そのパラメータを黙って消すのではなくURLごと共有しない
+   * （消すと、利用者が見ている画面と共有されるURLが別物になる）。
+   */
+  function credentialLikeQuery(rawUrl) {
+    var u;
+    try {
+      u = new URL(rawUrl);
+    } catch (e) {
+      /* 解析できないものはクエリごと落ちる経路なので、ここでは判定しない */
+      return false;
+    }
+    if (!u.search) return false;
+    if (u.protocol !== 'https:' || u.hostname !== 'github.com') return false;
+
+    var route = routeOf(u);
+    if (!QUERY_ALLOW[route]) return false;      // クエリを丸ごと落とすルート
+
+    var found = false;
+    u.searchParams.forEach(function (value, name) {
+      if (found) return;
+      if (!keepParam(route, name)) return;      // 残らない値は判定しない
+      if (credentialLikeValue(value) || credentialLikeValue(name)) found = true;
+    });
+    return found;
+  }
+
   /*
    * 共有するURLを整える。
    *
@@ -605,6 +717,13 @@
    * （フォールバック経路が別実装にならないよう、入口を1つに保つため）。
    */
   function canonicalUrl(rawUrl, info) {
+    /*
+     * 許可したクエリの値に資格情報が入っていたら、URLごと共有しない
+     * （第11回監査 R11-001）。null を返す経路は buildShare / fallbackUrl の
+     * 両方が見る。
+     */
+    if (credentialLikeQuery(rawUrl)) return null;
+
     var u;
     try {
       u = new URL(rawUrl);
@@ -648,10 +767,19 @@
    */
   function fallbackUrl(rawUrl) {
     if (isSensitiveUrl(rawUrl)) return null;   // 例外時の逃げ道から機微ページが漏れないようにする
+    /*
+     * 資格情報の判定は canonicalUrl だけが持つ（第11回監査 R11-001）。
+     * ここへ同じ判定をもう1つ置くと、変異させても落ちない＝効いているか
+     * 分からない行になる。null はそのまま返す。
+     */
     try {
       return canonicalUrl(rawUrl, null);
     } catch (e) {
-      return String(rawUrl).split('#')[0].split('?')[0];
+      /*
+       * ここで split('?')[0] のような独自処理を書くと、資格情報の判定を
+       * 通らない別経路ができる。落とすほうへ倒す。
+       */
+      return null;
     }
   }
 
@@ -722,6 +850,7 @@
     if (isSensitiveUrl(rawUrl)) return null;   // 認証・設定・管理画面は共有しない
 
     var url = canonicalUrl(rawUrl, info);
+    if (!url) return null;                     // 第11回監査 R11-001
     var title = cleanTitle(info.kind, rawTitle);
     var suffix = '';
 
@@ -755,6 +884,8 @@
     canonicalUrl: canonicalUrl,
     fallbackUrl: fallbackUrl,
     isSensitiveUrl: isSensitiveUrl,
+    credentialLikeQuery: credentialLikeQuery,
+    credentialLikeValue: credentialLikeValue,
     sanitizeFragment: sanitizeFragment,
     truncateWithSuffix: truncateWithSuffix,
     intentUrlFor: intentUrlFor,

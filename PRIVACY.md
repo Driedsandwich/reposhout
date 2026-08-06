@@ -1,7 +1,7 @@
 # Privacy Policy / プライバシーポリシー
 
 **RepoShout** — Chrome extension
-Last updated / 最終更新: 2026-08-06（1.1.7）
+Last updated / 最終更新: 2026-08-07（1.1.8）
 
 ---
 
@@ -30,7 +30,7 @@ RepoShout makes no background network requests, and contacts no server of its ow
 
 X, and your browser, then handle those values under their own policies.
 
-**A caution.** The title, the URL, or the generated suffix may contain a GitHub username or organisation identifier — a repository URL has the form `github.com/<owner>/<repository>`, and a profile page carries the name in its title too. (Not every shareable page does: `github.com/search?q=…`, `/explore` and `/topics/…` carry no account name.) If a GitHub page is private or confidential, do not press Share on it unless you intend its title and URL, including any account name in them, to reach X. From version 1.1.1 the extension refuses to share GitHub's authentication, account, settings and organisation-administration pages at all, but it cannot tell whether an ordinary repository is public or private from the URL alone.
+**A caution.** The title, the URL, or the generated suffix may contain a GitHub username or organisation identifier — a repository URL has the form `github.com/<owner>/<repository>`, and a profile page carries the name in its title too. (Not every shareable page does: `github.com/search?q=…`, `/explore` and `/topics/…` carry no account name.) If a GitHub page is private or confidential, do not press Share on it unless you intend its title and URL, including any account name in them, to reach X. From version 1.1.1 the extension refuses to share GitHub's authentication, account, settings and organisation-administration pages at all, but it cannot tell whether an ordinary repository is public or private from the URL alone. **From 1.1.8 it also refuses any page whose remaining query values look like credentials** — for example a search or a prepared pull-request body containing `access_token=…`, `client_secret:…`, a JSON token field, a `Bearer` value or a GitHub token prefix. The whole URL is refused rather than the parameter quietly removed, so that what is shared is never different from what you are looking at.
 
 ### Storage
 
@@ -121,7 +121,7 @@ RepoShout はバックグラウンドでの通信を行わず、独自のサー�
 
 渡ったあとの取り扱いには、X およびブラウザそれぞれのポリシーが適用されます。
 
-**注意。** タイトル・URL・付け足すサフィックスには、GitHubのユーザー名または組織名が**入る場合があります**（リポジトリのURLは `github.com/<所有者>/<リポジトリ名>` の形で、プロフィールページではタイトルにも入ります）。すべてがそうではありません——`github.com/search?q=…`・`/explore`・`/topics/…` は共有できてアカウント名を含みません。非公開・機密のGitHubページでは、そこに入るアカウント名ごとタイトルとURLをXへ送る意図がある場合だけShareを押してください。バージョン1.1.1 から、GitHubの認証・アカウント・設定・組織管理の画面では拡張が共有そのものを拒否しますが、**通常のリポジトリが公開か非公開かはURLだけでは判別できません**。
+**注意。** タイトル・URL・付け足すサフィックスには、GitHubのユーザー名または組織名が**入る場合があります**（リポジトリのURLは `github.com/<所有者>/<リポジトリ名>` の形で、プロフィールページではタイトルにも入ります）。すべてがそうではありません——`github.com/search?q=…`・`/explore`・`/topics/…` は共有できてアカウント名を含みません。非公開・機密のGitHubページでは、そこに入るアカウント名ごとタイトルとURLをXへ送る意図がある場合だけShareを押してください。バージョン1.1.1 から、GitHubの認証・アカウント・設定・組織管理の画面では拡張が共有そのものを拒否しますが、**通常のリポジトリが公開か非公開かはURLだけでは判別できません**。**1.1.8 からは、共有URLに残るクエリの値が資格情報の形をしている場合も拒否します**——検索欄や作成中のプルリクエストの本文に `access_token=…`・`client_secret:…`・JSONのトークン欄・`Bearer` の値・GitHubのトークンの接頭辞が入っている場合です。そのパラメータだけを黙って消すのではなく**URLごと共有しない**ので、見ている画面と共有されるものが食い違いません。
 
 ### 保存
 
