@@ -1,6 +1,6 @@
-# Chrome ウェブストア掲載欄の差分（1.0.1 → 1.1.7）
+# Chrome ウェブストア掲載欄の差分（1.0.1 → 1.1.8）
 
-作成: 2026-08-06 / 対象: 掲載中の 1.0.1 を 1.1.7 へ更新するときに、ダッシュボードのどの欄を何に直すか。
+作成: 2026-08-07 / 対象: 掲載中の 1.0.1 を 1.1.8 へ更新するときに、ダッシュボードのどの欄を何に直すか。
 
 **データの取り扱い欄の答えの正本は [DATA_DISCLOSURE.json](DATA_DISCLOSURE.json) です。** この文書はそこから写しています。
 
@@ -131,19 +131,22 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 今回出すもの:
 
 ```
-成果物 : reposhout-package-405b3c633797ae5a7d0a835c84d5367dbe7f35e0
-中のZIP : reposhout-1.1.7.zip
-SHA-256 : 86e52fd07ea9f604e27ef228dc234651a99667a8e79dd08676f9692b7dfffc0c
+状態     : pending_main_ci（出せる成果物はまだ存在しません）
+版       : 1.1.8
+中のZIP  : reposhout-1.1.8.zip
+成果物名 : 未定（main への push で CI が作ってから決まります）
+SHA-256  : 未定（同上）
 ```
 
-正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) です。同じ中身の成果物が
-別のコミットのCIにも残りますが、**「最新の main」では選ばず、上の成果物名とSHA-256で選んでください**
-（第10回監査 R10-006）。実物が正本どおりかは
-`npm run verify:store-readiness -- --artifact <成果物.zip>` で確かめられます。
+正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) です。1.1.8 は
+`src/share.js` を直した版なので配布物の中身が変わります（第11回監査 R11-001）。
+成果物が出るまでこの欄は埋まりません。**「最新の main」では選ばず、正本に書く成果物名と
+SHA-256 で選んでください**（第10回監査 R10-006）。実物が正本どおりかは
+`npm run verify:submission-ready -- --artifact <成果物.zip> ...` で確かめられます。
 
 ---
 
 ## 5. この文書でやらないこと
 
 - ダッシュボードの操作そのもの（拡張機能からウェブストアは操作できません。人の手作業です）
-- 掲載中 1.0.1 の説明文の即時修正（1.1.7 の提出と同時で足りるか、先に文面だけ直すかは本人の判断）
+- 掲載中 1.0.1 の説明文の即時修正（1.1.8 の提出と同時で足りるか、先に文面だけ直すかは本人の判断）

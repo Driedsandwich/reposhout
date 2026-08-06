@@ -1,6 +1,6 @@
 # Chrome ウェブストア 提出手順書
 
-更新: 2026-08-06 / 対象: RepoShout **1.1.7**（未提出。公開状態の正本は [RELEASE_STATUS.md](../RELEASE_STATUS.md)）
+更新: 2026-08-06 / 対象: RepoShout **1.1.8**（未提出。公開状態の正本は [RELEASE_STATUS.md](../RELEASE_STATUS.md)）
 **この文書は原稿と手順です。提出（Submit for review）はあなたが実行します。**
 
 > **提出の前提（2026-08-05 決定）**: 外部監査（ChatGPT の GPT-5.6 Sol Pro）に**合格してから**提出する。
@@ -9,7 +9,7 @@
 > （`REPOSHOUT_*_AUDIT_RESPONSE_*.md`）の日付が新しいものを見ること。
 初回提出と更新提出の両方でこの文書を使います。
 
-> **⚠️ 今回（1.0.1 → 1.1.7）の更新では、§0 事前確認・§1 パッケージ・§2 Store listing・§3 Privacy practices を
+> **⚠️ 今回（1.0.1 → 1.1.8）の更新では、§0 事前確認・§1 パッケージ・§2 Store listing・§3 Privacy practices を
 > すべて完了させてください（第10回監査 R10-004）。** 以前ここには「更新なら §1 と §2 だけで足りる」と
 > 書いていましたが、今回は §3 も必ず直す必要があります。掲載中の 1.0.1 は9項目を**すべて No** で申告して
 > おり、そのままにすると事実と違う申告を残したまま提出することになります。§3 で直すのは次の4つです。
@@ -52,7 +52,7 @@ RepoShout は既に `1.0.1` がストアで公開中です。新規登録の入�
 載せるZIP:
 
 ```
-reposhout-1.1.7.zip
+reposhout-1.1.8.zip
 ```
 
 （初回登録の手順は §7 にまとめてあります。**いまは使いません。**）
@@ -67,7 +67,7 @@ reposhout-1.1.7.zip
 
 | 見るところ | 提出してよいもの | 出してはいけないもの |
 |---|---|---|
-| ファイル名 | `reposhout-1.1.7.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty-NON-SUBMITTABLE.zip` |
+| ファイル名 | `reposhout-1.1.8.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty-NON-SUBMITTABLE.zip` |
 | `dist/release-manifest.json` の `submittable` | `true` | `false` |
 | 同 `ci.eventName` | `push` | `pull_request` / `workflow_dispatch` / `local` |
 | 同 `ci.ref` | `refs/heads/main` | それ以外 |
@@ -82,8 +82,8 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 
 1. Actions で main の該当 run を開き、成果物 `reposhout-package-<SHA>` をダウンロードする
 2. 展開して `release-manifest.json` を開き、上の表の5点を確かめる
-3. `shasum -a 256 reposhout-1.1.7.zip` の値が、同梱の `.sha256` と一致することを確かめる
-4. **新しい空のフォルダを作り、そこへ `reposhout-1.1.7.zip` を展開する**
+3. `shasum -a 256 reposhout-1.1.8.zip` の値が、同梱の `.sha256` と一致することを確かめる
+4. **新しい空のフォルダを作り、そこへ `reposhout-1.1.8.zip` を展開する**
    （ダウンロードした成果物のフォルダには `release-manifest.json` とZIPとハッシュしか入っておらず、
    `manifest.json` がありません。そのまま読み込もうとしても拡張として認識されません）
 5. 展開したフォルダの直下に `manifest.json` があること、その `version` が上げた版であることを確かめる
@@ -93,23 +93,36 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 **今回出す正本**（正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json)）:
 
 ```
-成果物 : reposhout-package-405b3c633797ae5a7d0a835c84d5367dbe7f35e0
-中のZIP : reposhout-1.1.7.zip
-SHA-256 : 86e52fd07ea9f604e27ef228dc234651a99667a8e79dd08676f9692b7dfffc0c
+状態     : pending_main_ci（出せる成果物はまだ存在しません）
+版       : 1.1.8
+中のZIP  : reposhout-1.1.8.zip
+成果物名 : 未定（main への push で CI が作ってから決まります）
+SHA-256  : 未定（同上）
+```
+
+1.1.8 は `src/share.js` を直した版なので、**配布物の中身が 1.1.7 から変わります**
+（第11回監査 R11-001）。本人がコミットして main の CI が走るまで、出すべき成果物は
+存在しません。**推測で書かない・手元で作ったZIPで代用しない**——手元ビルドの名前には
+`NON-SUBMITTABLE` が付きます。
+
+成果物が出たら、次の順で確定します。
+
+1. main の該当 run から `reposhout-package-<コミットSHA>` をダウンロードする
+2. `store/SUBMISSION_CANDIDATE.json` に、実測した成果物名・コミット・tree・run・
+   中のZIPの大きさ・収録数・SHA-256 を書く
+3. 次で、書いた値と実物が合っているかを機械的に確かめる
+
+```
+npm run verify:submission-ready -- --artifact <成果物.zip> \
+    --audit-report <監査報告書> --audit-attestation <監査申告.json>
 ```
 
 **「最新の main」で成果物を選ばないでください。** main は文書・テスト・CIの変更でも進むので、
-同じ中身の成果物が複数残ります。選ぶ基準は上の成果物名とSHA-256です（第10回監査 R10-006）。
-以前ここには「main はいま○○で、タグより1コミット先」と書いていましたが、**その手の記述は
-書いた翌日には古くなる**ので置きません。実物が正本どおりかは、次で機械的に確かめられます。
-
-```
-npm run verify:store-readiness -- --artifact <ダウンロードした成果物.zip>
-```
+同じ版の成果物が複数残ります。選ぶ基準は正本に書いた成果物名とSHA-256です（第10回監査 R10-006）。
 
 **手元に控えを残す**（提出後に「何を出したか」を後から確かめられるようにするため）:
-ダウンロードした成果物のZIPそのもの・`release-manifest.json`・`reposhout-1.1.7.zip`・
-`reposhout-1.1.7.zip.sha256` の4点を、Actions の保存期限（14日）が切れる前に手元へ保存して
+ダウンロードした成果物のZIPそのもの・`release-manifest.json`・`reposhout-1.1.8.zip`・
+`reposhout-1.1.8.zip.sha256` の4点を、Actions の保存期限（14日）が切れる前に手元へ保存して
 おいてください。GitHub Release は作りません。
 
 やってはいけないこと: ダウンロードした成果物のフォルダをそのまま読み込む／リポジトリの
@@ -121,7 +134,7 @@ npm run verify:store-readiness -- --artifact <ダウンロードした成果物.
 | 自動で入る値 | 内容 |
 |---|---|
 | Name | `RepoShout — Share GitHub repos, issues & PRs to X`（49文字 / 上限75） |
-| Version | `1.1.7`（manifest の値。前回より大きくないと弾かれます） |
+| Version | `1.1.8`（manifest の値。前回より大きくないと弾かれます） |
 | Short description | 下の §2 と同一（manifest の `description`・117文字 / 上限132） |
 
 ---

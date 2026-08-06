@@ -20,7 +20,7 @@
     "ownerConfirmation の4欄（読んだ設問文・確認日・選んだ答え・理由）をすべて埋める。",
     "提出前に npm run verify:store-readiness で確かめる。"
   ],
-  "version": "1.1.7",
+  "version": "1.1.8",
   "dashboardSection": "Privacy practices › Data usage",
   "policyReference": {
     "url": "https://developer.chrome.com/docs/webstore/program-policies/user-data-faq",
