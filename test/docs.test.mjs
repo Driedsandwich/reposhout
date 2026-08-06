@@ -117,7 +117,17 @@ const OVERCLAIMS = [
   '全入力',
   'すべての入力',
   '絶対に下回らない',
-  '数学的に証明'
+  '数学的に証明',
+  /*
+   * 第6回監査 R6-002。上の一覧に入れていなかった言い回しが素通りしていた。
+   * 検出器の探索範囲が狭いと、範囲の外に書けば何でも通る。
+   */
+  'only ever allowed to over-count',
+  'is never allowed to under-count',
+  '多く数えることはあっても、少なく数えることはない',
+  '少なく数えることはありません',
+  '必ず多めに数える',
+  '公式がどの解釈を採っても、こちらがそれを下回らない'
 ];
 
 /* 「全入力に対する証明ではありません」のような**否定**は、むしろ書いてよい */
@@ -138,6 +148,26 @@ test('言い過ぎの検査が効いているかの対照', () => {
   const claim = 'an oracle proving the counter never under-counts';
   assert.ok(OVERCLAIMS.some((p) => claim.includes(p)) && !DENIED.test(claim),
     '対照が成立していない＝この検査は言い過ぎを捕まえられない');
+});
+
+/*
+ * 「走らせていない」と書いたまま走らせるようになると、こんどは過少申告になる。
+ * 1.1.4 から固定した validate.yml の文字数対象節は実際に走っているので、
+ * 現行版の文書に「公式コーパスは走らせていない」と読める記述を残さない（R6-003）。
+ */
+test('現行版の文書に「公式コーパスを走らせていない」が残っていない', () => {
+  const stale = [
+    'so it is not run',
+    'is not run.',
+    '公式 conformance コーパスは走らせていない',
+    'conformance コーパスを走らせていません'
+  ];
+  for (const f of USER_FACING) {
+    const body = read(f);
+    for (const phrase of stale) {
+      assert.ok(!body.includes(phrase), `${f} に古い記述が残っている: ${phrase}`);
+    }
+  }
 });
 
 test('公式コーパスを走らせている範囲が、READMEに書いてある', () => {

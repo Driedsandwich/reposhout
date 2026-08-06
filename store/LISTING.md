@@ -102,7 +102,8 @@ Changed your mind? Press Escape in the share window to dismiss it.
   Markdown file and a prepared pull request's title and body are kept, while
   tracking parameters are dropped. Line, comment and README section anchors are kept
 • Character counting follows X's published rules, including Japanese, Chinese and
-  Korean text, emoji and links, so a long title is trimmed to something X accepts
+  Korean text, emoji and links, and errs on the side of counting high, so a long
+  title is trimmed with room to spare
 • Issue and pull request numbers stay in the post even when the title is trimmed
 • Light and dark mode follow GitHub's own theme automatically
 • Press Escape in the share window to dismiss it if you change your mind
@@ -378,7 +379,7 @@ https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md
 RepoShout は宛先をXに絞り、サイドパネルもカード生成も持ちません。差別化は次の3点です（いずれも実測に基づく事実で、README にも記載済み）。
 
 1. ログイン状態とログアウト状態の**両方**に対応（GitHubはこの2つで実装が別物。ログイン時のIssue/PRにはボタン行自体が無いため、ツールバー/ショートカットで補っている）
-2. 文字数の数え方を**Xの規則に沿わせ、ずれるときは必ず多めに数える**（半角カタカナ・絵文字・スキーム無しドメインを含む）。単体・適合テスト40件と、実際のChromeへ拡張を読み込む**E2E 10件**で検査している（2026-08-05 実測・いずれも全PASS）
+2. 文字数の数え方を**Xの規則に沿わせ、ずれるときは多めに数える側へ倒している**（半角カタカナ・絵文字・スキーム無しドメインを含む）。固定した公式コーパスの文字数対象節・手書きの期待値・生成した敵対的コーパスを `twitter-text` 3.1.0 と突き合わせた範囲では、過少計数は検出されていない（有限の回帰検査であり、全入力の証明ではない）。実際のChromeへ拡張を読み込む**E2E**も含め、`npm test` の全テストが通ることを確認している
 3. Open / Merged / Closed の状態を**意図的に出さない**（ログイン状態で読み取り値が食い違う事象を実測したため）
 
 それ以前の同種拡張（2015 / 2018 / 2021）はいずれも更新停止かつManifest V2世代で、現在は動作しません。
