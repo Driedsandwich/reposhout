@@ -259,9 +259,14 @@ test('機微なルートではクエリもハッシュも共有しない', () =>
     'https://github.com/o/r/settings/secrets/actions?name=API_KEY'
   ];
   for (const url of sensitive) {
-    const out = GXS.canonicalUrl(url, null);
-    assert.ok(!out.includes('?'), `クエリが残っている: ${out}`);
-    assert.ok(!out.includes('#'), `ハッシュが残っている: ${out}`);
+    /*
+     * 第12回監査 R12-001 以降、機微なルートは「クエリを落とした素のURL」では
+     * なく**共有そのものを断る**（reason='sensitive_route'）。
+     */
+    assert.equal(GXS.canonicalUrl(url, null), null, `共有できてしまう: ${url}`);
+    const r = GXS.canonicalResult(url);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, 'sensitive_route', `理由が違う: ${r.reason}`);
   }
 });
 
@@ -389,112 +394,225 @@ test('組み立てたintentUrlがそのままパースできる', () => {
 });
 
 /* ============================================================
- * 第11回監査 R11-001 — 許可したクエリの「値」に入った資格情報
+ * 出て行くURLに秘密が乗らないこと（第11回 R11-001 / 第12回 R12-001・R12-002）
  * ============================================================
  *
- * 1.1.7 の配布ZIPで再現した穴。クエリの**名前**しか見ていなかったので、
- * allowlist に載っている名前（q・body・title など）の値に資格情報の形が
- * 入っていると、canonicalUrl も buildShare も fallbackUrl も、そのまま
- * Xの投稿画面へ渡していた。
+ * 1.1.7 では、allowlist に載った名前（q・body・title）の**値**をそのままXへ
+ * 渡していた。1.1.8 で値の検査を足したが、第12回監査で
  *
- * ここに置く値はすべて dummy で、実在の資格情報は入れない。
- * 失敗メッセージにも値を出さない（ラベルだけを出す）。
+ *   ・5回以上エンコードすると素通りする（上限に達したら通していた）
+ *   ・accessToken / api-key のような書き方が素通りする
+ *   ・パスの中の access_token=… は見ていない
+ *   ・一覧に無いベンダのトークン形は素通りする
+ *   ・逆に `q=100% coverage` のような**普通の検索を落としていた**
+ *
+ * ことが実配布物で示された。有限の正規表現で「自由文に秘密が無い」ことは
+ * 示せないので、**自由文は共有URLから落とす**方針に変えた。
+ *
+ * ここで見るのは「拒否したか」ではなく **秘密が出て行かないか**。
+ * 落として共有するのも、URLごと断るのも、どちらも合格。
+ *
+ * 値はすべてダミー。失敗メッセージにも値を出さない（ラベルだけ）。
  */
 const DUMMY = 'dummy-secret';
+/*
+ * ダミーでも「その形」で書くと、GitHub の push protection が本物として弾く
+ * （実際に push が拒否された）。**形は保ったまま、ファイルには断片で置き、
+ * 実行時に組み立てる。** 検査に渡るのは組み立てた後の文字列なので、
+ * テストの意味は変わらない。
+ */
+const DUMMY_TOKENS = {
+  github: ['gh', 'p_', 'abcdefghijklmnopqrstuvwxyz012345'].join(''),
+  githubPat: ['github', '_pat_', 'abcdefghijklmnopqrstuvw'].join(''),
+  bearer: ['Authorization: ', 'Bear', 'er abcdefghijklmnopqrstu'].join(''),
+  aws: ['AK', 'IA', 'IOSFODNN7EXAMPLE'].join(''),
+  slack: ['xo', 'xb', '-000000000000-000000000000-DUMMYDUMMYDUMMYDUMMY'].join(''),
+  jwt: ['ey', 'JhbGciOiJIUzI1NiJ9', '.eyJzdWIiOiJkdW1teSJ9', '.DUMMYSIGNATUREVALUE'].join(''),
+  google: ['AI', 'za', 'SyDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUM'].join(''),
+  pem: ['-----BEGIN ', 'PRIVATE KEY', '-----DUMMY'].join('')
+};
+const SECRET_MARKERS = [DUMMY].concat(Object.values(DUMMY_TOKENS).map((v) => v.slice(0, 12)));
 
-/* 落ちるべき組み合わせ: ルート × 書き方 × エンコード段数 */
-const CREDENTIAL_CASES = [
-  ['search / 等号',            `https://github.com/search?q=client_secret%3D${DUMMY}&type=code`],
-  ['search / コロン',          `https://github.com/search?q=access_token%3A${DUMMY}`],
-  ['search / 二重エンコード',   `https://github.com/search?q=access_token%253D${DUMMY}`],
-  ['search / 三重エンコード',   `https://github.com/search?q=access_token%25253D${DUMMY}`],
-  ['search / JSON',           'https://github.com/search?q=%7B%22access_token%22%3A%22' + DUMMY + '%22%7D'],
-  ['search / 大文字混在',       `https://github.com/search?q=Access_Token%3D${DUMMY}`],
-  ['search / 空白入り',        `https://github.com/search?q=password+%3D+${DUMMY}`],
-  ['search / Bearer',         'https://github.com/search?q=Authorization%3A%20Bearer%20abcdefghijklmnopqrst'],
-  ['search / ghp_',           'https://github.com/search?q=ghp_abcdefghijklmnopqrstuvwxyz012345'],
-  ['search / gho_',           'https://github.com/search?q=gho_abcdefghijklmnopqrstuvwxyz012345'],
-  ['search / github_pat_',    'https://github.com/search?q=github_pat_abcdefghijklmnopqrstuvw'],
-  ['search / ほどけない%',      `https://github.com/search?q=access_token%ZZ${DUMMY}`],
-  ['search / 改行が混ざる',      `https://github.com/search?q=${DUMMY}%0Aaccess_token%3Dx`],
-  ['search / NULが混ざる',       `https://github.com/search?q=${DUMMY}%00`],
-  ['issue一覧 / コロン',        `https://github.com/o/r/issues?q=access_token%3A${DUMMY}`],
-  ['issue一覧 / 2つ目の欄',     `https://github.com/o/r/issues?page=1&q=api_key%3D${DUMMY}`],
-  ['PR一覧 / 等号',            `https://github.com/o/r/pulls?q=password%3D${DUMMY}&page=1`],
-  ['compare / body',          `https://github.com/o/r/compare/main...f?quick_pull=1&body=access_token%3D${DUMMY}`],
-  ['compare / title',         `https://github.com/o/r/compare/main...f?quick_pull=1&title=client_secret%3D${DUMMY}`],
-  ['discussion一覧',           `https://github.com/o/r/discussions?discussions_q=session_token%3D${DUMMY}`],
-  ['actions / query',         `https://github.com/o/r/actions?query=private_key%3D${DUMMY}`],
-  ['commits / author',        `https://github.com/o/r/commits/main?author=refresh_token%3D${DUMMY}`]
-];
-
-/* 残すべきもの（言及しているだけ・普通の検索・普通のページ） */
-const BENIGN_CASES = [
-  ['言及: how to use access_token', 'https://github.com/search?q=how+to+use+access_token'],
-  ['言及: passwordless',            'https://github.com/search?q=passwordless+authentication'],
-  ['言及: tokenization',            'https://github.com/o/r/compare/a...b?quick_pull=1&body=This+document+explains+tokenization'],
-  ['言及: Authentication docs',      'https://github.com/o/r/compare/a...b?quick_pull=1&title=Authentication+documentation'],
-  ['普通の検索',                     'https://github.com/o/r/issues?q=is%3Aopen+label%3Abug&page=2'],
-  ['リポジトリ',                     'https://github.com/o/r'],
-  ['Issue',                        'https://github.com/o/r/issues/12'],
-  ['%を含むファイル名',               'https://github.com/o/r/blob/main/100%25.md?plain=1'],
-  ['日本語の検索',                   'https://github.com/search?q=%E6%97%A5%E6%9C%AC%E8%AA%9E']
-];
-
-/* 3つの入口すべてで判定が同じであることを見る（片方だけ塞いでも意味がない） */
-function shareOutcome(url) {
+/* 出て行きうるものを全部集めて、秘密が混ざっていないかだけを見る */
+function outboundOf(url) {
   const share = GXS.buildShare(url, 'ページの見出し');
   const fallback = GXS.fallbackUrl(url);
   const canonical = GXS.canonicalUrl(url, GXS.parseLocation(url));
+  const parts = [canonical, fallback, share && share.url, share && share.intentUrl,
+                 share && share.text].filter(Boolean).map(String);
+  const decoded = parts.map((x) => { try { return decodeURIComponent(x); } catch (e) { return x; } });
   return {
     blocked: share === null && fallback === null && canonical === null,
-    partly: [share, fallback, canonical].some((x) => x === null) &&
-            [share, fallback, canonical].some((x) => x !== null),
-    intent: share ? share.intentUrl : null
+    leaked: parts.concat(decoded).some((x) => SECRET_MARKERS.some((m) => x.includes(m)))
   };
 }
 
-test('許可したクエリの値に資格情報の形があれば、URLごと共有しない', () => {
-  for (const [label, url] of CREDENTIAL_CASES) {
-    const r = shareOutcome(url);
-    assert.ok(!r.partly, `入口によって判定が違う: ${label}`);
-    assert.ok(r.blocked, `共有できてしまう: ${label}`);
+test('多重エンコードした資格情報は、何段でも出て行かない（R12-001）', () => {
+  for (let n = 0; n <= 12; n++) {
+    let v = `access_token=${DUMMY}`;
+    for (let i = 0; i < n; i++) v = encodeURIComponent(v);
+    const r = outboundOf(`https://github.com/search?q=${v}`);
+    assert.equal(r.leaked, false, `${n}回エンコードした値が出て行った`);
   }
 });
 
-test('Xへ渡すURLにも、投稿文にも、資格情報が出ていない', () => {
-  for (const [label, url] of CREDENTIAL_CASES) {
-    const r = shareOutcome(url);
-    assert.equal(r.intent, null, `intentUrlが作られている: ${label}`);
-  }
-  // 念のため、拒否したURLの文字列がどこにも現れないことを直接見る
-  for (const [label, url] of CREDENTIAL_CASES) {
-    const share = GXS.buildShare(url, 'T');
-    assert.equal(share, null, `buildShareがnullでない: ${label}`);
-  }
-});
-
-test('ただ言及しているだけのクエリは、これまでどおり共有できる', () => {
-  for (const [label, url] of BENIGN_CASES) {
-    const r = shareOutcome(url);
-    assert.ok(!r.blocked, `落としてはいけないものを落とした: ${label}`);
+test('名前の書き方を変えても出て行かない（camelCase / kebab / 大文字）', () => {
+  const keys = ['access_token', 'accessToken', 'ACCESS_TOKEN', 'access-token',
+                'clientSecret', 'client-secret', 'ClientSecret', 'api-key', 'apiKey',
+                'refreshToken', 'sessionToken', 'oauthToken', 'privateKey', 'passPhrase'];
+  for (const k of keys) {
+    for (const where of [
+      (v) => `https://github.com/search?q=${encodeURIComponent(v)}`,
+      (v) => `https://github.com/o/r/issues?q=${encodeURIComponent(v)}`,
+      (v) => `https://github.com/o/r/compare/a...b?quick_pull=1&body=${encodeURIComponent(v)}`,
+      (v) => `https://github.com/o/r/actions?query=${encodeURIComponent(v)}`
+    ]) {
+      const r = outboundOf(where(`${k}=${DUMMY}`));
+      assert.equal(r.leaked, false, `${k} の値が出て行った`);
+    }
   }
 });
 
-test('落とす側の値でも、共有URLに残らないものは理由にしない', () => {
+test('JSON・コロン・引用符つきでも出て行かない', () => {
+  for (const form of [
+    `{"access_token":"${DUMMY}"}`, `access_token: ${DUMMY}`,
+    `'clientSecret' = '${DUMMY}'`, `api_key:${DUMMY}`
+  ]) {
+    const r = outboundOf(`https://github.com/search?q=${encodeURIComponent(form)}`);
+    assert.equal(r.leaked, false, '代入の形が出て行った');
+  }
+});
+
+test('トークンの形そのもの（名前なし）も出て行かない', () => {
+  for (const [label, value] of Object.entries(DUMMY_TOKENS)) {
+    for (const url of [
+      `https://github.com/search?q=${encodeURIComponent(value)}`,
+      `https://github.com/o/r/compare/a...b?quick_pull=1&body=${encodeURIComponent(value)}`
+    ]) {
+      assert.equal(outboundOf(url).leaked, false, `${label} が出て行った`);
+    }
+  }
+});
+
+test('パス・ブランチ・ファイル名に入った資格情報は、URLごと断る（R12-001）', () => {
+  const cases = [
+    ['ファイル名の代入', `https://github.com/o/r/blob/main/access_token=${DUMMY}`],
+    ['ディレクトリの代入', `https://github.com/o/r/tree/client_secret=${DUMMY}`],
+    ['ファイル名がトークン', `https://github.com/o/r/blob/main/${DUMMY_TOKENS.github}`],
+    ['compareのブランチ名', `https://github.com/o/r/compare/main...access_token=${DUMMY}`],
+    ['エンコードされたパス', `https://github.com/o/r/blob/main/${encodeURIComponent('api_key=' + DUMMY)}`]
+  ];
+  for (const [label, url] of cases) {
+    const r = outboundOf(url);
+    assert.equal(r.leaked, false, `${label}: 出て行った`);
+    assert.equal(r.blocked, true, `${label}: 断っていない`);
+    assert.equal(GXS.canonicalResult(url).reason, 'credential_like', `${label}: 理由が違う`);
+  }
+});
+
+test('フラグメントに入った資格情報も出て行かない', () => {
+  for (const url of [
+    `https://github.com/o/r/issues/12#access_token=${DUMMY}`,
+    `https://github.com/o/r/issues/12#${DUMMY_TOKENS.github}`
+  ]) {
+    assert.equal(outboundOf(url).leaked, false, 'fragment から出て行った');
+  }
+});
+
+/* ---- 落としてはいけないもの（偽陽性）---------------------------------- */
+
+test('素の % を含む普通の検索を、拒否しない（R12-002）', () => {
+  const cases = [
+    ['100% coverage', 'https://github.com/search?q=100%25+coverage&type=code'],
+    ['C++ 100%', 'https://github.com/search?q=C%2B%2B+100%25+coverage'],
+    ['50%オフ', 'https://github.com/o/r/issues?q=50%25+off&state=open'],
+    ['%を含むファイル名', 'https://github.com/o/r/blob/main/100%25.md?plain=1'],
+    ['日本語', 'https://github.com/search?q=%E6%97%A5%E6%9C%AC%E8%AA%9E&type=code'],
+    ['言及: access_token', 'https://github.com/o/r/blob/main/access_token.md'],
+    ['言及: passwordless', 'https://github.com/o/r/blob/main/passwordless-auth.md'],
+    ['言及: tokenization', 'https://github.com/o/r/blob/main/tokenization.md'],
+    ['普通のリポジトリ', 'https://github.com/o/r'],
+    ['Issue', 'https://github.com/o/r/issues/12']
+  ];
+  for (const [label, url] of cases) {
+    const r = outboundOf(url);
+    assert.equal(r.blocked, false, `落としてはいけないものを落とした: ${label}`);
+  }
+});
+
+test('壊れたエスケープが残るパスは断る（判定できないものは出さない）', () => {
+  const url = 'https://github.com/o/r/blob/main/%E4%B8%8D%E5';
+  assert.equal(GXS.canonicalUrl(url, null), null, '判定できないものを共有した');
+});
+
+/* ---- 自由文は共有しない（この方針そのものを固定する）------------------ */
+
+test('自由文のクエリは、共有URLに残らない', () => {
+  const cases = [
+    ['検索語', 'https://github.com/search?q=hello+world&type=code', 'q='],
+    ['Issue検索', 'https://github.com/o/r/issues?q=is%3Aopen&state=open', 'q='],
+    ['下書き本文', 'https://github.com/o/r/compare/a...b?quick_pull=1&body=Why', 'body='],
+    ['下書き表題', 'https://github.com/o/r/compare/a...b?quick_pull=1&title=Fix', 'title='],
+    ['Actions検索', 'https://github.com/o/r/actions?query=branch%3Amain&page=2', 'query='],
+    ['Discussion検索', 'https://github.com/o/r/discussions?discussions_q=abc&page=1', 'discussions_q=']
+  ];
+  for (const [label, url, needle] of cases) {
+    const out = GXS.canonicalUrl(url, null);
+    assert.ok(out, `${label}: 共有できなくなっている`);
+    assert.ok(!out.includes(needle), `${label}: 自由文が残っている`);
+  }
+});
+
+test('型に合う値だけが残る', () => {
+  const keep = [
+    ['ページ番号', 'https://github.com/o/r/issues?page=3', 'page=3'],
+    ['状態', 'https://github.com/o/r/issues?state=closed', 'state=closed'],
+    ['差分表示', 'https://github.com/o/r/pull/12/files?diff=split&w=1', 'diff=split'],
+    ['検索の種別', 'https://github.com/search?type=code', 'type=code']
+  ];
+  for (const [label, url, needle] of keep) {
+    assert.ok(String(GXS.canonicalUrl(url, null)).includes(needle), `${label}: 落ちてしまった`);
+  }
+  const drop = [
+    ['整数でないページ', 'https://github.com/o/r/issues?page=abc', 'page='],
+    ['桁が多すぎるページ', 'https://github.com/o/r/issues?page=1234567', 'page='],
+    ['一覧に無い状態', 'https://github.com/o/r/issues?state=whatever', 'state='],
+    ['真偽値でない', 'https://github.com/o/r/blob/main/a.md?plain=maybe', 'plain='],
+    ['長すぎるラベル', `https://github.com/o/r/issues?labels=${'a'.repeat(200)}`, 'labels=']
+  ];
+  for (const [label, url, needle] of drop) {
+    const out = String(GXS.canonicalUrl(url, null));
+    assert.ok(!out.includes(needle), `${label}: 型に合わない値が残った`);
+  }
+});
+
+test('自由文の名前は、どのページ種別の表にも載っていない', () => {
   /*
-   * 名前で落ちるパラメータ（allowlist外・SENSITIVE_PARAM_RE）は共有URLに
-   * 入らないので、それを理由にURLごと拒否しない。これまで共有できていた
-   * ページが、無関係なパラメータのせいで共有できなくなるのを避けるため。
+   * 「共有URLに載せない」は型の表に足さないことで担保している。
+   * ここが破られたら（例えば search に q を足したら）落ちる。
    */
-  const url = `https://github.com/o/r/issues?q=is%3Aopen&access_token=${DUMMY}`;
-  const out = GXS.canonicalUrl(url, GXS.parseLocation(url));
-  assert.equal(out, 'https://github.com/o/r/issues?q=is%3Aopen');
-  assert.ok(!String(out).includes(DUMMY), '落とすはずの値が残っている');
+  for (const [route, rules] of Object.entries(GXS.QUERY_RULES)) {
+    if (!rules) continue;
+    for (const name of GXS.FREE_TEXT_PARAMS) {
+      assert.ok(!Object.prototype.hasOwnProperty.call(rules, name),
+        `${route} の表に自由文 ${name} が載っている`);
+    }
+  }
+});
+
+test('深くエンコードしたパスは、ほどききれないので断る（R12-001）', () => {
+  /* 上限に達しても有効な %HH が残る＝判定できない。通してはいけない */
+  for (let n = 1; n <= 8; n++) {
+    let seg = `access_token=${DUMMY}`;
+    for (let i = 0; i < n; i++) seg = encodeURIComponent(seg);
+    const url = `https://github.com/o/r/blob/main/${seg}`;
+    const r = outboundOf(url);
+    assert.equal(r.leaked, false, `${n}回エンコードしたパスが出て行った`);
+    assert.equal(r.blocked, true, `${n}回エンコードしたパスを共有した`);
+  }
 });
 
 test('資格情報の判定は、ほどける段数に上限がある（止まらなくならない）', () => {
-  // 何段でもほどける入力を与えても、必ず戻ってくる
   let deep = 'plain-text';
   for (let i = 0; i < 40; i++) deep = encodeURIComponent(deep);
   const t0 = Date.now();
