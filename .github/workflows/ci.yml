@@ -111,6 +111,31 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: npm run package
 
+      # タグを打った直後に走ったときだけ、そのタグ自身を検証する。
+      # 「過去の確定済みの行を検証する」だけでは、いま付けたタグが正しいかを見ていない
+      # （第8回監査 R8-004）。tag名・指す先・main に入っているかを、ここで直接見る。
+      - name: いま付けたタグを検証する（タグpushのときだけ）
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          TAG="${GITHUB_REF_NAME}"
+          echo "tag=$TAG / manifest=$VERSION / sha=$GITHUB_SHA"
+
+          test "$TAG" = "v$VERSION" || {
+            echo "タグ名と manifest の版が違います: $TAG ≠ v$VERSION" >&2
+            exit 1
+          }
+          PEELED=$(git rev-parse "$TAG^{}")
+          test "$PEELED" = "$GITHUB_SHA" || {
+            echo "タグの指す先が GITHUB_SHA と違います: $PEELED ≠ $GITHUB_SHA" >&2
+            exit 1
+          }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "このコミットは origin/main に入っていません: $GITHUB_SHA" >&2
+            exit 1
+          }
+          echo "✅ タグ $TAG は manifest と一致し、main に入っているコミットを指しています"
+
       # 自作の読み手だけに頼らない。標準実装でも開けることを確かめる
       # （第7回監査 R7-004: 自作readerがCRCを見ておらず、標準の unzip が拒否するZIPを通していた）
       - name: 標準の実装でもZIPを開けること（Ubuntu）

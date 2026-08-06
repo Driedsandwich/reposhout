@@ -1,6 +1,6 @@
 # Chrome ウェブストア 提出手順書
 
-更新: 2026-08-06 / 対象: RepoShout **1.1.6**（未提出。公開状態の正本は [RELEASE_STATUS.md](../RELEASE_STATUS.md)）
+更新: 2026-08-06 / 対象: RepoShout **1.1.7**（未提出。公開状態の正本は [RELEASE_STATUS.md](../RELEASE_STATUS.md)）
 **この文書は原稿と手順です。提出（Submit for review）はあなたが実行します。**
 
 > **提出の前提（2026-08-05 決定）**: 外部監査（ChatGPT の GPT-5.6 Sol Pro）に**合格してから**提出する。
@@ -27,11 +27,25 @@
 
 ## 1. パッケージのアップロード
 
-**「新しいアイテムを追加」→ ZIPをドラッグ**
+**⚠️ これは「更新」です。「新しいアイテムを追加」を押さないでください。**
+
+RepoShout は既に `1.0.1` がストアで公開中です。新規登録の入口から入ると、
+**別のIDの拡張機能がもう1つ出来てしまい**、いまの利用者・評価・自動更新は引き継がれません
+（第8回監査 R8-001）。既存のアイテムを開いて、そこへ新しいZIPを載せます。
+
+1. デベロッパーダッシュボードで、既存のアイテム `joaipdjaiefbenoijcekdnjagiadikkd` を開く
+2. **Package** タブを開く
+3. **Upload New Package** から、検証済みのZIPをアップロードする
+4. Store listing タブと Privacy practices タブを、下の §2・§3 のとおりに直す
+5. **Submit for review**
+
+載せるZIP:
 
 ```
-dist/reposhout-1.1.6.zip
+reposhout-1.1.7.zip
 ```
+
+（初回登録の手順は §7 にまとめてあります。**いまは使いません。**）
 
 ### どのZIPを出すか（2026-08-06 追加・第5回監査 R5-003）
 
@@ -43,7 +57,7 @@ dist/reposhout-1.1.6.zip
 
 | 見るところ | 提出してよいもの | 出してはいけないもの |
 |---|---|---|
-| ファイル名 | `reposhout-1.1.6.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty-NON-SUBMITTABLE.zip` |
+| ファイル名 | `reposhout-1.1.7.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty-NON-SUBMITTABLE.zip` |
 | `dist/release-manifest.json` の `submittable` | `true` | `false` |
 | 同 `ci.eventName` | `push` | `pull_request` / `workflow_dispatch` / `local` |
 | 同 `ci.ref` | `refs/heads/main` | それ以外 |
@@ -58,8 +72,8 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 
 1. Actions で main の該当 run を開き、成果物 `reposhout-package-<SHA>` をダウンロードする
 2. 展開して `release-manifest.json` を開き、上の表の5点を確かめる
-3. `shasum -a 256 reposhout-1.1.6.zip` の値が、同梱の `.sha256` と一致することを確かめる
-4. **新しい空のフォルダを作り、そこへ `reposhout-1.1.6.zip` を展開する**
+3. `shasum -a 256 reposhout-1.1.7.zip` の値が、同梱の `.sha256` と一致することを確かめる
+4. **新しい空のフォルダを作り、そこへ `reposhout-1.1.7.zip` を展開する**
    （ダウンロードした成果物のフォルダには `release-manifest.json` とZIPとハッシュしか入っておらず、
    `manifest.json` がありません。そのまま読み込もうとしても拡張として認識されません）
 5. 展開したフォルダの直下に `manifest.json` があること、その `version` が上げた版であることを確かめる
@@ -75,7 +89,7 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 | 自動で入る値 | 内容 |
 |---|---|
 | Name | `RepoShout — Share GitHub repos, issues & PRs to X`（49文字 / 上限75） |
-| Version | `1.1.6`（manifest の値。前回より大きくないと弾かれます） |
+| Version | `1.1.7`（manifest の値。前回より大きくないと弾かれます） |
 | Short description | 下の §2 と同一（manifest の `description`・117文字 / 上限132） |
 
 ---
@@ -99,7 +113,7 @@ Changed your mind? Press Escape in the share window to dismiss it.
 • A Share button on repository pages, placed to the left of Pin / Watch / Fork / Star
 • A Share button on issues and pull requests, placed to the left of New issue / Code
 • A toolbar icon and a keyboard shortcut (Alt+Shift+X, or Option+Shift+X on macOS)
-  that work on every other GitHub page too
+  that work on other shareable GitHub pages too
 • Post text tailored to the page:
     Repository   →  owner/repo: description
     Issue        →  Title (Issue #123 · owner/repo)
@@ -399,3 +413,21 @@ RepoShout は宛先をXに絞り、サイドパネルもカード生成も持ち
 **75文字**です（[公式ドキュメント](https://developer.chrome.com/docs/extensions/reference/manifest/name)で確認）。2024-02-22に45文字から引き上げられており、[Chromium拡張のアナウンス](https://groups.google.com/a/chromium.org/g/chromium-extensions/c/mpDvFpT0KJM/m/WWFFQZFyAAAJ)に「a universal limit of 75 characters for an extension's name field in their manifest.json」と記載があります。古い資料には45文字と書かれていることがあるので注意してください。
 
 この枠を使って「固有名 — 機能説明」の形にしています。固有名だけでは誰も検索しませんし、機能語だけでは他社商標が名前の主役になってしまうためです。`short_name`（`RepoShout`・9文字）は狭い表示領域用で、12文字以内が推奨されます。
+
+---
+
+## 7. 付録: 初回登録の手順（いまは使いません）
+
+**この節は、まだ公開していない拡張機能を新規に登録するときのものです。**
+RepoShout は 1.0.1 が公開済みなので、更新のときは §1 のとおり
+既存アイテムの **Package → Upload New Package** を使ってください。
+
+新規登録の場合だけ、次の入口から入ります。
+
+```
+「新しいアイテムを追加」→ ZIPをドラッグ
+```
+
+そのあとの Store listing / Privacy practices / Distribution の各欄は、
+§2 以降と同じ内容を入力します。
+

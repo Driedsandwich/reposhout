@@ -120,6 +120,51 @@ test('二重エンコードで機微ページの拒否を迂回できない（R4
   }
 });
 
+/*
+ * 解いたあとに壊れたエスケープが残るパスを共有していた（第8回監査 R8-003）。
+ *
+ *   /%2573ettings%2525ZZ/tokens
+ *     → %73ettings%25ZZ → settings%ZZ で止まる（有効な %xx が無くなるため）
+ *     → 「settings ではない」と判定され、リポジトリ名として共有できていた
+ *
+ * 「デコードできないものは null へ倒す」と書いてあるのに、判定できないものを
+ * 共有できる側に置いていた。経路を決める先頭3つに % が残ったら共有しない。
+ */
+test('解いたあとに壊れたエスケープが残るパスを共有しない（R8-003の回帰）', () => {
+  const blocked = [
+    'https://github.com/%2573ettings%2525ZZ/tokens',
+    'https://github.com/%252573ettings%252525ZZ/tokens',
+    'https://github.com/o/r/%2573ettings%2525ZZ/secrets',
+    'https://github.com/%25ZZ/r',
+    'https://github.com/o/%25ZZ',
+    'https://github.com/o/r/%25ZZ',
+    // 多重エンコードした .. も経路の判定を狂わせる
+    'https://github.com/%252e%252e/settings/tokens',
+    'https://github.com/o/r/%252e%252e/settings',
+    'https://github.com/%2e%2e/settings'
+  ];
+  for (const url of blocked) {
+    assert.equal(GXS.buildShare(url, 'T'), null, `共有できてしまう: ${url}`);
+    assert.equal(GXS.fallbackUrl(url), null, `フォールバックで漏れる: ${url}`);
+  }
+
+  /*
+   * 対照: 4つ目以降はファイル名なので、正当な % を含む名前を壊さない。
+   * ここを落とすと `100%.md` のようなファイルが共有できなくなる。
+   */
+  const allowed = [
+    'https://github.com/o/r',
+    'https://github.com/o/r/issues/12',
+    'https://github.com/o/r/blob/main/100%25.md',
+    'https://github.com/o/r/blob/main/a%20b.md',
+    'https://github.com/o/r/blob/main/%E6%97%A5.md',
+    'https://github.com/o/r/tree/main/docs'
+  ];
+  for (const url of allowed) {
+    assert.ok(GXS.buildShare(url, 'T · GitHub'), `落ちてはいけない: ${url}`);
+  }
+});
+
 test('資格情報らしきハッシュを名前によらず落とす（T3-003の回帰）', () => {
   const keys = ['client_secret', 'password', 'api_key', 'api-key', 'session_token',
                 'oauth_token', 'refresh_token', 'ACCESS_TOKEN', 'Code', 'x'];

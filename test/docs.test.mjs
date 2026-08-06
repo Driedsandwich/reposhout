@@ -177,6 +177,36 @@ test('現行版の文書に「公式コーパスを走らせていない」が�
  * ここでは手順書に必要な工程が、必要な順で書いてあることを見る。
  * 「本当に manifest.json が無い」ことは test/package.test.mjs が実物で確かめる。
  */
+/*
+ * 公開済みの拡張機能を更新する手順なのに、「新しいアイテムを追加」を案内していた
+ * （第8回監査 R8-001）。そのまま実行すると別IDの拡張機能がもう1つ出来て、
+ * いまの利用者・評価・自動更新は引き継がれない。取り返しがつきにくい種類の間違い。
+ */
+test('更新の手順が、新規登録ではなく既存アイテムへの差し替えになっている', () => {
+  const body = read('store/LISTING.md');
+  const i = body.indexOf('## 1. パッケージのアップロード');
+  assert.ok(i > 0, 'アップロードの節が無い');
+  const section = body.slice(i, body.indexOf('\n## 2.', i));
+
+  for (const needle of ['Upload New Package', 'Package', '既存のアイテム',
+                        'joaipdjaiefbenoijcekdnjagiadikkd', 'Submit for review']) {
+    assert.ok(section.includes(needle), `更新の手順に「${needle}」が無い`);
+  }
+  // 新規登録の入口を、更新の手順の中で案内していないこと
+  assert.ok(!section.includes('「新しいアイテムを追加」→'),
+    '更新の手順の中で新規登録の入口を案内している');
+  assert.ok(/新しいアイテムを追加.{0,40}(押さない|使いません)/s.test(section),
+    '新規登録の入口を使わない旨の注意が無い');
+
+  // 初回登録の手順は残す（消してしまうと初回に困る）。ただし別の節へ
+  assert.ok(body.includes('付録: 初回登録の手順'), '初回登録の手順が消えている');
+});
+
+test('更新手順の検査が効いているかの対照', () => {
+  const old = '**「新しいアイテムを追加」→ ZIPをドラッグ**';
+  assert.ok(!old.includes('Upload New Package'), '対照が成立していない＝旧手順でも通る');
+});
+
 test('提出物のQA手順に、内側のZIPを展開する工程がある', () => {
   const body = read('store/LISTING.md');
   const i = body.indexOf('### どのZIPを出すか');
