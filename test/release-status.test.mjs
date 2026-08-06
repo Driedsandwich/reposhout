@@ -58,10 +58,20 @@ test('確定した版の表が、git の実物と一致する', () => {
     const target = git(['rev-parse', `${row.tag}^{}`]);
     assert.equal(target, row.commit,
       `${row.tag} の指す先が表と違う: git=${target} 表=${row.commit}`);
-    // そのコミットが本当に main にあること
-    const branches = git(['branch', '--contains', row.commit]);
-    assert.match(branches, /(^|\n)\*?\s*main$/m,
-      `${row.tag} のコミットが main に無い: ${row.commit}`);
+    /*
+     * そのコミットが本当に main にあること。
+     * `git branch --contains` はローカルのブランチしか見ないので、PRの浅い
+     * チェックアウト（detached HEAD・ローカルに main が無い）では答えられない。
+     * リモート追跡ブランチも含めて見る。それでも見えないなら、環境が浅いだけなのか
+     * 本当に main に無いのか区別できないので、区別できないと言って落とす。
+     */
+    const branches = git(['branch', '-a', '--contains', row.commit]);
+    const onMain = /(^|\n)\s*\*?\s*(remotes\/origin\/)?main\s*$/m.test(branches);
+    const shallow = git(['rev-parse', '--is-shallow-repository']) === 'true';
+    assert.ok(onMain,
+      shallow
+        ? `浅いチェックアウトなので ${row.tag} が main にあるか確かめられない（git fetch --unshallow が要る）`
+        : `${row.tag} のコミットが main に無い: ${row.commit}`);
   }
 });
 
