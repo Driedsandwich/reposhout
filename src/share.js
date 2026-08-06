@@ -191,6 +191,9 @@
    */
   var MAX_DECODE_ROUNDS = 5;
 
+  /* 経路を決めるのは先頭3つ（所有者 / リポジトリ / 種別）。ここだけ厳しく見る */
+  var ROUTE_SEGMENT_COUNT = 3;
+
   function pathSegments(u) {
     var raw = u.pathname.split('/').filter(Boolean);
     var out = [];
@@ -224,6 +227,21 @@
         rounds++;
       }
       if (/[\u0000-\u001F\u007F\/\\]/.test(d)) return null;
+      // `.` と `..` は、どこに出てきても経路の判定を狂わせる。実在するファイル名でもない
+      if (d === '.' || d === '..') return null;
+      /*
+       * 第8回監査 R8-003。経路を決めるのは先頭3つ（所有者・リポジトリ・種別）で、
+       * そこに**解ききれないパーセント**が残っていたら、それが settings なのか
+       * 別のものなのか判定できない。
+       *
+       *   /%2573ettings%2525ZZ/tokens
+       *     → %73ettings%25ZZ → settings%ZZ で止まる（有効な %xx が無くなるため）
+       *     → 「settings ではない」と判定され、リポジトリ名として共有できていた
+       *
+       * 判定できないものは共有しない。4つ目以降はファイル名なので、
+       * `100%.md` のような正当な名前を壊さないよう、この規則は掛けない。
+       */
+      if (i < ROUTE_SEGMENT_COUNT && d.indexOf('%') !== -1) return null;
       out.push(d);
     }
     return out;
