@@ -100,6 +100,26 @@ test('スキーム無しドメインを少なく数えない（RA-001の回帰�
   assert.ok(GXS.weightedLength(out) <= GXS.MAX_WEIGHT, `切り詰められていない: ${GXS.weightedLength(out)}`);
 });
 
+test('二重エンコードで機微ページの拒否を迂回できない（R4-003の回帰）', () => {
+  const blocked = [
+    'https://github.com/%2573ettings/tokens',
+    'https://github.com/%25252573ettings/tokens',
+    'https://github.com/o/r/%2573ettings/secrets',
+    'https://github.com/settings%252Ftokens',
+    'https://github.com/orgs/acme/%2573ettings/profile'
+  ];
+  for (const url of blocked) {
+    assert.equal(GXS.isSensitiveUrl(url), true, `機微と判定されない: ${url}`);
+    assert.equal(GXS.buildShare(url, 'T'), null, `共有できてしまう: ${url}`);
+    assert.equal(GXS.fallbackUrl(url), null, `フォールバックで漏れる: ${url}`);
+  }
+  // 対照: 普通のページは共有できる
+  for (const url of ['https://github.com/o/r', 'https://github.com/o/r/issues/1', 'https://github.com/o/r/blob/main/%E6%97%A5.md']) {
+    assert.equal(GXS.isSensitiveUrl(url), false, url);
+    assert.ok(GXS.buildShare(url, 'T · GitHub'), url);
+  }
+});
+
 test('資格情報らしきハッシュを名前によらず落とす（T3-003の回帰）', () => {
   const keys = ['client_secret', 'password', 'api_key', 'api-key', 'session_token',
                 'oauth_token', 'refresh_token', 'ACCESS_TOKEN', 'Code', 'x'];

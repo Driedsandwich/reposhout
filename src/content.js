@@ -143,6 +143,15 @@
   }
 
   function onClick(event) {
+    /*
+     * 利用者が実際に押したときだけ動かす。
+     * ページ側のスクリプトから `btn.click()` を呼べば投稿画面を開けてしまう
+     * 状態だった（2026-08-05の第4回監査で指摘）。実害は「勝手に投稿される」
+     * ではなく「勝手に投稿画面が開く」だが、利用者の操作を起点にする設計
+     * そのものが崩れるので塞ぐ。
+     * isTrusted が読めない環境では、従来どおり動かす（機能を壊さない）。
+     */
+    if (event && event.isTrusted === false) return;
     event.preventDefault();
     event.stopPropagation();
 

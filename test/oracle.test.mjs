@@ -45,7 +45,9 @@ function adversarialCorpus() {
   const hosts = [
     'example.com', 'a.co', 'foo.co.jp', 'foobar.みんな', 'twitter.みんな',
     'foo_bar.com', 'xn--r8jz45g.jp', '日本.jp', 'a.b.c.example.io',
-    'UPPER.COM', 'x.y', 'ex-ample.dev', 'a1.io', '.com', 'example.'
+    'UPPER.COM', 'x.y', 'ex-ample.dev', 'a1.io', '.com', 'example.',
+    // IPホスト。第4回監査で「過少計算するのでは」と指摘された領域（実測では公式も素で数える）
+    '1.1.1.1', '192.168.0.1', '[::1]', '[2001:db8::1]', '255.255.255.255', '1.1.1.1.1'
   ];
   const paths = ['', '/', '/path', '/a/b?c=d#e', '/' + 'x'.repeat(40), '/日本語', '?q=1'];
   const prefixes = ['', 'text:', 'see', '（', 'あ', '@', 'mailto:', 'ver.', '1.', 'コード:'];
@@ -76,7 +78,8 @@ function adversarialCorpus() {
     out.push(parts.join(pick(joiners)));
   }
   // 繰り返しは差が線形に積み上がるので、まとめて確かめる
-  for (const unit of ['a.co', 'foobar.みんな/', 'text:http://example.com', 'http://foo_bar.com/abcdefghij']) {
+  for (const unit of ['a.co', 'foobar.みんな/', 'text:http://example.com', 'http://foo_bar.com/abcdefghij',
+                      'http://1.1.1.1', 'http://[::1]', 'https://192.168.0.1/path']) {
     for (const times of [2, 5, 15, 50]) out.push(Array(times).fill(unit).join(' '));
   }
   return out;
