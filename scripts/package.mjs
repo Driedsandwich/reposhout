@@ -127,6 +127,29 @@ function buildZip(entries) {
   return Buffer.concat([...locals, centralBuf, eocd]);
 }
 
+/*
+ * その成果物をストアへ出してよいかを、作った側で判定して書き残す。
+ *
+ * PRのCIが作るZIPは、GitHubがPR検証のために作る一時的なマージ結果から作られる。
+ * それは main のどのコミットとも一致しないのに、名前は提出候補と同じだった
+ * （第5回監査 R5-003）。名前と記録の両方で区別する。
+ */
+function readCiContext(env) {
+  const eventName = env.GITHUB_ACTIONS ? (env.GITHUB_EVENT_NAME || 'unknown') : 'local';
+  return {
+    eventName,
+    ref: env.GITHUB_REF || null,
+    runId: env.GITHUB_RUN_ID || null,
+    pullRequest: eventName === 'pull_request' ? Number((env.GITHUB_REF || '').split('/')[2]) || null : null,
+    // pull_request では GITHUB_SHA が「PR検証用の一時マージコミット」を指す。
+    // PRの head / base はワークフロー側から明示的に渡す（環境変数に既定では入らない）
+    githubSha: env.GITHUB_SHA || null,
+    prHeadSha: env.PR_HEAD_SHA || null,
+    prBaseSha: env.PR_BASE_SHA || null,
+    isCi: Boolean(env.CI)
+  };
+}
+
 export function makePackage({
   dryRun = false,
   allowDirty = false,
@@ -150,18 +173,31 @@ export function makePackage({
    * ZIP自体はこの情報を含まないので、ハッシュの決定論は壊れない。
    */
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const ci = readCiContext(env);
   const dirty = git(['status', '--porcelain']) !== '';
 
   /*
-   * 未コミットの変更が入った成果物に、提出用と同じ名前を付けない。
+   * 提出してよい成果物の条件は2つだけ。
+   *   1. 未コミットの変更が無い（履歴と突き合わせられる）
+   *   2. PRの検証ビルドではない（一時マージコミットから作られていない）
    * 名前にも書く。記録を読まずにファイルだけ拾っても間違えないように。
    */
-  const finalName = `reposhout-${manifest.version}${dirty ? '-dirty' : ''}.zip`;
+  const isPrBuild = ci.eventName === 'pull_request';
+  const submittable = !dirty && !isPrBuild;
+  const marks = [dirty ? 'dirty' : null, isPrBuild ? 'NON-SUBMITTABLE' : null].filter(Boolean);
+  const finalName = `reposhout-${manifest.version}${marks.map((m) => `-${m}`).join('')}.zip`;
 
   const provenance = {
     version: manifest.version,
     sourceCommit: git(['rev-parse', 'HEAD']),
+    treeSha: git(['rev-parse', 'HEAD^{tree}']),
     dirty,
+    submittable,
+    notSubmittableBecause: submittable
+      ? null
+      : [dirty ? '未コミットの変更がある' : null, isPrBuild ? 'PRの検証ビルド（一時マージコミット由来）' : null]
+          .filter(Boolean),
+    ci,
     node: process.version,
     generatedFrom: 'scripts/package.mjs',
     files: entries.map((e) => ({
@@ -181,6 +217,7 @@ export function makePackage({
     files: entries.map((e) => ({ name: e.name, bytes: e.data.length })),
     zipBytes: zip.length,
     sha256: sha,
+    submittable,
     written: false
   };
 
@@ -196,7 +233,7 @@ export function makePackage({
       '未コミットの変更があります。コミットしてから作るか、--allow-dirty を付けてください。'
     );
   }
-  if (dirty && allowDirty && env.CI) {
+  if (dirty && allowDirty && ci.isCi) {
     throw new Error('CI では --allow-dirty を使えません（履歴と一致しない成果物を残さないため）。');
   }
 
@@ -284,5 +321,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log(`  ZIP: ${r.zipBytes} B  ${r.written ? r.file : '(未書き込み)'}`);
   console.log(`  SHA-256: ${r.sha256}`);
   console.log(`  コミット: ${r.provenance.sourceCommit || '(不明)'}${r.provenance.dirty ? ' (未コミットの変更あり)' : ''}`);
+  console.log(`  ビルド種別: ${r.provenance.ci.eventName}`);
+  if (r.submittable) {
+    console.log(`  提出可否: 提出候補（ストアへ出せます）`);
+  } else {
+    console.log(`  提出可否: ★ストアへ提出しないでください — ${r.provenance.notSubmittableBecause.join(' / ')}`);
+  }
   console.log(`  除外: test/ store/ scripts/ 文書 dist/（allowlist方式）`);
 }

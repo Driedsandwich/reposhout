@@ -159,6 +159,42 @@ test('CIワークフローが供給網の最低条件を満たす', () => {
   assert.match(wf, /timeout-minutes:\s*\d+/, 'timeout-minutes が無い');
   assert.ok(!/pull_request_target/.test(wf), 'pull_request_target は使わない');
   assert.ok(!/\$\{\{\s*secrets\./.test(wf), 'secret を参照している');
+
+  // チェックアウトのたびにトークンを .git/config へ残さない
+  const checkouts = uses.filter((u) => u.startsWith('actions/checkout@'));
+  assert.ok(checkouts.length >= 2, `checkout の数が想定と違う: ${checkouts.length}`);
+  assert.equal(
+    (wf.match(/persist-credentials: false/g) || []).length,
+    checkouts.length,
+    'persist-credentials: false が付いていない checkout がある'
+  );
+});
+
+/*
+ * PRのCIが作るZIPは、GitHubがPR検証のために作る一時マージコミットから出来ている。
+ * それを提出候補と同じ名前で残していたので、所有者が取り違えられた（第5回監査 R5-003）。
+ * ここは文言ではなくワークフローの構造を見る。
+ */
+test('PRのCIは提出候補の成果物を残さない', () => {
+  const wf = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8').replace(/\r\n/g, '\n');
+  const steps = wf.split(/\n      - /).slice(1);
+  const uploads = steps.filter((s) => /uses:\s*actions\/upload-artifact@/.test(s));
+  assert.ok(uploads.length >= 1, 'upload-artifact のステップが無い');
+
+  for (const step of uploads) {
+    assert.match(step, /if:\s*github\.event_name\s*!=\s*'pull_request'/,
+      'PRを除外する条件が付いていない upload-artifact がある');
+    assert.match(step, /name:\s*reposhout-package-\$\{\{\s*github\.sha\s*\}\}/,
+      '成果物の名前にコミットが入っていない（どのコミット由来か辿れない）');
+  }
+
+  // PRでも package は走らせる（作れることは確かめる）
+  assert.match(wf, /run: npm run package/, 'package を走らせていない');
+  // PRの head / base を package へ渡している
+  assert.match(wf, /PR_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/,
+    'PRの head SHA を記録へ渡していない');
+  assert.match(wf, /PR_BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/,
+    'PRの base SHA を記録へ渡していない');
 });
 
 test('配布するファイルに CRLF が混ざっていない', () => {

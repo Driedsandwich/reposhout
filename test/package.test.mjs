@@ -22,9 +22,11 @@ import { makePackage, realIo } from '../scripts/package.mjs';
 
 /* 「未コミットの変更なし・既知のコミット」を装う git */
 const CLEAN_COMMIT = '4db83f086735db360443f4d45512702f38ca5936';
+const CLEAN_TREE = '1111111111111111111111111111111111111111';
 const fakeGit = ({ dirty = false } = {}) => (args) => {
   if (args[0] === 'status') return dirty ? ' M src/share.js' : '';
   if (args[1] === 'HEAD') return CLEAN_COMMIT;
+  if (args[1] === 'HEAD^{tree}') return CLEAN_TREE;
   return null;
 };
 
@@ -72,6 +74,7 @@ test('通常のビルドが3点そろって出来て、記録が実物と一致�
   const distDir = freshDist();
   const r = buildOnce(distDir);
   assert.equal(r.written, true);
+  assert.equal(r.submittable, true);
 
   const names = readdirSync(distDir).sort();
   const zipName = `reposhout-${r.version}.zip`;
@@ -86,6 +89,9 @@ test('通常のビルドが3点そろって出来て、記録が実物と一致�
   assert.equal(m.zip.sha256, r.sha256);
   assert.equal(m.zip.bytes, zip.length);
   assert.equal(m.sourceCommit, CLEAN_COMMIT);
+  assert.equal(m.treeSha, CLEAN_TREE);
+  assert.equal(m.submittable, true);
+  assert.equal(m.notSubmittableBecause, null);
   assert.equal(leftovers(distDir).length, 0, '作業用ディレクトリが残っている');
 });
 
@@ -193,6 +199,8 @@ test('--allow-dirty のとき、ファイル名と記録の名前が一致する
   const m = JSON.parse(readFileSync(join(distDir, 'release-manifest.json'), 'utf8'));
   assert.equal(m.zip.name, expected, '記録が提出用の名前のままになっている');
   assert.equal(m.dirty, true);
+  assert.equal(m.submittable, false);
+  assert.ok(m.notSubmittableBecause.some((s) => s.includes('未コミット')));
   assert.equal(readFileSync(join(distDir, `${expected}.sha256`), 'utf8'), `${r.sha256}  ${expected}\n`);
 });
 
@@ -202,6 +210,55 @@ test('CI では --allow-dirty を使えない', () => {
     () => makePackage({ distDir, git: fakeGit({ dirty: true }), env: { CI: 'true' }, allowDirty: true }),
     /CI では --allow-dirty を使えません/
   );
+});
+
+test('PRの検証ビルドは、名前と記録の両方で提出候補と区別される', () => {
+  const distDir = freshDist();
+  const env = {
+    CI: 'true',
+    GITHUB_ACTIONS: 'true',
+    GITHUB_EVENT_NAME: 'pull_request',
+    GITHUB_REF: 'refs/pull/4/merge',
+    GITHUB_RUN_ID: '123',
+    GITHUB_SHA: '0b8be2aabb062fab7f443435a5435aa3a722d1ff',
+    PR_HEAD_SHA: 'e79b4a158d0f7ea1b96659e68311afa1462b6490',
+    PR_BASE_SHA: 'b1d9a41000000000000000000000000000000000'
+  };
+  const r = makePackage({ distDir, git: fakeGit(), env });
+  const expected = `reposhout-${r.version}-NON-SUBMITTABLE.zip`;
+
+  assert.equal(basename(r.file), expected, 'PRビルドが提出候補と同じ名前になっている');
+  assert.equal(r.submittable, false);
+  const m = JSON.parse(readFileSync(join(distDir, 'release-manifest.json'), 'utf8'));
+  assert.equal(m.zip.name, expected);
+  assert.equal(m.submittable, false);
+  assert.equal(m.ci.eventName, 'pull_request');
+  assert.equal(m.ci.pullRequest, 4);
+  assert.equal(m.ci.githubSha, env.GITHUB_SHA, 'PR検証用の一時コミットを記録していない');
+  assert.equal(m.ci.prHeadSha, env.PR_HEAD_SHA);
+  assert.equal(m.ci.prBaseSha, env.PR_BASE_SHA);
+  assert.notEqual(m.sourceCommit, m.ci.githubSha,
+    'このテストの前提が崩れている（一時マージコミットと取り出したコミットが同じ）');
+});
+
+test('main への push で作った成果物は提出候補になる', () => {
+  const distDir = freshDist();
+  const env = {
+    CI: 'true',
+    GITHUB_ACTIONS: 'true',
+    GITHUB_EVENT_NAME: 'push',
+    GITHUB_REF: 'refs/heads/main',
+    GITHUB_RUN_ID: '124',
+    GITHUB_SHA: CLEAN_COMMIT
+  };
+  const r = makePackage({ distDir, git: fakeGit(), env });
+  assert.equal(basename(r.file), `reposhout-${r.version}.zip`);
+  assert.equal(r.submittable, true);
+  const m = JSON.parse(readFileSync(join(distDir, 'release-manifest.json'), 'utf8'));
+  assert.equal(m.ci.eventName, 'push');
+  assert.equal(m.ci.ref, 'refs/heads/main');
+  assert.equal(m.sourceCommit, m.ci.githubSha,
+    '取り出したコミットと GITHUB_SHA が一致していない');
 });
 
 test('同じ入力からは同じZIPが出来る（決定論）', () => {
