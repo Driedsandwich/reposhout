@@ -1,10 +1,10 @@
 # Chrome ウェブストア 提出手順書
 
-更新: 2026-08-05 / 対象: RepoShout **1.1.2**（未提出。ストアで公開中なのは 1.0.1・2026-08-03通過。1.1.0 と 1.1.1 はタグのみで提出していない）
+更新: 2026-08-05 / 対象: RepoShout **1.1.3**（未提出。ストアで公開中なのは 1.0.1・2026-08-03通過。1.1.0〜1.1.2 はタグのみで提出していない）
 **この文書は原稿と手順です。提出（Submit for review）はあなたが実行します。**
 
 > **提出の前提（2026-08-05 決定）**: 外部監査（ChatGPT の GPT-5.6 Sol Pro）に**合格してから**提出する。
-> 現時点の最新監査は第3回で、判定は `CONDITIONAL_PASS`／`NOT_READY_FOR_CHROME_WEB_STORE_SUBMISSION`。
+> 現時点の最新監査は第4回で、判定は `CONDITIONAL_FAIL`／`NOT_READY_FOR_CHROME_WEB_STORE_SUBMISSION`。
 > 次の監査で合格が出るまで、この手順は実行しない。
 初回提出と更新提出の両方でこの文書を使います。更新のときは §1 のアップロードと、変えた機能に関わる §2 の掲載文だけを直せば足ります。
 
@@ -29,7 +29,7 @@
 **「新しいアイテムを追加」→ ZIPをドラッグ**
 
 ```
-dist/reposhout-1.1.2.zip
+dist/reposhout-1.1.3.zip
 ```
 
 同梱物は9ファイル（`npm run package` の出力に一覧が出ます）。`store/` `test/` `scripts/` `.github/` と文書は動作に不要なので、収録一覧（allowlist）に入れていません。
@@ -38,7 +38,7 @@ dist/reposhout-1.1.2.zip
 | 自動で入る値 | 内容 |
 |---|---|
 | Name | `RepoShout — Share GitHub repos, issues & PRs to X`（49文字 / 上限75） |
-| Version | `1.1.2`（manifest の値。前回より大きくないと弾かれます） |
+| Version | `1.1.3`（manifest の値。前回より大きくないと弾かれます） |
 | Short description | 下の §2 と同一（manifest の `description`・117文字 / 上限132） |
 
 ---
