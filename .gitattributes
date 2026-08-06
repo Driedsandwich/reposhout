@@ -9,3 +9,7 @@
 *.png binary
 *.zip binary
 *.crx binary
+
+# 借りてきた公式コーパスは1バイトも変えずに取り出す。
+# 上流のSHA-256で固定しており、改行を変換されると照合が壊れる。
+test/vendor/** -text

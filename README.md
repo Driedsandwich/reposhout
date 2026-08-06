@@ -151,10 +151,14 @@ Requirements: Node 22+, Chrome or Chromium (found via `CHROME_PATH` or the usual
 
 | Suite | Command | What it covers |
 |---|---|---|
-| Unit + oracle | `npm run test:unit` | Hand-written fixtures for the per-route URL policy, refusal of sensitive routes, suffix preservation, title parsing and truncation safety; plus `twitter-text` as an oracle proving the counter never under-counts |
+| Unit + oracle | `npm run test:unit` | Hand-written fixtures for the per-route URL policy, refusal of sensitive routes, suffix preservation, title parsing and truncation safety; plus `twitter-text` 3.1.0 as an oracle over a generated differential corpus |
+| Official conformance | `npm run test:conformance` | The counting sections of Twitter's own `conformance/validate.yml`, vendored at a pinned upstream commit and checked by SHA-256 |
+| Packaging | `npm run test:package` | Builds with each write deliberately failed in turn, and checks that the previous artifact survives, that nothing partial is left, and that a `-dirty` build is named `-dirty` in its manifest too |
 | Manifest and package | included above | Manifest V3 validity, the permission list (the test fails if a permission is added), no remote-code patterns, the exact list of shipped files |
 | Real-extension E2E | `npm run test:e2e` | 10 tests. Loads the nine shipped files into real Chrome via `Extensions.loadUnpacked`, with `x.com` and `github.com` mapped to a local HTTPS server, and drives the real service worker |
 | Browser runner | open `test/share.test.html` | The same fixtures, rendered as a table — useful for reading the actual output |
+
+On character counting: across the official corpus and the generated adversarial corpus, **no case was found where the counter falls below X's own**. That is a finite regression check, not a proof over all inputs.
 
 The E2E is the one that matters for the Escape behaviour, because that behaviour is a property of the whole extension rather than of one file:
 

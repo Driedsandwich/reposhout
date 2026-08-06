@@ -78,26 +78,78 @@ test('Xへ渡ることが、利用者が読む文書すべてに書いてある'
 });
 
 /*
- * 「conformance」という語は、実行していないことを断る文脈でだけ使ってよい。
- * 語そのものを禁止すると、「走らせていない」と書くことすらできなくなる。
+ * 1.1.4 から公式の conformance コーパスを**実際に走らせている**。
+ * ただし走らせているのは文字数の3節だけで、autolink や extract は走らせていない。
+ * だから「conformance を実行した」と書いてよいが、**範囲を書かずに書いてはいけない**。
+ *
+ * 範囲を示す語（走らせているファイル名・節・件数、または走らせていないという否定）が
+ * 同じ行に無ければ落とす。
  */
-const DENIES_RUNNING = /not run|not shipped|is not|実行していない|同梱されていない|走らせていない|していません/i;
+const SCOPED = /validate\.yml|counting section|文字数の?\d+節|not run|not shipped|実行していない|同梱されていない|走らせていない|していません/i;
 
-test('conformance を「実行した」とは書いていない', () => {
+test('conformance を、範囲を書かずに「実行した」と書いていない', () => {
   for (const f of [...USER_FACING, 'CHANGELOG.md', 'IMPLEMENTATION_REPORT.md']) {
-    const lines = read(f).split('\n');
-    for (const line of lines) {
+    for (const line of read(f).split('\n')) {
       if (!/conformance/i.test(line)) continue;
-      assert.ok(DENIES_RUNNING.test(line),
-        `${f}: conformance を実行したように読める行がある: ${line.trim().slice(0, 90)}`);
+      assert.ok(SCOPED.test(line),
+        `${f}: conformance の範囲を書かずに触れている行がある: ${line.trim().slice(0, 90)}`);
     }
   }
 });
 
 test('conformance の検査が効いているかの対照', () => {
   const claim = '公式 conformance コーパスを実行して全PASSした';
-  assert.ok(/conformance/i.test(claim) && !DENIES_RUNNING.test(claim),
-    '対照が成立していない＝この検査は主張を捕まえられない');
+  assert.ok(/conformance/i.test(claim) && !SCOPED.test(claim),
+    '対照が成立していない＝この検査は範囲抜きの主張を捕まえられない');
+});
+
+/*
+ * 有限のfixtureで測ったことを「証明した」と書かない。
+ * 履歴の文書（CHANGELOG・実装報告）は、過去に書いた誤りを引用する必要があるので対象外。
+ */
+const OVERCLAIMS = [
+  'never under-counts',
+  'proving the counter',
+  'proves the counter',
+  'over all inputs',
+  'for all inputs',
+  'for any input',
+  '全入力',
+  'すべての入力',
+  '絶対に下回らない',
+  '数学的に証明'
+];
+
+/* 「全入力に対する証明ではありません」のような**否定**は、むしろ書いてよい */
+const DENIED = /not a proof|does not prove|ではありません|ではない|とは限りません|限りません/i;
+
+test('文字数の保証を、実際に測った範囲より広く書いていない', () => {
+  for (const f of USER_FACING) {
+    for (const line of read(f).split('\n')) {
+      const hit = OVERCLAIMS.find((p) => line.includes(p));
+      if (!hit) continue;
+      assert.ok(DENIED.test(line),
+        `${f} に測った範囲を超える言い方が残っている（${hit}）: ${line.trim().slice(0, 90)}`);
+    }
+  }
+});
+
+test('言い過ぎの検査が効いているかの対照', () => {
+  const claim = 'an oracle proving the counter never under-counts';
+  assert.ok(OVERCLAIMS.some((p) => claim.includes(p)) && !DENIED.test(claim),
+    '対照が成立していない＝この検査は言い過ぎを捕まえられない');
+});
+
+test('公式コーパスを走らせている範囲が、READMEに書いてある', () => {
+  for (const [f, needles] of Object.entries({
+    'README.md': ['validate.yml', 'counting sections', 'pinned upstream commit'],
+    'README.ja.md': ['validate.yml', '文字数の3節', '配布物には入りません']
+  })) {
+    const body = read(f);
+    for (const n of needles) {
+      assert.ok(body.includes(n), `${f} に公式コーパスの範囲が書いていない: ${n}`);
+    }
+  }
 });
 
 /*
