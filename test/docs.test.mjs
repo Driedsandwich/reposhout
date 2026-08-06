@@ -265,6 +265,11 @@ test('ストア文書が、手元ビルドを提出用として案内してい�
     assert.ok(body.includes('reposhout-package-'),
       `${f} に、どの成果物を出すかが書いていない`);
   }
+  // 出す正本が一意に決まっていること
+  assert.match(read('store/LISTING.md'), /成果物 : reposhout-package-[0-9a-f]{40}/,
+    '提出する成果物が一意に指定されていない');
+  assert.match(read('store/LISTING.md'), /SHA-256 : [0-9a-f]{64}/,
+    '提出するZIPのSHA-256が書いていない');
 });
 
 test('公式コーパスを走らせている範囲が、READMEに書いてある', () => {

@@ -136,6 +136,9 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 SHA-256 : 86e52fd07ea9f604e27ef228dc234651a99667a8e79dd08676f9692b7dfffc0c
 ```
 
+現在の main（`ce48958`）から作られた成果物も中身は1バイト違わず同じですが、
+**タグ `v1.1.7` と同じコミットから作られた上記を正本**とします（第9回監査 R9-004）。
+
 ---
 
 ## 5. この文書でやらないこと
