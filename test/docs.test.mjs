@@ -12,6 +12,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { ROOT } from './helpers/load.mjs';
 
 /* 利用者が読む文書。ここに旧説明が残ってはいけない */
@@ -346,6 +347,70 @@ test('権限説明の検査が効いているかの対照', () => {
   for (const needle of ['<style>', 'location.href', 'document.title', 'event.isTrusted']) {
     assert.ok(!old.includes(needle), `対照が成立していない＝旧文でも通ってしまう: ${needle}`);
   }
+});
+
+/*
+ * 「まだ出していない」と書いた文書は、出したあとも同じことを言い続ける。
+ * 1.1.4 は main へマージしてタグまで打ったのに、CHANGELOG と実装報告は
+ * 「作業ツリーにあるだけ」のままだった（第6回監査 R6-005）。
+ *
+ * そこで、**タグが実在する版について**は、未公開だと読める書き方を禁止する。
+ * タグの有無は git に聞く。タグを取っていないチェックアウト（CIの浅いclone等）では
+ * 何も言えないので、そのときは黙って通す（嘘をつくよりは検査しないほうがまし）。
+ */
+function localTags() {
+  try {
+    return execFileSync('git', ['tag', '-l', 'v*'], { cwd: ROOT, encoding: 'utf8' })
+      .split('\n').map((s) => s.trim()).filter(Boolean);
+  } catch (e) {
+    return [];
+  }
+}
+
+const UNRELEASED_WORDING = ['未リリース', '作業ツリーにあるだけ', 'commit も push もしていない',
+                            'commit も push もタグもしていない'];
+
+test('タグを打った版を「まだ出していない」と書いていない', () => {
+  const tags = new Set(localTags());
+  const lines = read('CHANGELOG.md').split('\n');
+  let checked = 0;
+  for (const line of lines) {
+    const m = /^## \[(\d+\.\d+\.\d+)\](.*)$/.exec(line);
+    if (!m || !tags.has(`v${m[1]}`)) continue;
+    checked++;
+    for (const w of UNRELEASED_WORDING) {
+      assert.ok(!m[2].includes(w),
+        `CHANGELOG: v${m[1]} のタグはあるのに「${w}」と書いてある: ${line.trim()}`);
+    }
+  }
+  // タグが1つも取れていない環境では何も検査していない。それを黙らせない
+  if (tags.size === 0) {
+    assert.ok(true, 'タグが無いチェックアウトなので、この検査は何も確かめていない');
+  } else {
+    assert.ok(checked > 0, `タグは ${tags.size} 本あるのに、CHANGELOG の節と1つも対応しなかった`);
+  }
+});
+
+test('公開状態の正本があり、欄が分かれている', () => {
+  const body = read('RELEASE_STATUS.md');
+  for (const col of ['main へマージ', 'タグ', 'GitHub Release', 'ストアへ提出', 'ストアで公開中']) {
+    assert.ok(body.includes(col), `RELEASE_STATUS.md に「${col}」の欄が無い`);
+  }
+  // 「タグを打った＝公開した」と読める混同をしていないこと
+  assert.ok(body.includes('全部べつの出来事'), '欄を分ける理由が書いていない');
+  // 現行版が表に載っていること
+  const v = JSON.parse(read('manifest.json')).version;
+  assert.ok(body.includes(`| ${v} |`), `RELEASE_STATUS.md に ${v} の行が無い`);
+});
+
+test('公開状態の検査が効いているかの対照', () => {
+  const tags = new Set(localTags());
+  if (tags.size === 0) return;               // 検査できない環境
+  const fake = '## [1.1.4] — 未リリース（作業ツリーにあるだけ）';
+  const m = /^## \[(\d+\.\d+\.\d+)\](.*)$/.exec(fake);
+  assert.ok(tags.has(`v${m[1]}`), '対照に使う版のタグが無い');
+  assert.ok(UNRELEASED_WORDING.some((w) => m[2].includes(w)),
+    '対照が成立していない＝この検査は古い書き方を捕まえられない');
 });
 
 test('バージョンが manifest / package.json / CHANGELOG / ストア文書で揃っている', () => {
