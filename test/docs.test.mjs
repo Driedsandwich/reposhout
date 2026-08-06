@@ -12,6 +12,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { ROOT } from './helpers/load.mjs';
 
 /* 利用者が読む文書。ここに旧説明が残ってはいけない */
@@ -117,7 +118,17 @@ const OVERCLAIMS = [
   '全入力',
   'すべての入力',
   '絶対に下回らない',
-  '数学的に証明'
+  '数学的に証明',
+  /*
+   * 第6回監査 R6-002。上の一覧に入れていなかった言い回しが素通りしていた。
+   * 検出器の探索範囲が狭いと、範囲の外に書けば何でも通る。
+   */
+  'only ever allowed to over-count',
+  'is never allowed to under-count',
+  '多く数えることはあっても、少なく数えることはない',
+  '少なく数えることはありません',
+  '必ず多めに数える',
+  '公式がどの解釈を採っても、こちらがそれを下回らない'
 ];
 
 /* 「全入力に対する証明ではありません」のような**否定**は、むしろ書いてよい */
@@ -138,6 +149,66 @@ test('言い過ぎの検査が効いているかの対照', () => {
   const claim = 'an oracle proving the counter never under-counts';
   assert.ok(OVERCLAIMS.some((p) => claim.includes(p)) && !DENIED.test(claim),
     '対照が成立していない＝この検査は言い過ぎを捕まえられない');
+});
+
+/*
+ * 「走らせていない」と書いたまま走らせるようになると、こんどは過少申告になる。
+ * 1.1.4 から固定した validate.yml の文字数対象節は実際に走っているので、
+ * 現行版の文書に「公式コーパスは走らせていない」と読める記述を残さない（R6-003）。
+ */
+test('現行版の文書に「公式コーパスを走らせていない」が残っていない', () => {
+  const stale = [
+    'so it is not run',
+    'is not run.',
+    '公式 conformance コーパスは走らせていない',
+    'conformance コーパスを走らせていません'
+  ];
+  for (const f of USER_FACING) {
+    const body = read(f);
+    for (const phrase of stale) {
+      assert.ok(!body.includes(phrase), `${f} に古い記述が残っている: ${phrase}`);
+    }
+  }
+});
+
+/*
+ * 提出物のQA手順。ダウンロードした成果物のフォルダには manifest.json が無く、
+ * そのままでは拡張として読み込めない。内側のZIPを展開する工程が要る（第6回監査 R6-004）。
+ * ここでは手順書に必要な工程が、必要な順で書いてあることを見る。
+ * 「本当に manifest.json が無い」ことは test/package.test.mjs が実物で確かめる。
+ */
+test('提出物のQA手順に、内側のZIPを展開する工程がある', () => {
+  const body = read('store/LISTING.md');
+  const i = body.indexOf('### どのZIPを出すか');
+  assert.ok(i > 0, 'どのZIPを出すかの節が無い');
+  const section = body.slice(i, body.indexOf('\n同梱物は', i));
+
+  const order = [
+    'ダウンロード',
+    'release-manifest.json',
+    '.sha256',
+    '新しい空のフォルダ',
+    '展開',
+    'manifest.json',
+    'パッケージ化されていない拡張機能',
+    'アップロード'
+  ];
+  let at = 0;
+  for (const step of order) {
+    const found = section.indexOf(step, at);
+    assert.ok(found >= 0, `QA手順に「${step}」が無い（または順序が違う）`);
+    at = found;
+  }
+  assert.ok(section.includes('そのまま読み込'),
+    '「そのまま読み込んではいけない」という注意が無い');
+});
+
+test('QA手順の検査が効いているかの対照', () => {
+  // 内側ZIPの展開工程が無い旧手順は、同じ検査を通らない
+  const old = 'ダウンロードする / release-manifest.json を確かめる / .sha256 を確かめる / ' +
+              'その展開物をそのままパッケージ化されていない拡張機能として読み込む / アップロードする';
+  assert.ok(!old.includes('新しい空のフォルダ'),
+    '対照が成立していない＝旧手順でも通ってしまう');
 });
 
 test('公式コーパスを走らせている範囲が、READMEに書いてある', () => {
@@ -236,6 +307,110 @@ test('アカウント名は「入る場合がある」と書いてある（「�
 
   const pii = DISCLOSURE.categories.find((c) => c.id === 'personally_identifiable_information');
   assert.match(pii.codeFact, /場合がある/, '正本が「必ず入る」と読める書き方になっている');
+});
+
+/*
+ * ダッシュボードへ貼るホスト権限の説明を、実装と揃える。
+ *
+ * README と PRIVACY は直したのに、**実際に審査へ出す文面だけ**が
+ * 「ページを読むのはボタン行を探すためだけで、要素を1つ足す」のまま残っていた
+ * （第6回監査 R6-002）。人が読み直す運用では、貼る文面ほど見落とす。
+ */
+test('ストアへ貼る github.com の権限説明が、実装と揃っている', () => {
+  const body = read('store/LISTING.md');
+  const i = body.indexOf('**Host permission: github.com**');
+  assert.ok(i > 0, 'github.com の権限説明が無い');
+  const section = body.slice(i, body.indexOf('**Host permission: x.com**', i));
+
+  const must = {
+    'action row': 'どこを探すのか',
+    '<style>': '足す style 要素',
+    'wrapper': 'ボタンを包む要素',
+    '<li> or a <div>': 'コンテナによって li か div になること',
+    'location.href': '読む値（URL）',
+    'document.title': '読む値（タイトル）',
+    'event.isTrusted': '合成クリックを拒否すること',
+    'activeTab': 'ツールバー/ショートカットは別経路であること'
+  };
+  for (const [needle, why] of Object.entries(must)) {
+    assert.ok(section.includes(needle), `github.com の権限説明に「${why}」が書いていない: ${needle}`);
+  }
+
+  // 旧文の言い回しが残っていないこと
+  for (const stale of ['adds a single <li> element', 'reads\nthe page only to locate']) {
+    assert.ok(!section.includes(stale), `旧い説明が残っている: ${stale}`);
+  }
+});
+
+test('権限説明の検査が効いているかの対照', () => {
+  const old = "The content script reads the page only to locate the button row, and adds a single <li> element.";
+  for (const needle of ['<style>', 'location.href', 'document.title', 'event.isTrusted']) {
+    assert.ok(!old.includes(needle), `対照が成立していない＝旧文でも通ってしまう: ${needle}`);
+  }
+});
+
+/*
+ * 「まだ出していない」と書いた文書は、出したあとも同じことを言い続ける。
+ * 1.1.4 は main へマージしてタグまで打ったのに、CHANGELOG と実装報告は
+ * 「作業ツリーにあるだけ」のままだった（第6回監査 R6-005）。
+ *
+ * そこで、**タグが実在する版について**は、未公開だと読める書き方を禁止する。
+ * タグの有無は git に聞く。タグを取っていないチェックアウト（CIの浅いclone等）では
+ * 何も言えないので、そのときは黙って通す（嘘をつくよりは検査しないほうがまし）。
+ */
+function localTags() {
+  try {
+    return execFileSync('git', ['tag', '-l', 'v*'], { cwd: ROOT, encoding: 'utf8' })
+      .split('\n').map((s) => s.trim()).filter(Boolean);
+  } catch (e) {
+    return [];
+  }
+}
+
+const UNRELEASED_WORDING = ['未リリース', '作業ツリーにあるだけ', 'commit も push もしていない',
+                            'commit も push もタグもしていない'];
+
+test('タグを打った版を「まだ出していない」と書いていない', () => {
+  const tags = new Set(localTags());
+  const lines = read('CHANGELOG.md').split('\n');
+  let checked = 0;
+  for (const line of lines) {
+    const m = /^## \[(\d+\.\d+\.\d+)\](.*)$/.exec(line);
+    if (!m || !tags.has(`v${m[1]}`)) continue;
+    checked++;
+    for (const w of UNRELEASED_WORDING) {
+      assert.ok(!m[2].includes(w),
+        `CHANGELOG: v${m[1]} のタグはあるのに「${w}」と書いてある: ${line.trim()}`);
+    }
+  }
+  // タグが1つも取れていない環境では何も検査していない。それを黙らせない
+  if (tags.size === 0) {
+    assert.ok(true, 'タグが無いチェックアウトなので、この検査は何も確かめていない');
+  } else {
+    assert.ok(checked > 0, `タグは ${tags.size} 本あるのに、CHANGELOG の節と1つも対応しなかった`);
+  }
+});
+
+test('公開状態の正本があり、欄が分かれている', () => {
+  const body = read('RELEASE_STATUS.md');
+  for (const col of ['main へマージ', 'タグ', 'GitHub Release', 'ストアへ提出', 'ストアで公開中']) {
+    assert.ok(body.includes(col), `RELEASE_STATUS.md に「${col}」の欄が無い`);
+  }
+  // 「タグを打った＝公開した」と読める混同をしていないこと
+  assert.ok(body.includes('全部べつの出来事'), '欄を分ける理由が書いていない');
+  // 現行版が表に載っていること
+  const v = JSON.parse(read('manifest.json')).version;
+  assert.ok(body.includes(`| ${v} |`), `RELEASE_STATUS.md に ${v} の行が無い`);
+});
+
+test('公開状態の検査が効いているかの対照', () => {
+  const tags = new Set(localTags());
+  if (tags.size === 0) return;               // 検査できない環境
+  const fake = '## [1.1.4] — 未リリース（作業ツリーにあるだけ）';
+  const m = /^## \[(\d+\.\d+\.\d+)\](.*)$/.exec(fake);
+  assert.ok(tags.has(`v${m[1]}`), '対照に使う版のタグが無い');
+  assert.ok(UNRELEASED_WORDING.some((w) => m[2].includes(w)),
+    '対照が成立していない＝この検査は古い書き方を捕まえられない');
 });
 
 test('バージョンが manifest / package.json / CHANGELOG / ストア文書で揃っている', () => {

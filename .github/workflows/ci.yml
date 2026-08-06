@@ -23,6 +23,9 @@ jobs:
         with:
           # チェックアウト後にトークンを .git/config へ残さない
           persist-credentials: false
+          # タグも取る。「タグを打った版を『まだ出していない』と書いていない」検査は、
+          # タグが見えないチェックアウトでは何も確かめられないため（第6回監査 R6-005）
+          fetch-tags: true
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
@@ -48,6 +51,9 @@ jobs:
         with:
           # チェックアウト後にトークンを .git/config へ残さない
           persist-credentials: false
+          # タグも取る。「タグを打った版を『まだ出していない』と書いていない」検査は、
+          # タグが見えないチェックアウトでは何も確かめられないため（第6回監査 R6-005）
+          fetch-tags: true
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -99,20 +105,22 @@ jobs:
             exit 1
           }
 
-      # 提出候補を残すのは main への push と手動実行のときだけ。
-      # PRでも同じ名前で残していたので、所有者が「main由来の提出物」と取り違えられた
-      # （第5回監査 R5-003）。PRでは作れることの確認までにして、成果物は残さない。
-      - name: 提出候補を残す（main への push と手動実行のときだけ）
-        if: github.event_name != 'pull_request'
+      # 提出候補を残すのは「main への push」だけ。
+      #
+      # 以前は「PRでなければ残す」だったので、workflow_dispatch を feature ブランチや
+      # タグから手で回した成果物まで提出候補の名前で残りえた（第6回監査 R6-001）。
+      # scripts/package.mjs の submittable の条件と、ここを同じにしておく。
+      - name: 提出候補を残す（main への push のときだけ）
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: reposhout-package-${{ github.sha }}
           path: dist/
           retention-days: 14
 
-      - name: 成果物を残さなかったことを表示する（PRのとき）
-        if: github.event_name == 'pull_request'
+      - name: 成果物を残さなかったことを表示する（main への push 以外）
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         run: |
-          echo "PRの検証ビルドなので成果物は残しません。"
-          echo "ストアへ出すZIPは、main への push で走ったこの CI の成果物を使ってください。"
-          cat dist/release-manifest.json | head -20
+          echo "main への push ではないので、成果物は残しません（作れることの確認まで）。"
+          echo "ストアへ出すZIPは、main への push で走った CI の成果物を使ってください。"
+          cat dist/release-manifest.json | head -25

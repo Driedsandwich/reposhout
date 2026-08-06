@@ -9,7 +9,7 @@
     "『規約がそれをどう分類するか（判断）』を混ぜないため。コードを読んだだけで",
     "『該当しない』と断定しない。"
   ],
-  "version": "1.1.4",
+  "version": "1.1.5",
   "dashboardSection": "Privacy practices › Data usage",
   "policyReference": {
     "url": "https://developer.chrome.com/docs/webstore/program-policies/user-data-faq",
@@ -61,9 +61,9 @@
       "label": "Authentication information",
       "labelJa": "認証情報",
       "answer": "No",
-      "codeFact": "cookie・トークン・パスワードを読まない。認証・設定・組織管理の画面では共有そのものを拒否し、URLの断片に = を含むもの（#client_secret=… 等）は落とす",
-      "policyBasis": "該当なし",
-      "ownerMustConfirm": false
+      "codeFact": "cookie・フォームの入力値を読まず、資格情報を取り出したり保存したり送ったりしない。ただし操作されたときは現在のタブのURL全体をいったん受け取る（ツールバー/ショートカットは activeTab 経由）。認証・設定・組織管理の画面は、Xの投稿画面を開く前に拒否する。URLの断片に = を含むもの（#client_secret=… 等）も落とす",
+      "policyBasis": "資格情報そのものは扱わないと判断した。ただし handle には use が含まれ、拒否の前段でURL全体を受け取ってはいるので、現行の設問文で最終確認が要る",
+      "ownerMustConfirm": true
     },
     {
       "id": "personal_communications",

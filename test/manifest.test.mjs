@@ -182,8 +182,13 @@ test('PRのCIは提出候補の成果物を残さない', () => {
   assert.ok(uploads.length >= 1, 'upload-artifact のステップが無い');
 
   for (const step of uploads) {
-    assert.match(step, /if:\s*github\.event_name\s*!=\s*'pull_request'/,
-      'PRを除外する条件が付いていない upload-artifact がある');
+    /*
+     * 「PRでなければ残す」では緩い。workflow_dispatch は実行するブランチを選べるので、
+     * feature ブランチやタグから回した成果物まで提出候補の名前で残りえた（R6-001）。
+     * 残してよいのは main への push だけ。
+     */
+    assert.match(step, /if:\s*github\.event_name\s*==\s*'push'\s*&&\s*github\.ref\s*==\s*'refs\/heads\/main'/,
+      'upload-artifact の条件が「main への push」に限定されていない');
     assert.match(step, /name:\s*reposhout-package-\$\{\{\s*github\.sha\s*\}\}/,
       '成果物の名前にコミットが入っていない（どのコミット由来か辿れない）');
   }

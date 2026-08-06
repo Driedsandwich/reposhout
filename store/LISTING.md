@@ -1,10 +1,10 @@
 # Chrome ウェブストア 提出手順書
 
-更新: 2026-08-06 / 対象: RepoShout **1.1.4**（未提出。ストアで公開中なのは 1.0.1・2026-08-03通過で、2026-08-06 に配布中のCRXを取得して実測。1.1.0〜1.1.3 はタグのみで提出していない）
+更新: 2026-08-06 / 対象: RepoShout **1.1.5**（未提出。公開状態の正本は [RELEASE_STATUS.md](../RELEASE_STATUS.md)）
 **この文書は原稿と手順です。提出（Submit for review）はあなたが実行します。**
 
 > **提出の前提（2026-08-05 決定）**: 外部監査（ChatGPT の GPT-5.6 Sol Pro）に**合格してから**提出する。
-> 現時点の最新監査は第5回で、判定は `CONDITIONAL_FAIL`／`NOT_READY_FOR_CHROME_WEB_STORE_SUBMISSION`。
+> 現時点の最新監査は第6回で、判定は `NOT READY`（P2が4件・P3が1件）。
 > 次の監査で合格が出るまで、この手順は実行しない。
 初回提出と更新提出の両方でこの文書を使います。更新のときは §1 のアップロードと、変えた機能に関わる §2 の掲載文だけを直せば足ります。
 
@@ -29,7 +29,7 @@
 **「新しいアイテムを追加」→ ZIPをドラッグ**
 
 ```
-dist/reposhout-1.1.4.zip
+dist/reposhout-1.1.5.zip
 ```
 
 ### どのZIPを出すか（2026-08-06 追加・第5回監査 R5-003）
@@ -42,19 +42,31 @@ dist/reposhout-1.1.4.zip
 
 | 見るところ | 提出してよいもの | 出してはいけないもの |
 |---|---|---|
-| ファイル名 | `reposhout-1.1.4.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty.zip` |
+| ファイル名 | `reposhout-1.1.5.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty-NON-SUBMITTABLE.zip` |
 | `dist/release-manifest.json` の `submittable` | `true` | `false` |
-| 同 `ci.eventName` | `push`（main）または `workflow_dispatch` | `pull_request` |
-| 同 `sourceCommit` | main のコミットと一致 | 一致しない |
+| 同 `ci.eventName` | `push` | `pull_request` / `workflow_dispatch` / `local` |
+| 同 `ci.ref` | `refs/heads/main` | それ以外 |
+| 同 `sourceCommit` | main のコミットと一致（`ci.githubSha` とも一致） | 一致しない |
 
-PRのCIはそもそも成果物を残しません（作れることの確認だけ）。使うのは、**main へマージしたあとに走った
-CI が残した `reposhout-package-<コミットSHA>`** です。手順は次のとおり。
+**提出候補になるのは「main への push で走ったCI」だけです**（1.1.5 で厳しくしました・第6回監査 R6-001）。
+手元で `npm run package` して作ったZIPも、feature ブランチやタグから手で回したCIのZIPも、
+名前に `NON-SUBMITTABLE` が付き、記録の `submittable` は `false` になります。
+PRのCIはそもそも成果物を残しません（作れることの確認だけ）。
+
+使うのは、**main へマージしたあとに走った CI が残した `reposhout-package-<コミットSHA>`** です。
 
 1. Actions で main の該当 run を開き、成果物 `reposhout-package-<SHA>` をダウンロードする
-2. 展開して `release-manifest.json` を開き、上の表の4点を確かめる
-3. `shasum -a 256 reposhout-1.1.4.zip` の値が、同梱の `.sha256` と一致することを確かめる
-4. その展開物をそのまま「パッケージ化されていない拡張機能」として読み込み、動作を見る
-5. **そのZIPをアップロードする**（手元で作り直したものと差し替えない）
+2. 展開して `release-manifest.json` を開き、上の表の5点を確かめる
+3. `shasum -a 256 reposhout-1.1.5.zip` の値が、同梱の `.sha256` と一致することを確かめる
+4. **新しい空のフォルダを作り、そこへ `reposhout-1.1.5.zip` を展開する**
+   （ダウンロードした成果物のフォルダには `release-manifest.json` とZIPとハッシュしか入っておらず、
+   `manifest.json` がありません。そのまま読み込もうとしても拡張として認識されません）
+5. 展開したフォルダの直下に `manifest.json` があること、その `version` が上げた版であることを確かめる
+6. **そのフォルダ**を「パッケージ化されていない拡張機能」として読み込み、動作を見る
+7. **手順3で確かめたのと同じZIPファイルをアップロードする**（手元で作り直したものと差し替えない）
+
+やってはいけないこと: ダウンロードした成果物のフォルダをそのまま読み込む／リポジトリの
+フォルダで代わりに動作確認する／手元で作り直したZIPを出す／ハッシュを確かめていないZIPを出す。
 
 同梱物は `scripts/package-files.mjs` に挙げたファイルだけです（`npm run package` の出力に一覧と件数が出ます）。`store/` `test/` `scripts/` `.github/` と文書は動作に不要なので、収録一覧（allowlist）に入れていません。
 アップロード後、名前は `manifest.json` から自動で入ります（入力欄はありません）。
@@ -62,7 +74,7 @@ CI が残した `reposhout-package-<コミットSHA>`** です。手順は次の
 | 自動で入る値 | 内容 |
 |---|---|
 | Name | `RepoShout — Share GitHub repos, issues & PRs to X`（49文字 / 上限75） |
-| Version | `1.1.4`（manifest の値。前回より大きくないと弾かれます） |
+| Version | `1.1.5`（manifest の値。前回より大きくないと弾かれます） |
 | Short description | 下の §2 と同一（manifest の `description`・117文字 / 上限132） |
 
 ---
@@ -96,7 +108,8 @@ Changed your mind? Press Escape in the share window to dismiss it.
   Markdown file and a prepared pull request's title and body are kept, while
   tracking parameters are dropped. Line, comment and README section anchors are kept
 • Character counting follows X's published rules, including Japanese, Chinese and
-  Korean text, emoji and links, so a long title is trimmed to something X accepts
+  Korean text, emoji and links, and errs on the side of counting high, so a long
+  title is trimmed with room to spare
 • Issue and pull request numbers stay in the post even when the title is trimmed
 • Light and dark mode follow GitHub's own theme automatically
 • Press Escape in the share window to dismiss it if you change your mind
@@ -234,11 +247,28 @@ which any web page could copy.
 **Host permission: github.com**（content script の欄がある場合）
 
 ```
-The in-page Share button is injected into GitHub's repository header so that
-sharing takes one click from where the user already is. The content script reads
-the page only to locate the button row, and adds a single <li> element. It never
-modifies or removes any existing GitHub element, and does nothing at all if the
-expected container is not found.
+The in-page Share button is injected into GitHub's own action row so that
+sharing takes one click from where the user already is.
+
+What the content script does on github.com:
+
+- It locates GitHub's action row. It reads the page structure only to find that
+  row, and it does not inspect the body content of the page.
+- It adds one <style> element to the document head, and one wrapper containing
+  one Share button. The wrapper is an <li> or a <div>, depending on which
+  container GitHub uses on that page. It does not modify, delete, or replace any
+  existing GitHub element, and it does nothing at all if the expected container
+  is not found.
+- When -- and only when -- the user activates that button with a real click, it
+  reads location.href and document.title in order to build the X Web Intent
+  link. A click synthesised by page JavaScript is refused (event.isTrusted).
+- It does not read cookies or form fields, runs no analytics, and makes no
+  network request of its own.
+
+The toolbar icon and the keyboard shortcut are a separate path: they do not use
+this content script at all. They read the current tab's URL and title through
+the activeTab permission, which is granted only at the moment the user invokes
+the extension, and only for that one tab.
 ```
 
 **Host permission: x.com**
@@ -355,7 +385,7 @@ https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md
 RepoShout は宛先をXに絞り、サイドパネルもカード生成も持ちません。差別化は次の3点です（いずれも実測に基づく事実で、README にも記載済み）。
 
 1. ログイン状態とログアウト状態の**両方**に対応（GitHubはこの2つで実装が別物。ログイン時のIssue/PRにはボタン行自体が無いため、ツールバー/ショートカットで補っている）
-2. 文字数の数え方を**Xの規則に沿わせ、ずれるときは必ず多めに数える**（半角カタカナ・絵文字・スキーム無しドメインを含む）。単体・適合テスト40件と、実際のChromeへ拡張を読み込む**E2E 10件**で検査している（2026-08-05 実測・いずれも全PASS）
+2. 文字数の数え方を**Xの規則に沿わせ、ずれるときは多めに数える側へ倒している**（半角カタカナ・絵文字・スキーム無しドメインを含む）。固定した公式コーパスの文字数対象節・手書きの期待値・生成した敵対的コーパスを `twitter-text` 3.1.0 と突き合わせた範囲では、過少計数は検出されていない（有限の回帰検査であり、全入力の証明ではない）。実際のChromeへ拡張を読み込む**E2E**も含め、`npm test` の全テストが通ることを確認している
 3. Open / Merged / Closed の状態を**意図的に出さない**（ログイン状態で読み取り値が食い違う事象を実測したため）
 
 それ以前の同種拡張（2015 / 2018 / 2021）はいずれも更新停止かつManifest V2世代で、現在は動作しません。
