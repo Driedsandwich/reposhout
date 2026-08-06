@@ -347,6 +347,23 @@ test('更新の手順が、Privacy practices まで必須と書いてある', ()
   assert.ok(!/§0[^\n]*§3/.test(old), '対照が成立していない＝旧文面でも通ってしまう');
 });
 
+/*
+ * 第10回監査 R10-006。ストア文書は SUBMISSION_CANDIDATE.json と
+ * 一致し、いまの main の位置（すぐ古くなる）を書かない。
+ */
+test('ストア文書が、正本の成果物と一致していて、可変な main を書いていない', () => {
+  const cand = JSON.parse(read('store/SUBMISSION_CANDIDATE.json'));
+  const known = [cand.sourceCommit, cand.treeSha, cand.innerSha256];
+  for (const f of ['store/LISTING.md', 'store/STORE_DASHBOARD_CHANGES.md']) {
+    const body = read(f);
+    assert.ok(body.includes(cand.artifactName), `${f} に正本の成果物名が無い`);
+    assert.ok(body.includes(cand.innerSha256), `${f} に正本のSHA-256が無い`);
+    const strays = [...new Set((body.match(/\b[0-9a-f]{7,40}\b/g) || [])
+      .filter((h) => !known.some((k) => k && k.startsWith(h))))];
+    assert.deepEqual(strays, [], `${f} に、正本に無いコミットが書いてある: ${strays.join(', ')}`);
+  }
+});
+
 test('ストア文書が、手元ビルドを提出用として案内していない', () => {
   for (const f of ['store/LISTING.md', 'store/STORE_DASHBOARD_CHANGES.md']) {
     const body = read(f);

@@ -136,8 +136,10 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 SHA-256 : 86e52fd07ea9f604e27ef228dc234651a99667a8e79dd08676f9692b7dfffc0c
 ```
 
-現在の main（`ce48958`）から作られた成果物も中身は1バイト違わず同じですが、
-**タグ `v1.1.7` と同じコミットから作られた上記を正本**とします（第9回監査 R9-004）。
+正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) です。同じ中身の成果物が
+別のコミットのCIにも残りますが、**「最新の main」では選ばず、上の成果物名とSHA-256で選んでください**
+（第10回監査 R10-006）。実物が正本どおりかは
+`npm run verify:store-readiness -- --artifact <成果物.zip>` で確かめられます。
 
 ---
 
