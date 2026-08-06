@@ -7,7 +7,11 @@
     "",
     "列を2つに分けているのは、『コードが何をしているか（事実）』と",
     "『規約がそれをどう分類するか（判断）』を混ぜないため。コードを読んだだけで",
-    "『該当しない』と断定しない。"
+    "『該当しない』と断定しない。",
+    "",
+    "ownerMustConfirm が true の欄は answer を null にし、proposedAnswer に案を置く。",
+    "本人がダッシュボードの現行の設問文を読んで確定し、ownerConfirmation を埋めるまで、",
+    "文書側でも「要確認」と表示する（第7回監査 R7-002）。"
   ],
   "version": "1.1.5",
   "dashboardSection": "Privacy practices › Data usage",
@@ -60,10 +64,17 @@
       "id": "authentication_information",
       "label": "Authentication information",
       "labelJa": "認証情報",
-      "answer": "No",
       "codeFact": "cookie・フォームの入力値を読まず、資格情報を取り出したり保存したり送ったりしない。ただし操作されたときは現在のタブのURL全体をいったん受け取る（ツールバー/ショートカットは activeTab 経由）。認証・設定・組織管理の画面は、Xの投稿画面を開く前に拒否する。URLの断片に = を含むもの（#client_secret=… 等）も落とす",
       "policyBasis": "資格情報そのものは扱わないと判断した。ただし handle には use が含まれ、拒否の前段でURL全体を受け取ってはいるので、現行の設問文で最終確認が要る",
-      "ownerMustConfirm": true
+      "ownerMustConfirm": true,
+      "proposedAnswer": "No",
+      "answer": null,
+      "ownerConfirmation": {
+        "dashboardQuestionText": null,
+        "confirmedOn": null,
+        "chosen": null,
+        "reason": null
+      }
     },
     {
       "id": "personal_communications",
@@ -96,10 +107,17 @@
       "id": "user_activity",
       "label": "User activity",
       "labelJa": "ユーザーの操作",
-      "answer": "No",
       "codeFact": "x.com で keydown を1つ監視しているが、見ているのは Escape かどうかだけで、保存も送信もしない（拡張が自分で開いた投稿画面を閉じるため）。クリック・スクロール・マウス位置・入力内容は読まない",
       "policyBasis": "この欄は『操作の監視（クリック・マウス位置・スクロール・キーロギング等）』を指す。自分で開いた画面を閉じるための1キー判定は監視にあたらないと判断した",
-      "ownerMustConfirm": true
+      "ownerMustConfirm": true,
+      "proposedAnswer": "No",
+      "answer": null,
+      "ownerConfirmation": {
+        "dashboardQuestionText": null,
+        "confirmedOn": null,
+        "chosen": null,
+        "reason": null
+      }
     },
     {
       "id": "website_content",

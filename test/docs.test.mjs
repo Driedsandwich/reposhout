@@ -255,6 +255,20 @@ test('ストア文書のデータ申告が、正本と1つ残らず一致する'
   for (const { file, answerColumn } of DISCLOSURE_TABLES) {
     const got = answersFrom(file, answerColumn);
     for (const cat of DISCLOSURE.categories) {
+      /*
+       * 第7回監査 R7-002。本人の確認が要る欄を、文書側では確定した No として
+       * 見せていた。貼る人は文書しか見ないので、確認待ちのものを確定値で出さない。
+       */
+      if (cat.ownerMustConfirm) {
+        assert.equal(cat.answer, null, `${cat.label}: 確認待ちなのに正本が答えを持っている`);
+        assert.ok(['Yes', 'No'].includes(cat.proposedAnswer),
+          `${cat.label}: 案（proposedAnswer）が無い`);
+        assert.equal(got.get(cat.label), undefined,
+          `${file}: 確認待ちの「${cat.label}」が確定値として書かれている`);
+        assert.ok(new RegExp(`\\| ${cat.label} \\|[^\\n]*要確認`).test(read(file)),
+          `${file}: 「${cat.label}」に要確認の印が無い`);
+        continue;
+      }
       assert.ok(got.has(cat.label), `${file} に「${cat.label}」の行が無い`);
       assert.equal(got.get(cat.label), cat.answer,
         `${file} の「${cat.label}」が正本と違う: 文書=${got.get(cat.label)} 正本=${cat.answer}`);
@@ -262,12 +276,29 @@ test('ストア文書のデータ申告が、正本と1つ残らず一致する'
   }
 });
 
-test('データ申告の欄が9つそろっていて、答えが Yes / No のどちらかである', () => {
+test('確認待ちの欄に、確認結果を書く場所が用意してある', () => {
+  const pending = DISCLOSURE.categories.filter((c) => c.ownerMustConfirm);
+  assert.ok(pending.length >= 1, '確認待ちの欄が1つも無い');
+  for (const c of pending) {
+    const oc = c.ownerConfirmation;
+    assert.ok(oc, `${c.label}: ownerConfirmation が無い`);
+    for (const k of ['dashboardQuestionText', 'confirmedOn', 'chosen', 'reason']) {
+      assert.ok(k in oc, `${c.label}: ${k} の欄が無い`);
+    }
+  }
+});
+
+test('データ申告の欄が9つそろっている', () => {
   const labels = DISCLOSURE.categories.map((c) => c.label);
   assert.equal(labels.length, 9, `欄の数が違う: ${labels.length}`);
   assert.equal(new Set(labels).size, 9, '同じ欄が二重に入っている');
   for (const c of DISCLOSURE.categories) {
-    assert.ok(['Yes', 'No'].includes(c.answer), `${c.label} の答えが Yes / No でない: ${c.answer}`);
+    if (c.ownerMustConfirm) {
+      assert.equal(c.answer, null, `${c.label}: 確認待ちなら答えは持たない`);
+      assert.ok(['Yes', 'No'].includes(c.proposedAnswer), `${c.label} の案が Yes / No でない`);
+    } else {
+      assert.ok(['Yes', 'No'].includes(c.answer), `${c.label} の答えが Yes / No でない: ${c.answer}`);
+    }
     // コードの事実と、規約上の判断は別の欄に書く（どちらか片方で断定しない）
     assert.ok(c.codeFact && c.codeFact.length > 5, `${c.label} にコードの事実が無い`);
     assert.ok(c.policyBasis && c.policyBasis.length > 3, `${c.label} に規約上の根拠が無い`);
