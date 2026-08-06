@@ -131,18 +131,18 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 今回出すもの:
 
 ```
-状態     : pending_main_ci（出せる成果物はまだ存在しません）
-版       : 1.1.8
-中のZIP  : reposhout-1.1.8.zip
-成果物名 : 未定（main への push で CI が作ってから決まります）
-SHA-256  : 未定（同上）
+成果物 : reposhout-package-cf04a5450af80d291ad13835ca2180d6059751b4
+中のZIP : reposhout-1.1.8.zip
+大きさ : 29,970 B / 11ファイル
+SHA-256 : b4bb967e76c9d6d570e1edffaf206b9effefd6971ac5d6814fdd1e070dcd440b
 ```
 
 正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) です。1.1.8 は
-`src/share.js` を直した版なので配布物の中身が変わります（第11回監査 R11-001）。
-成果物が出るまでこの欄は埋まりません。**「最新の main」では選ばず、正本に書く成果物名と
-SHA-256 で選んでください**（第10回監査 R10-006）。実物が正本どおりかは
-`npm run verify:submission-ready -- --artifact <成果物.zip> ...` で確かめられます。
+`src/share.js` を直した版で、配布物の中身が 1.1.7 から変わっています（第11回監査 R11-001）。
+**「最新の main」では選ばず、上の成果物名とSHA-256 で選んでください**（第10回監査 R10-006）。
+実物が正本どおりかは
+`npm run verify:submission-ready -- --artifact <成果物.zip> --audit-report … --audit-attestation …`
+で確かめられます。
 
 ---
 

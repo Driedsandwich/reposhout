@@ -200,10 +200,15 @@ export function validateStoreReadiness(input) {
   };
   collect(candidate);
   (candidate.history || []).forEach(collect);
+  /*
+   * 数字だけの並び（run ID など）はコミットではないので対象外にする。
+   * ここで見たいのは「文書に書かれた git のコミット」だけ。
+   */
   for (const [name, body] of [['store/LISTING.md', listing],
                               ['store/STORE_DASHBOARD_CHANGES.md', dashboardChanges]]) {
-    const strays = (body.match(/\b[0-9a-f]{7,40}\b/g) || []).filter(
-      (h) => ![...known].some((k) => k.startsWith(h)));
+    const strays = (body.match(/\b[0-9a-f]{7,40}\b/g) || [])
+      .filter((h) => /[a-f]/.test(h))
+      .filter((h) => ![...known].some((k) => k.startsWith(h)));
     check(`${name} に古くなるコミットを書いていない`, strays.length === 0,
       `正本に無いコミットが書いてある: ${[...new Set(strays)].join(', ')}`);
   }

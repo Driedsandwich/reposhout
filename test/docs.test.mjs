@@ -374,7 +374,9 @@ test('ストア文書が、正本の成果物と一致していて、可変な m
       assert.ok(body.includes(cand.artifactName), `${f} に正本の成果物名が無い`);
       assert.ok(body.includes(cand.innerSha256), `${f} に正本のSHA-256が無い`);
     }
+    /* 数字だけの並び（run ID など）はコミットではない */
     const strays = [...new Set((body.match(/\b[0-9a-f]{7,40}\b/g) || [])
+      .filter((h) => /[a-f]/.test(h))
       .filter((h) => !known.some((k) => k && k.startsWith(h))))];
     assert.deepEqual(strays, [], `${f} に、正本に無いコミットが書いてある: ${strays.join(', ')}`);
   }

@@ -47,8 +47,13 @@
 
 ### 出す成果物
 
-**まだ存在しない。** `store/SUBMISSION_CANDIDATE.json` は `pending_main_ci` で、
-成果物名もSHA-256も `null` のまま。main の CI が作ってから実測値を書く。
+main への push で走った CI（run 31117148744）が作ったものを、ダウンロードして実測した。
+
+    成果物  : reposhout-package-cf04a5450af80d291ad13835ca2180d6059751b4
+    中のZIP : reposhout-1.1.8.zip / 29,970 B / 11ファイル
+    SHA-256 : b4bb967e76c9d6d570e1edffaf206b9effefd6971ac5d6814fdd1e070dcd440b
+
+**タグはまだ打っていない**（外部監査に合格してから）。1.1.7 は提出しない。
 
 ## [未リリース] — 拡張機能の版は 1.1.7 のまま（文書・検査・CIだけ）
 

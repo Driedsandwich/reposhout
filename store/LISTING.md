@@ -93,32 +93,23 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 **今回出す正本**（正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json)）:
 
 ```
-状態     : pending_main_ci（出せる成果物はまだ存在しません）
-版       : 1.1.8
-中のZIP  : reposhout-1.1.8.zip
-成果物名 : 未定（main への push で CI が作ってから決まります）
-SHA-256  : 未定（同上）
+成果物 : reposhout-package-cf04a5450af80d291ad13835ca2180d6059751b4
+中のZIP : reposhout-1.1.8.zip
+大きさ : 29,970 B / 11ファイル
+SHA-256 : b4bb967e76c9d6d570e1edffaf206b9effefd6971ac5d6814fdd1e070dcd440b
 ```
 
-1.1.8 は `src/share.js` を直した版なので、**配布物の中身が 1.1.7 から変わります**
-（第11回監査 R11-001）。本人がコミットして main の CI が走るまで、出すべき成果物は
-存在しません。**推測で書かない・手元で作ったZIPで代用しない**——手元ビルドの名前には
-`NON-SUBMITTABLE` が付きます。
-
-成果物が出たら、次の順で確定します。
-
-1. main の該当 run から `reposhout-package-<コミットSHA>` をダウンロードする
-2. `store/SUBMISSION_CANDIDATE.json` に、実測した成果物名・コミット・tree・run・
-   中のZIPの大きさ・収録数・SHA-256 を書く
-3. 次で、書いた値と実物が合っているかを機械的に確かめる
-
-```
-npm run verify:submission-ready -- --artifact <成果物.zip> \
-    --audit-report <監査報告書> --audit-attestation <監査申告.json>
-```
+main への push で走った CI（run 31117148744）が作ったものを、ダウンロードして実測した値です。
+**タグはまだ打っていません**（外部監査に合格してから打ちます）。1.1.7 は R11-001 のため提出しません。
 
 **「最新の main」で成果物を選ばないでください。** main は文書・テスト・CIの変更でも進むので、
-同じ版の成果物が複数残ります。選ぶ基準は正本に書いた成果物名とSHA-256です（第10回監査 R10-006）。
+同じ版の成果物が複数残ります。選ぶ基準は上の成果物名とSHA-256です（第10回監査 R10-006）。
+実物が正本どおりかは、次で機械的に確かめられます（`preflight` だけでは足りません）。
+
+```
+npm run verify:submission-ready -- --artifact <ダウンロードした成果物.zip> \
+    --audit-report <監査報告書> --audit-attestation <監査申告.json>
+```
 
 **手元に控えを残す**（提出後に「何を出したか」を後から確かめられるようにするため）:
 ダウンロードした成果物のZIPそのもの・`release-manifest.json`・`reposhout-1.1.8.zip`・
