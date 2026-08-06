@@ -3,6 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+    # タグを打った直後にも走らせる。公開状態の検査は、タグが実在する状態でしか
+    # 何も確かめられない（第7回監査 R7-003）。成果物は main への push のときだけ残す。
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
