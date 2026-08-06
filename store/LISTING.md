@@ -109,8 +109,9 @@ Changed your mind? Press Escape in the share window to dismiss it.
   Markdown file and a prepared pull request's title and body are kept, while
   tracking parameters are dropped. Line, comment and README section anchors are kept
 • Character counting follows X's published rules, including Japanese, Chinese and
-  Korean text, emoji and links, and errs on the side of counting high, so a long
-  title is trimmed with room to spare
+  Korean text, emoji and links. No under-count was found against twitter-text 3.1.0
+  in the pinned counting sections of the official corpus, the regression fixtures or
+  the generated differential corpus, so a long title is trimmed with room to spare
 • Issue and pull request numbers stay in the post even when the title is trimmed
 • Light and dark mode follow GitHub's own theme automatically
 • Press Escape in the share window to dismiss it if you change your mind
