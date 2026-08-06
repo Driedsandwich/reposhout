@@ -175,28 +175,43 @@ export function makePackage({
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
   const ci = readCiContext(env);
   const dirty = git(['status', '--porcelain']) !== '';
+  const sourceCommit = git(['rev-parse', 'HEAD']);
 
   /*
-   * 提出してよい成果物の条件は2つだけ。
-   *   1. 未コミットの変更が無い（履歴と突き合わせられる）
-   *   2. PRの検証ビルドではない（一時マージコミットから作られていない）
-   * 名前にも書く。記録を読まずにファイルだけ拾っても間違えないように。
+   * 提出してよい成果物の条件を「満たすべきものを並べて全部通ったときだけ true」にする。
+   *
+   * 以前は「PRでなく、汚れてもいなければ true」という消去法だった（第6回監査 R6-001）。
+   * それだと手元のビルドも、feature ブランチやタグから手で回した CI も提出候補に見える。
+   * `workflow_dispatch` は実行するブランチを選べるので、これは机上の話ではない。
    */
-  const isPrBuild = ci.eventName === 'pull_request';
-  const submittable = !dirty && !isPrBuild;
-  const marks = [dirty ? 'dirty' : null, isPrBuild ? 'NON-SUBMITTABLE' : null].filter(Boolean);
+  const notSubmittableBecause = [];
+  if (ci.eventName === 'local') {
+    notSubmittableBecause.push('手元のビルド（CIが作ったものではない）');
+  } else if (ci.eventName !== 'push') {
+    notSubmittableBecause.push(`${ci.eventName} で作られている（main への push ではない）`);
+  } else if (ci.ref !== 'refs/heads/main') {
+    notSubmittableBecause.push(`main 以外の ref から作られている（${ci.ref}）`);
+  }
+  if (ci.githubSha && sourceCommit !== ci.githubSha) {
+    notSubmittableBecause.push('取り出したコミットと GITHUB_SHA が一致しない');
+  }
+  if (dirty) notSubmittableBecause.push('未コミットの変更がある');
+  const submittable = notSubmittableBecause.length === 0;
+
+  /*
+   * 名前にも書く。記録を読まずにファイルだけ拾っても間違えないように。
+   * 提出してよいものだけが素の名前になる。
+   */
+  const marks = [dirty ? 'dirty' : null, submittable ? null : 'NON-SUBMITTABLE'].filter(Boolean);
   const finalName = `reposhout-${manifest.version}${marks.map((m) => `-${m}`).join('')}.zip`;
 
   const provenance = {
     version: manifest.version,
-    sourceCommit: git(['rev-parse', 'HEAD']),
+    sourceCommit,
     treeSha: git(['rev-parse', 'HEAD^{tree}']),
     dirty,
     submittable,
-    notSubmittableBecause: submittable
-      ? null
-      : [dirty ? '未コミットの変更がある' : null, isPrBuild ? 'PRの検証ビルド（一時マージコミット由来）' : null]
-          .filter(Boolean),
+    notSubmittableBecause: submittable ? null : notSubmittableBecause,
     ci,
     node: process.version,
     generatedFrom: 'scripts/package.mjs',

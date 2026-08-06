@@ -30,6 +30,16 @@ const fakeGit = ({ dirty = false } = {}) => (args) => {
   return null;
 };
 
+/* 提出候補になる唯一の経路＝main への push */
+const mainPushEnv = (sha = CLEAN_COMMIT) => ({
+  CI: 'true',
+  GITHUB_ACTIONS: 'true',
+  GITHUB_EVENT_NAME: 'push',
+  GITHUB_REF: 'refs/heads/main',
+  GITHUB_RUN_ID: '999',
+  GITHUB_SHA: sha
+});
+
 function freshDist() {
   const base = mkdtempSync(join(tmpdir(), 'reposhout-dist-'));
   return join(base, 'dist');
@@ -67,7 +77,7 @@ function faultyIo({ failWrite = null, failRename = null }) {
 const leftovers = (distDir) => readdirSync(dirname(distDir)).filter((n) => n !== 'dist');
 
 function buildOnce(distDir, extra = {}) {
-  return makePackage({ distDir, git: fakeGit(), env: {}, ...extra });
+  return makePackage({ distDir, git: fakeGit(), env: mainPushEnv(), ...extra });
 }
 
 test('通常のビルドが3点そろって出来て、記録が実物と一致する', () => {
@@ -183,7 +193,7 @@ test('検査が効いているかの対照（先に消す旧方式なら前の�
 test('未コミットの変更があるとき、提出用の名前では作らない', () => {
   const distDir = freshDist();
   assert.throws(
-    () => makePackage({ distDir, git: fakeGit({ dirty: true }), env: {} }),
+    () => makePackage({ distDir, git: fakeGit({ dirty: true }), env: mainPushEnv() }),
     /未コミットの変更があります/
   );
   assert.equal(existsSync(distDir), false, '失敗したのに dist を作っている');
@@ -192,7 +202,7 @@ test('未コミットの変更があるとき、提出用の名前では作ら�
 test('--allow-dirty のとき、ファイル名と記録の名前が一致する', () => {
   const distDir = freshDist();
   const r = makePackage({ distDir, git: fakeGit({ dirty: true }), env: {}, allowDirty: true });
-  const expected = `reposhout-${r.version}-dirty.zip`;
+  const expected = `reposhout-${r.version}-dirty-NON-SUBMITTABLE.zip`;
 
   assert.equal(basename(r.file), expected);
   assert.ok(existsSync(join(distDir, expected)), '-dirty の名前で出来ていない');
@@ -243,14 +253,7 @@ test('PRの検証ビルドは、名前と記録の両方で提出候補と区別
 
 test('main への push で作った成果物は提出候補になる', () => {
   const distDir = freshDist();
-  const env = {
-    CI: 'true',
-    GITHUB_ACTIONS: 'true',
-    GITHUB_EVENT_NAME: 'push',
-    GITHUB_REF: 'refs/heads/main',
-    GITHUB_RUN_ID: '124',
-    GITHUB_SHA: CLEAN_COMMIT
-  };
+  const env = mainPushEnv();
   const r = makePackage({ distDir, git: fakeGit(), env });
   assert.equal(basename(r.file), `reposhout-${r.version}.zip`);
   assert.equal(r.submittable, true);
@@ -259,6 +262,60 @@ test('main への push で作った成果物は提出候補になる', () => {
   assert.equal(m.ci.ref, 'refs/heads/main');
   assert.equal(m.sourceCommit, m.ci.githubSha,
     '取り出したコミットと GITHUB_SHA が一致していない');
+});
+
+/*
+ * 提出候補になれるのは「main への push」だけ。
+ *
+ * 以前は「PRでなく、汚れてもいなければ提出候補」という消去法だったので、
+ * 手元のビルドも、feature ブランチやタグから手で回した CI も提出候補に見えた
+ * （第6回監査 R6-001）。workflow_dispatch は実行するブランチを選べるので、
+ * これは机上の話ではない。
+ */
+for (const [label, env, expectReason] of [
+  ['手元のビルド', {}, /手元のビルド/],
+  ['main で手動実行した CI', {
+    CI: 'true', GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'workflow_dispatch',
+    GITHUB_REF: 'refs/heads/main', GITHUB_SHA: CLEAN_COMMIT
+  }, /workflow_dispatch/],
+  ['feature ブランチで手動実行した CI', {
+    CI: 'true', GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'workflow_dispatch',
+    GITHUB_REF: 'refs/heads/feat/anything', GITHUB_SHA: CLEAN_COMMIT
+  }, /workflow_dispatch/],
+  ['タグで手動実行した CI', {
+    CI: 'true', GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'workflow_dispatch',
+    GITHUB_REF: 'refs/tags/v9.9.9', GITHUB_SHA: CLEAN_COMMIT
+  }, /workflow_dispatch/],
+  ['main 以外への push', {
+    CI: 'true', GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'push',
+    GITHUB_REF: 'refs/heads/feat/anything', GITHUB_SHA: CLEAN_COMMIT
+  }, /main 以外の ref/],
+  ['取り出したコミットと GITHUB_SHA が違う', {
+    CI: 'true', GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'push',
+    GITHUB_REF: 'refs/heads/main', GITHUB_SHA: 'f'.repeat(40)
+  }, /GITHUB_SHA が一致しない/]
+]) {
+  test(`${label} は提出候補にならない`, () => {
+    const distDir = freshDist();
+    const r = makePackage({ distDir, git: fakeGit(), env });
+    assert.equal(r.submittable, false, `${label} が提出候補になっている`);
+    assert.equal(basename(r.file), `reposhout-${r.version}-NON-SUBMITTABLE.zip`,
+      `${label} のZIPが提出用と同じ名前になっている`);
+    const m = JSON.parse(readFileSync(join(distDir, 'release-manifest.json'), 'utf8'));
+    assert.equal(m.submittable, false);
+    assert.ok(m.notSubmittableBecause.some((s) => expectReason.test(s)),
+      `理由が書かれていない: ${JSON.stringify(m.notSubmittableBecause)}`);
+  });
+}
+
+test('提出可否の判定が効いているかの対照', () => {
+  // 旧判定（PRでなく汚れていなければ提出可）だと、手元のビルドまで提出候補になる
+  const oldPredicate = (ci, dirty) => !dirty && ci.eventName !== 'pull_request';
+  assert.equal(oldPredicate({ eventName: 'local' }, false), true,
+    '対照が成立していない＝旧判定でも手元ビルドを弾けてしまう');
+
+  const r = makePackage({ distDir: freshDist(), git: fakeGit(), env: {} });
+  assert.equal(r.submittable, false, '新しい判定が手元ビルドを弾いていない');
 });
 
 test('同じ入力からは同じZIPが出来る（決定論）', () => {

@@ -42,16 +42,22 @@ dist/reposhout-1.1.4.zip
 
 | 見るところ | 提出してよいもの | 出してはいけないもの |
 |---|---|---|
-| ファイル名 | `reposhout-1.1.4.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty.zip` |
+| ファイル名 | `reposhout-1.1.4.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty-NON-SUBMITTABLE.zip` |
 | `dist/release-manifest.json` の `submittable` | `true` | `false` |
-| 同 `ci.eventName` | `push`（main）または `workflow_dispatch` | `pull_request` |
-| 同 `sourceCommit` | main のコミットと一致 | 一致しない |
+| 同 `ci.eventName` | `push` | `pull_request` / `workflow_dispatch` / `local` |
+| 同 `ci.ref` | `refs/heads/main` | それ以外 |
+| 同 `sourceCommit` | main のコミットと一致（`ci.githubSha` とも一致） | 一致しない |
 
-PRのCIはそもそも成果物を残しません（作れることの確認だけ）。使うのは、**main へマージしたあとに走った
+**提出候補になるのは「main への push で走ったCI」だけです**（1.1.4 で厳しくしました・第6回監査 R6-001）。
+手元で `npm run package` して作ったZIPも、feature ブランチやタグから手で回したCIのZIPも、
+名前に `NON-SUBMITTABLE` が付き、記録の `submittable` は `false` になります。
+PRのCIはそもそも成果物を残しません（作れることの確認だけ）。
+
+使うのは、**main へマージしたあとに走った
 CI が残した `reposhout-package-<コミットSHA>`** です。手順は次のとおり。
 
 1. Actions で main の該当 run を開き、成果物 `reposhout-package-<SHA>` をダウンロードする
-2. 展開して `release-manifest.json` を開き、上の表の4点を確かめる
+2. 展開して `release-manifest.json` を開き、上の表の5点を確かめる
 3. `shasum -a 256 reposhout-1.1.4.zip` の値が、同梱の `.sha256` と一致することを確かめる
 4. その展開物をそのまま「パッケージ化されていない拡張機能」として読み込み、動作を見る
 5. **そのZIPをアップロードする**（手元で作り直したものと差し替えない）
