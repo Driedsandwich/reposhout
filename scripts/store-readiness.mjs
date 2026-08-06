@@ -2,26 +2,21 @@
  * store-readiness.mjs — ストアへ出す前の確認を、純粋な関数として持つ
  *
  * 第9回監査 R9-002 で作った関門は、ファイルを読んで表示するだけのスクリプトだった。
- * そのため**テストが1つも無く**、中身も「文字列があるか」「桁数が合うか」しか見て
- * いなかった。第10回監査 R10-002 で、次のでたらめな値でも全部 ✅ になり
- * 「すべてそろっています」と表示することが実測で示された。
+ * テストが1つも無く、中身も「文字列があるか」「桁数が合うか」しか見ていなかったので、
+ * でたらめな値でも全部 ✅ になった（第10回監査 R10-002 で実測）。そこで判定を
+ * 副作用の無い関数へ分け、fixture テストを付けた。
  *
- *   成果物名  reposhout-package-0000000000000000000000000000000000000000
- *   SHA-256   0000…0000（64桁の0）
- *   確認日    not-a-date
- *   設問文    空白1文字
- *   3つの証明 すべて未チェック
- *   ポリシーURL http://invalid.example
+ * 第11回監査 R11-002 で、さらに次を直している。
  *
- * ここでは判定を副作用の無い関数へ分け、CLI（verify-store-readiness.mjs）は
- * ファイルを読んで渡し、結果を表示するだけにする。テストは fixture を直接渡す。
- *
- * **この関門が通っても「提出してよい」にはならない。** ここで見られるのは
- * リポジトリ側の材料だけで、外部監査の判定と、ダッシュボードの現行の設問文を
- * 本人が読んで確定する作業は別に要る。表示する文言もそう書く。
+ *   ・**2段に分ける。** preflight はリポジトリ側の材料だけを見る。実物の成果物も
+ *     外部監査の判定も無いまま exit 0 になり得るので、**これを最終関門にしない**。
+ *     strict は実物の成果物と外部監査の申告を**必須**にする。
+ *   ・外部監査の申告は、リポジトリに置いた自己申告では権威にしない。報告書の実体を
+ *     読んでハッシュを計算し、申告と突き合わせる（呼び出し側が計算して渡す）。
+ *   ・申告は runtime（配布物）だけでなく **metadata（掲載文・申告の位置）** にも結び付ける。
+ *     監査後に文書を書き換えたら合わなくなる。
  */
 
-/* 40桁・64桁の16進 */
 const HEX40 = /^[0-9a-f]{40}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -36,19 +31,8 @@ function isRealDate(s) {
 }
 
 /**
- * @param {object} input
- * @param {object} input.disclosure      store/DATA_DISCLOSURE.json
- * @param {object} input.candidate       store/SUBMISSION_CANDIDATE.json
- * @param {string} input.manifestVersion manifest.json の version
- * @param {string} input.packageVersion  package.json の version
- * @param {string} input.privacy         PRIVACY.md 本文
- * @param {string} input.listing         store/LISTING.md 本文
- * @param {string} input.dashboardChanges store/STORE_DASHBOARD_CHANGES.md 本文
- * @param {string} input.today           'YYYY-MM-DD'（未来日の判定に使う）
- * @param {?object} input.artifact       {outerName, files:[{name,data(Buffer)}]} 実物を見るとき
- * @param {?object} input.audit          外部監査の申告 {verdict, reportSha256, date, sourceCommit}
- * @param {function} input.sha256        (Buffer) => hex64
- * @returns {{problems:string[], ok:string[], artifactChecked:boolean, auditChecked:boolean}}
+ * @param {object} input   ファイルを読んだ結果（この関数はファイルを読まない）
+ * @returns {{problems:string[], ok:string[], mode:string, artifactChecked:boolean, auditChecked:boolean}}
  */
 export function validateStoreReadiness(input) {
   const problems = [];
@@ -59,10 +43,16 @@ export function validateStoreReadiness(input) {
   };
 
   const {
+    mode = 'preflight',
     disclosure, candidate, manifestVersion, packageVersion,
     privacy = '', listing = '', dashboardChanges = '',
-    today, artifact = null, audit = null, sha256, readZipStrict = null
+    today, artifact = null, audit = null, auditReportSha256 = null,
+    metadata = null,          // いまの文書側の位置 {sourceCommit, treeSha, dirty}
+    sha256, readZipStrict = null
   } = input;
+
+  const strict = mode === 'strict';
+  const pending = candidate.status === 'pending_main_ci';
 
   /* ---- 1. 版がそろっているか ---------------------------------------- */
   check('版の一致',
@@ -91,7 +81,6 @@ export function validateStoreReadiness(input) {
     check(`${at} の選んだ答え`, ['Yes', 'No'].includes(oc.chosen), `Yes / No でない: ${oc.chosen}`);
     check(`${at} の一致`, c.answer === oc.chosen,
       `answer(${c.answer}) と ownerConfirmation.chosen(${oc.chosen}) が違う`);
-    /* 空白だけの文字列を「埋まっている」と数えない（R10-002） */
     check(`${at} の読んだ設問文`, !blank(oc.dashboardQuestionText), '空欄または空白だけ');
     check(`${at} の理由`, !blank(oc.reason), '空欄または空白だけ');
     check(`${at} の確認した日`, !blank(oc.confirmedOn) && isRealDate(oc.confirmedOn),
@@ -125,12 +114,6 @@ export function validateStoreReadiness(input) {
   check('Limited Use の遵守声明（日本語）',
     /ユーザーデータポリシー（Limited Use の要件を含む）に従います/.test(privacy),
     'PRIVACY.md に日本語の遵守声明が無い');
-  /*
-   * 同じ文書が「Xへ渡る」と書いているのに「人は誰も読まない」「受け取れるサーバーは
-   * 無い」と断定すると、字義上その文書自身と矛盾する（R10-001）。保証できるのは
-   * 開発者側だけなので、開発者側に限定した書き方を要求する。
-   */
-  /* 文が改行で折り返されていても同じ判定になるよう、空白を潰した写しで見る */
   const flat = privacy.replace(/\s+/g, ' ');
   const sendsToX = /X receives|Xへ渡|Xは利用者が要求した/.test(flat);
   for (const [re, why] of [
@@ -162,27 +145,53 @@ export function validateStoreReadiness(input) {
     /すべて No|全部 No/.test(listing),
     '掲載中の古い申告（すべてNo）を直す指示が無い');
 
-  /* ---- 7. 出す成果物が正本と一字一句一致しているか --------------------- */
-  check('成果物名が正本と一致',
-    listing.includes(candidate.artifactName),
-    `store/LISTING.md に ${candidate.artifactName} が無い`);
-  check('中身のZIPのハッシュが正本と一致',
-    listing.includes(candidate.innerSha256),
-    `store/LISTING.md に ${candidate.innerSha256} が無い`);
-  check('正本のコミットが40桁の16進', HEX40.test(candidate.sourceCommit || ''),
-    `sourceCommit が不正: ${candidate.sourceCommit}`);
-  check('正本のハッシュが64桁の16進', HEX64.test(candidate.innerSha256 || ''),
-    `innerSha256 が不正: ${candidate.innerSha256}`);
+  /* ---- 7. 出す成果物の正本 -------------------------------------------- */
+  if (pending) {
+    /*
+     * まだ main の CI が作っていない。ここで名前やハッシュを推測で埋めない
+     * （第11回監査 Task B）。preflight では「進行中」として扱い、strict では落とす。
+     */
+    for (const [k, v] of Object.entries({
+      sourceCommit: candidate.sourceCommit, artifactName: candidate.artifactName,
+      innerSha256: candidate.innerSha256, runId: candidate.runId
+    })) {
+      check(`正本の ${k} が空のまま`, v === null,
+        `pending_main_ci なのに値が入っている: ${v}`);
+    }
+    for (const [name, body] of [['store/LISTING.md', listing],
+                                ['store/STORE_DASHBOARD_CHANGES.md', dashboardChanges]]) {
+      check(`${name} が「まだ成果物が無い」と書いている`, body.includes('pending_main_ci'),
+        '成果物が未確定であることが書いていない');
+    }
+    if (strict) {
+      problems.push('提出できる成果物 — まだ main の CI が作っていません（pending_main_ci）');
+    }
+  } else {
+    check('成果物名が正本と一致', listing.includes(candidate.artifactName),
+      `store/LISTING.md に ${candidate.artifactName} が無い`);
+    check('中身のZIPのハッシュが正本と一致', listing.includes(candidate.innerSha256),
+      `store/LISTING.md に ${candidate.innerSha256} が無い`);
+    check('正本のコミットが40桁の16進', HEX40.test(candidate.sourceCommit || ''),
+      `sourceCommit が不正: ${candidate.sourceCommit}`);
+    check('正本のハッシュが64桁の16進', HEX64.test(candidate.innerSha256 || ''),
+      `innerSha256 が不正: ${candidate.innerSha256}`);
+  }
 
   /*
-   * 文書に「いまの main はどこか」を書かない（R10-006）。main は文書・テスト・CIで
-   * 進むので、書いた時点で古くなる。正本に無いコミットが書いてあれば止める。
+   * 文書に「いまの main はどこか」を書かない（第10回監査 R10-006）。
+   * 正本（履歴を含む）に無いコミットが書いてあれば止める。
    */
-  const known = new Set([candidate.sourceCommit, candidate.treeSha, candidate.innerSha256]);
+  const known = new Set();
+  const collect = (o) => {
+    if (!o) return;
+    for (const k of ['sourceCommit', 'treeSha', 'innerSha256']) if (o[k]) known.add(o[k]);
+  };
+  collect(candidate);
+  (candidate.history || []).forEach(collect);
   for (const [name, body] of [['store/LISTING.md', listing],
                               ['store/STORE_DASHBOARD_CHANGES.md', dashboardChanges]]) {
     const strays = (body.match(/\b[0-9a-f]{7,40}\b/g) || []).filter(
-      (h) => ![...known].some((k) => k && k.startsWith(h)));
+      (h) => ![...known].some((k) => k.startsWith(h)));
     check(`${name} に古くなるコミットを書いていない`, strays.length === 0,
       `正本に無いコミットが書いてある: ${[...new Set(strays)].join(', ')}`);
   }
@@ -194,9 +203,12 @@ export function validateStoreReadiness(input) {
       '手元ビルドを提出用として案内している');
   }
 
-  /* ---- 9. 実物の成果物（--artifact で渡されたときだけ） ----------------- */
+  /* ---- 9. 実物の成果物 ------------------------------------------------ */
   let artifactChecked = false;
-  if (artifact) {
+  if (strict && !artifact) {
+    problems.push('実物の成果物 — strict では --artifact が要ります（見ないまま提出可にしない）');
+  }
+  if (artifact && !pending) {
     artifactChecked = true;
     check('成果物の名前', artifact.outerName === candidate.artifactName,
       `${artifact.outerName} は正本 ${candidate.artifactName} と違う`);
@@ -219,10 +231,6 @@ export function validateStoreReadiness(input) {
         `実測 ${innerZip.length} B ≠ 正本 ${candidate.innerBytes} B`);
     }
     if (innerZip && readZipStrict) {
-      /*
-       * 外側の容れ物はGitHubが書くので data descriptor を許すが、中身の配布ZIPは
-       * こちらが作ったものなので厳しいまま読む。収録数もここで数える。
-       */
       let entries = null;
       let why = '';
       try { entries = readZipStrict(innerZip); } catch (e) { why = e.message; }
@@ -240,11 +248,10 @@ export function validateStoreReadiness(input) {
     }
     if (manifestRaw) {
       let rm = null;
-      try { rm = JSON.parse(manifestRaw.toString('utf8')); } catch { /* 下で落とす */ }
+      try { rm = JSON.parse(manifestRaw.toString('utf8')); } catch { /* 次の行で落とす */ }
       check('記録が読める', Boolean(rm), 'release-manifest.json が壊れている');
       if (rm) {
-        check('記録の版', rm.version === candidate.version,
-          `${rm.version} ≠ ${candidate.version}`);
+        check('記録の版', rm.version === candidate.version, `${rm.version} ≠ ${candidate.version}`);
         check('記録のコミット', rm.sourceCommit === candidate.sourceCommit,
           `${rm.sourceCommit} ≠ ${candidate.sourceCommit}`);
         check('記録のtree', rm.treeSha === candidate.treeSha,
@@ -265,19 +272,50 @@ export function validateStoreReadiness(input) {
     }
   }
 
-  /* ---- 10. 外部監査の判定（申告があるときだけ） ------------------------ */
+  /* ---- 10. 外部監査の申告 --------------------------------------------- */
   let auditChecked = false;
+  if (strict && !audit) {
+    problems.push('外部監査の判定 — strict では申告（--audit-attestation）が要ります');
+  }
   if (audit) {
     auditChecked = true;
-    check('外部監査の判定', audit.verdict === 'READY',
-      `判定が READY でない: ${audit.verdict}`);
-    check('外部監査が見たコミット', audit.sourceCommit === candidate.sourceCommit,
-      `${audit.sourceCommit} ≠ ${candidate.sourceCommit}`);
-    check('外部監査の報告書のハッシュ', HEX64.test(audit.reportSha256 || ''),
+    check('外部監査の判定', audit.verdict === 'READY', `判定が READY でない: ${audit.verdict}`);
+    check('外部監査が見た配布物のコミット', audit.runtimeSourceCommit === candidate.sourceCommit,
+      `${audit.runtimeSourceCommit} ≠ ${candidate.sourceCommit}`);
+    check('外部監査が見た配布物のtree', audit.runtimeTree === candidate.treeSha,
+      `${audit.runtimeTree} ≠ ${candidate.treeSha}`);
+    check('外部監査が見た配布物のハッシュ', audit.innerSha256 === candidate.innerSha256,
+      '申告のZIPハッシュが正本と違う');
+    check('外部監査が見た版', audit.runtimeVersion === candidate.version,
+      `${audit.runtimeVersion} ≠ ${candidate.version}`);
+    check('外部監査の日付', isRealDate(audit.auditDate || ''),
+      `YYYY-MM-DD の実在する日でない: ${audit.auditDate}`);
+    check('外部監査の実施者', !blank(audit.auditor), '空欄');
+    /*
+     * 報告書は書式ではなく**実体のハッシュ**で結び付ける。呼び出し側が
+     * 実ファイルを読んで計算した値を渡す（第11回監査 R11-002）。
+     */
+    check('外部監査の報告書のハッシュが64桁の16進', HEX64.test(audit.reportSha256 || ''),
       `64桁の16進でない: ${audit.reportSha256}`);
-    check('外部監査の日付', isRealDate(audit.date || ''),
-      `YYYY-MM-DD の実在する日でない: ${audit.date}`);
+    check('外部監査の報告書が実物と一致',
+      Boolean(auditReportSha256) && auditReportSha256 === audit.reportSha256,
+      auditReportSha256
+        ? `実測 ${auditReportSha256} ≠ 申告 ${audit.reportSha256}`
+        : '報告書の実体を渡していない（--audit-report）');
+    /*
+     * 掲載文とデータ申告は監査のあとで書き換えられる。**文書側の位置**も結び付ける。
+     */
+    check('外部監査が見た文書のコミット',
+      Boolean(metadata) && audit.metadataSourceCommit === metadata.sourceCommit,
+      metadata ? `申告 ${audit.metadataSourceCommit} ≠ いまの ${metadata.sourceCommit}`
+               : 'いまの文書側の位置を渡していない');
+    check('外部監査が見た文書のtree',
+      Boolean(metadata) && audit.metadataTree === metadata.treeSha,
+      metadata ? `申告 ${audit.metadataTree} ≠ いまの ${metadata.treeSha}` : '同上');
+    check('文書側に未コミットの変更が無い',
+      Boolean(metadata) && metadata.dirty === false,
+      metadata ? '未コミットの変更がある' : '同上');
   }
 
-  return { problems, ok, artifactChecked, auditChecked };
+  return { problems, ok, mode, artifactChecked, auditChecked };
 }
