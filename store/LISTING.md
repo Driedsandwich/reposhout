@@ -1,17 +1,18 @@
 # Chrome ウェブストア 提出手順書
 
-更新: 2026-08-06 / 対象: RepoShout **1.1.5**（未提出。公開状態の正本は [RELEASE_STATUS.md](../RELEASE_STATUS.md)）
+更新: 2026-08-06 / 対象: RepoShout **1.1.6**（未提出。公開状態の正本は [RELEASE_STATUS.md](../RELEASE_STATUS.md)）
 **この文書は原稿と手順です。提出（Submit for review）はあなたが実行します。**
 
 > **提出の前提（2026-08-05 決定）**: 外部監査（ChatGPT の GPT-5.6 Sol Pro）に**合格してから**提出する。
-> 現時点の最新監査は第6回で、判定は `NOT READY`（P2が4件・P3が1件）。
-> 次の監査で合格が出るまで、この手順は実行しない。
+> **合格が出るまでこの手順は実行しない。** 何回目まで済んでいて判定がどうだったかは、
+> ここへ書くと必ず古くなるので書かない。最新の判定は `~/dev/ClaudeCode` の監査応答ファイル
+> （`REPOSHOUT_*_AUDIT_RESPONSE_*.md`）の日付が新しいものを見ること。
 初回提出と更新提出の両方でこの文書を使います。更新のときは §1 のアップロードと、変えた機能に関わる §2 の掲載文だけを直せば足ります。
 
 デベロッパーダッシュボードの画面順に並べてあります。上から順に進めてください。
 各欄はコードブロックをそのままコピペできます。
 
-- 提出用ZIP: リポジトリで `npm run package` を実行すると `dist/reposhout-<版>.zip` ができます（収録一覧は `scripts/package-files.mjs`・allowlist方式）。同じ内容なら何度作っても同じZIPになるので、`dist/*.zip.sha256` の値で手元と提出物の一致を確かめられます
+- 提出用ZIP: **手元で `npm run package` して作ったものは提出しません**（名前に `NON-SUBMITTABLE` が付きます）。使うのは main への push で走ったCIが残した成果物だけです（→ §1「どのZIPを出すか」）。収録一覧は `scripts/package-files.mjs`・allowlist方式で、同じ内容なら何度作っても同じZIPになります
 - 公開リポジトリ: https://github.com/Driedsandwich/reposhout
 - ダッシュボード: https://chrome.google.com/webstore/devconsole
 
@@ -29,7 +30,7 @@
 **「新しいアイテムを追加」→ ZIPをドラッグ**
 
 ```
-dist/reposhout-1.1.5.zip
+dist/reposhout-1.1.6.zip
 ```
 
 ### どのZIPを出すか（2026-08-06 追加・第5回監査 R5-003）
@@ -42,7 +43,7 @@ dist/reposhout-1.1.5.zip
 
 | 見るところ | 提出してよいもの | 出してはいけないもの |
 |---|---|---|
-| ファイル名 | `reposhout-1.1.5.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty-NON-SUBMITTABLE.zip` |
+| ファイル名 | `reposhout-1.1.6.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty-NON-SUBMITTABLE.zip` |
 | `dist/release-manifest.json` の `submittable` | `true` | `false` |
 | 同 `ci.eventName` | `push` | `pull_request` / `workflow_dispatch` / `local` |
 | 同 `ci.ref` | `refs/heads/main` | それ以外 |
@@ -57,8 +58,8 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 
 1. Actions で main の該当 run を開き、成果物 `reposhout-package-<SHA>` をダウンロードする
 2. 展開して `release-manifest.json` を開き、上の表の5点を確かめる
-3. `shasum -a 256 reposhout-1.1.5.zip` の値が、同梱の `.sha256` と一致することを確かめる
-4. **新しい空のフォルダを作り、そこへ `reposhout-1.1.5.zip` を展開する**
+3. `shasum -a 256 reposhout-1.1.6.zip` の値が、同梱の `.sha256` と一致することを確かめる
+4. **新しい空のフォルダを作り、そこへ `reposhout-1.1.6.zip` を展開する**
    （ダウンロードした成果物のフォルダには `release-manifest.json` とZIPとハッシュしか入っておらず、
    `manifest.json` がありません。そのまま読み込もうとしても拡張として認識されません）
 5. 展開したフォルダの直下に `manifest.json` があること、その `version` が上げた版であることを確かめる
@@ -74,7 +75,7 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 | 自動で入る値 | 内容 |
 |---|---|
 | Name | `RepoShout — Share GitHub repos, issues & PRs to X`（49文字 / 上限75） |
-| Version | `1.1.5`（manifest の値。前回より大きくないと弾かれます） |
+| Version | `1.1.6`（manifest の値。前回より大きくないと弾かれます） |
 | Short description | 下の §2 と同一（manifest の `description`・117文字 / 上限132） |
 
 ---
@@ -108,8 +109,9 @@ Changed your mind? Press Escape in the share window to dismiss it.
   Markdown file and a prepared pull request's title and body are kept, while
   tracking parameters are dropped. Line, comment and README section anchors are kept
 • Character counting follows X's published rules, including Japanese, Chinese and
-  Korean text, emoji and links, and errs on the side of counting high, so a long
-  title is trimmed with room to spare
+  Korean text, emoji and links. No under-count was found against twitter-text 3.1.0
+  in the pinned counting sections of the official corpus, the regression fixtures or
+  the generated differential corpus, so a long title is trimmed with room to spare
 • Issue and pull request numbers stay in the post even when the title is trimmed
 • Light and dark mode follow GitHub's own theme automatically
 • Press Escape in the share window to dismiss it if you change your mind
@@ -308,11 +310,11 @@ the popup (for example to /i/flow/login when the user is signed out).
 | Personally identifiable information | **Yes** | 共有するURL・タイトルに、GitHubのユーザー名または組織名が入る場合がある（公式FAQはPIIの例に username を挙げている） |
 | Health information | No | 扱わない |
 | Financial and payment information | No | 扱わない |
-| Authentication information | No | 扱わない |
+| Authentication information | **要確認**（案: No） | 資格情報そのものは扱わないが、操作時に現在のタブのURL全体をいったん受け取る。設問文を読んで本人が確定する |
 | Personal communications | No | 扱わない |
 | Location | No | 扱わない |
 | Web history | **Yes** | 利用者が見ているページのURLが、第三者であるXへ渡るため |
-| User activity | No | クリック・スクロール・入力内容は読まない（Escapeの1キーだけ、拡張が自分で開いた画面を閉じるために見ている） |
+| User activity | **要確認**（案: No） | クリック・スクロール・入力内容は読まない。x.com で keydown を1つ見て Escape かどうかだけ判定する（保存も送信もしない）。設問文を読んで本人が確定する |
 | Website content | **Yes** | ページのタイトルが、同じくXへ渡るため |
 
 3つの証明にすべてチェック（該当なし・遵守）:

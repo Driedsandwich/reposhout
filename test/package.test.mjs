@@ -294,7 +294,19 @@ for (const [label, env, expectReason] of [
   ['取り出したコミットと GITHUB_SHA が違う', {
     CI: 'true', GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'push',
     GITHUB_REF: 'refs/heads/main', GITHUB_SHA: 'f'.repeat(40)
-  }, /GITHUB_SHA が一致しない/]
+  }, /GITHUB_SHA が一致しない/],
+  /*
+   * 第7回監査 R7-005。`ci.githubSha &&` で守っていたので、GITHUB_SHA が無いときは
+   * 突き合わせを飛ばして提出可のままだった。無いものは無条件で通る＝fail-open。
+   */
+  ['GITHUB_SHA が無い', {
+    CI: 'true', GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'push',
+    GITHUB_REF: 'refs/heads/main'
+  }, /GITHUB_SHA が無い/],
+  ['GITHUB_SHA が空', {
+    CI: 'true', GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'push',
+    GITHUB_REF: 'refs/heads/main', GITHUB_SHA: ''
+  }, /GITHUB_SHA が無い/]
 ]) {
   test(`${label} は提出候補にならない`, () => {
     const distDir = freshDist();
@@ -329,35 +341,87 @@ test('同じ入力からは同じZIPが出来る（決定論）', () => {
 /*
  * ZIPを読む最小限の実装。書く側（scripts/package.mjs）と別に用意して、
  * 「書いたものが本当に読めるか」を独立に確かめる。
+ *
+ * 第7回監査 R7-004: 最初の版は CRC32 を見ておらず、標準の unzip が
+ * 「bad CRC」で拒否する壊れたZIPを素通りさせていた。読み手が甘いと、
+ * 「11ファイルあってハッシュも一致」という報告が壊れた成果物にも出てしまう。
+ * 中央ディレクトリとローカルヘッダの食い違いも見る。
  */
 function readZip(buf) {
   const eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
-  assert.ok(eocd >= 0, 'ZIPの終端レコードが見つからない');
+  if (eocd < 0) throw new Error('ZIPの終端レコードが見つからない');
   const count = buf.readUInt16LE(eocd + 10);
   let p = buf.readUInt32LE(eocd + 16);
   const out = [];
+  const seen = new Set();
   for (let i = 0; i < count; i++) {
-    assert.equal(buf.readUInt32LE(p), 0x02014b50, '中央ディレクトリの署名が違う');
-    const method = buf.readUInt16LE(p + 10);
-    const compSize = buf.readUInt32LE(p + 20);
-    const rawSize = buf.readUInt32LE(p + 24);
+    if (buf.readUInt32LE(p) !== 0x02014b50) throw new Error('中央ディレクトリの署名が違う');
+    const cFlags = buf.readUInt16LE(p + 8);
+    const cMethod = buf.readUInt16LE(p + 10);
+    const cCrc = buf.readUInt32LE(p + 16);
+    const cComp = buf.readUInt32LE(p + 20);
+    const cRaw = buf.readUInt32LE(p + 24);
     const nameLen = buf.readUInt16LE(p + 28);
     const extraLen = buf.readUInt16LE(p + 30);
     const commentLen = buf.readUInt16LE(p + 32);
     const offset = buf.readUInt32LE(p + 42);
     const name = buf.subarray(p + 46, p + 46 + nameLen).toString('utf8');
 
-    assert.equal(buf.readUInt32LE(offset), 0x04034b50, 'ローカルヘッダの署名が違う');
+    if (cFlags & 0x0001) throw new Error(`暗号化されている: ${name}`);
+    if (cFlags & 0x0008) throw new Error(`data descriptor 付きは受け取らない: ${name}`);
+    if (cMethod !== 0 && cMethod !== 8) throw new Error(`知らない圧縮方式 ${cMethod}: ${name}`);
+    if (seen.has(name)) throw new Error(`同じ名前が2度入っている: ${name}`);
+    seen.add(name);
+    if (name.startsWith('/') || /^[A-Za-z]:/.test(name) || name.includes('\\') ||
+        name.split('/').includes('..')) {
+      throw new Error(`危険な名前: ${name}`);
+    }
+
+    if (offset + 30 > buf.length || buf.readUInt32LE(offset) !== 0x04034b50) {
+      throw new Error(`ローカルヘッダの署名が違う: ${name}`);
+    }
+    const lFlags = buf.readUInt16LE(offset + 6);
+    const lMethod = buf.readUInt16LE(offset + 8);
+    const lCrc = buf.readUInt32LE(offset + 14);
+    const lComp = buf.readUInt32LE(offset + 18);
+    const lRaw = buf.readUInt32LE(offset + 22);
     const lNameLen = buf.readUInt16LE(offset + 26);
     const lExtraLen = buf.readUInt16LE(offset + 28);
+    const lName = buf.subarray(offset + 30, offset + 30 + lNameLen).toString('utf8');
+
+    // 中央ディレクトリとローカルヘッダが食い違うZIPは受け取らない
+    if (lName !== name) throw new Error(`名前が食い違う: ${name} / ${lName}`);
+    if (lMethod !== cMethod) throw new Error(`圧縮方式が食い違う: ${name}`);
+    if (lCrc !== cCrc) throw new Error(`CRCが食い違う: ${name}`);
+    if (lComp !== cComp || lRaw !== cRaw) throw new Error(`サイズが食い違う: ${name}`);
+    if (lFlags !== cFlags) throw new Error(`フラグが食い違う: ${name}`);
+
     const dataAt = offset + 30 + lNameLen + lExtraLen;
-    const body = buf.subarray(dataAt, dataAt + compSize);
-    const data = method === 0 ? Buffer.from(body) : inflateRawSync(body);
-    assert.equal(data.length, rawSize, `展開後の長さが違う: ${name}`);
+    if (dataAt + cComp > buf.length) throw new Error(`データが足りない: ${name}`);
+    const body = buf.subarray(dataAt, dataAt + cComp);
+    const data = cMethod === 0 ? Buffer.from(body) : inflateRawSync(body);
+    if (data.length !== cRaw) throw new Error(`展開後の長さが違う: ${name}`);
+    if (crc32(data) !== cCrc) throw new Error(`CRCが合わない: ${name}`);
     out.push({ name, data });
     p += 46 + nameLen + extraLen + commentLen;
   }
   return out;
+}
+
+/* CRC-32（ZIPが要求するもの）。書く側とは別に、ここで独立に持つ */
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(b) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < b.length; i++) c = CRC_TABLE[(c ^ b[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
 }
 
 /*
@@ -408,6 +472,83 @@ test('成果物のフォルダには manifest.json が無く、内側のZIPを�
     assert.ok(e, `記録にあるファイルがZIPに無い: ${rec.name}`);
     assert.equal(createHash('sha256').update(e.data).digest('hex'), rec.sha256,
       `中身が記録と違う: ${rec.name}`);
+  }
+});
+
+/*
+ * 読み手が甘いと、壊れた成果物に「11ファイルあってハッシュも一致」と報告してしまう。
+ * 第7回監査 R7-004 では、CRCを1ビット変えたZIPを標準の unzip は拒否したのに、
+ * こちらの読み手は素通りさせた。壊し方ごとに、拒否できることを確かめる。
+ */
+test('壊したZIPを、読み手がちゃんと拒否する（R7-004の回帰）', () => {
+  const distDir = freshDist();
+  const r = buildOnce(distDir);
+  const zipPath = join(distDir, `reposhout-${r.version}.zip`);
+  const good = readFileSync(zipPath);
+
+  // まず正常なものは読めること（対照）
+  assert.equal(readZip(good).length, r.files.length);
+
+  const at = (buf, sig, from = 0) => buf.indexOf(Buffer.from(sig), from);
+  const LOCAL = [0x50, 0x4b, 0x03, 0x04];
+  const CENTRAL = [0x50, 0x4b, 0x01, 0x02];
+
+  const mutations = {
+    'CRCを1ビット変える（中央とローカルの両方）': (b) => {
+      const l = at(b, LOCAL), c = at(b, CENTRAL);
+      b.writeUInt32LE((b.readUInt32LE(l + 14) ^ 1) >>> 0, l + 14);
+      b.writeUInt32LE((b.readUInt32LE(c + 16) ^ 1) >>> 0, c + 16);
+    },
+    '中央とローカルでCRCを食い違わせる': (b) => {
+      const c = at(b, CENTRAL);
+      b.writeUInt32LE((b.readUInt32LE(c + 16) ^ 1) >>> 0, c + 16);
+    },
+    '中央とローカルで圧縮方式を食い違わせる': (b) => {
+      const c = at(b, CENTRAL);
+      b.writeUInt16LE(b.readUInt16LE(c + 10) === 8 ? 0 : 8, c + 10);
+    },
+    '知らない圧縮方式にする': (b) => {
+      const l = at(b, LOCAL), c = at(b, CENTRAL);
+      b.writeUInt16LE(99, l + 8);
+      b.writeUInt16LE(99, c + 10);
+    },
+    '暗号化フラグを立てる': (b) => {
+      const l = at(b, LOCAL), c = at(b, CENTRAL);
+      b.writeUInt16LE(b.readUInt16LE(l + 6) | 0x0001, l + 6);
+      b.writeUInt16LE(b.readUInt16LE(c + 8) | 0x0001, c + 8);
+    },
+    '中身を1バイト書き換える': (b) => {
+      const l = at(b, LOCAL);
+      const nameLen = b.readUInt16LE(l + 26);
+      const extraLen = b.readUInt16LE(l + 28);
+      const data = l + 30 + nameLen + extraLen;
+      b[data] = b[data] ^ 0xFF;
+    },
+    '末尾を切り詰める': (b) => b.subarray(0, b.length - 40)
+  };
+
+  for (const [label, mutate] of Object.entries(mutations)) {
+    const broken = Buffer.from(good);
+    const result = mutate(broken) || broken;
+    assert.throws(() => readZip(result), (e) => e instanceof Error,
+      `壊したのに読めてしまう: ${label}`);
+  }
+});
+
+test('危険な名前と重複する名前を拒否する', () => {
+  // 中央ディレクトリの名前だけを書き換えて確かめる（長さは変えない）
+  const distDir = freshDist();
+  const r = buildOnce(distDir);
+  const good = readFileSync(join(distDir, `reposhout-${r.version}.zip`));
+  const c = good.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+  const nameLen = good.readUInt16LE(c + 28);
+  const nameAt = c + 46;
+  assert.equal(good.subarray(nameAt, nameAt + nameLen).toString(), 'manifest.json');
+
+  for (const evil of ['../manifest.jso', '/manifest.json', 'a\\manifest.jso']) {
+    const b = Buffer.from(good);
+    Buffer.from(evil.padEnd(nameLen, '_').slice(0, nameLen)).copy(b, nameAt);
+    assert.throws(() => readZip(b), /危険な名前|名前が食い違う/, `拒否できない: ${evil}`);
   }
 });
 

@@ -1,6 +1,6 @@
-# Chrome ウェブストア掲載欄の差分（1.0.1 → 1.1.5）
+# Chrome ウェブストア掲載欄の差分（1.0.1 → 1.1.6）
 
-作成: 2026-08-06 / 対象: 掲載中の 1.0.1 を 1.1.5 へ更新するときに、ダッシュボードのどの欄を何に直すか。
+作成: 2026-08-06 / 対象: 掲載中の 1.0.1 を 1.1.6 へ更新するときに、ダッシュボードのどの欄を何に直すか。
 
 **データの取り扱い欄の答えの正本は [DATA_DISCLOSURE.json](DATA_DISCLOSURE.json) です。** この文書はそこから写しています。
 
@@ -76,11 +76,11 @@ and URL of the GitHub page the user is currently viewing.
 | Personally identifiable information | No | **Yes へ変更** | 共有するURL・タイトルに、GitHubのユーザー名または組織名が入る場合がある |
 | Health information | No | No | 扱わない |
 | Financial and payment information | No | No | 扱わない |
-| Authentication information | No | No | 扱わない |
+| Authentication information | No | **要確認**（案: No） | 資格情報そのものは扱わないが、操作時に現在のタブのURL全体をいったん受け取る |
 | Personal communications | No | No | 扱わない |
 | Location | No | No | 扱わない |
 | Web history | No | **Yes へ変更** | 利用者が見ているページのURLが、第三者（X）へ渡る |
-| User activity | No | No | クリック・スクロール・マウス位置・入力内容は読まない |
+| User activity | No | **要確認**（案: No） | クリック・スクロール・マウス位置・入力内容は読まない。keydown を1つ見て Escape かだけ判定する |
 | Website content | No | **Yes へ変更** | ページのタイトルが、第三者（X）へ渡る |
 
 **個人を識別できる情報（PII）を Yes にする理由**（第5回監査 R5-001）: 公式の User Data FAQ は、PIIの例に **username を明記**しています。RepoShout が共有するURLは `github.com/<ユーザー名>/<リポジトリ名>` の形で、タイトルや `(Issue #12 · owner/repo)` というサフィックスにもユーザー名・組織名が入ります。プロフィールページを共有した場合、そのユーザー名は本人を指します。**handle には transmit が含まれ**、これらはXへ渡ります。
@@ -90,7 +90,7 @@ and URL of the GitHub page the user is currently viewing.
 > アカウント名を含みません（2026-08-06に実測）。正しくは「**入る場合がある**」です。
 > 少なく申告しないのと同じくらい、事実より広く言わないことも大事です。
 
-**本人の確認が要る欄は2つ**（残りの7欄は判断が確定しています）。
+**本人の確認が要る欄は2つ**（残りの7欄は判断が確定しています）。この2欄は、**確定するまで「要確認」のまま**にしてあります（第7回監査 R7-002）。確定したら `store/DATA_DISCLOSURE.json` の `ownerConfirmation` へ、読んだ設問文・確認日・選んだ答え・理由を書いてください。
 
 **① Authentication information**: cookie もフォームの入力値も読まず、資格情報を取り出したり保存したり送ったりはしません。ただし**操作された時点では現在のタブのURL全体をいったん受け取り**（ツールバー/ショートカットは `activeTab` 経由）、認証・設定の画面かどうかはそのあとで判定して拒否します。資格情報そのものは扱わないので **No と判断**しましたが、`handle` には use が含まれるので、現行の設問文を読んで最終確認してください。
 
@@ -125,14 +125,14 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 ## 4. アップロードするもの
 
 ```
-dist/reposhout-1.1.5.zip
+dist/reposhout-1.1.6.zip
 ```
 
-`npm run package` で作れます。同じ内容なら何度作っても同じZIPになるので、`dist/reposhout-1.1.5.zip.sha256` の値を控えておけば、提出したものと手元のものが同じかを後から確かめられます。
+`npm run package` で作れます。同じ内容なら何度作っても同じZIPになるので、`dist/reposhout-1.1.6.zip.sha256` の値を控えておけば、提出したものと手元のものが同じかを後から確かめられます。
 
 ---
 
 ## 5. この文書でやらないこと
 
 - ダッシュボードの操作そのもの（拡張機能からウェブストアは操作できません。人の手作業です）
-- 掲載中 1.0.1 の説明文の即時修正（1.1.5 の提出と同時で足りるか、先に文面だけ直すかは本人の判断）
+- 掲載中 1.0.1 の説明文の即時修正（1.1.6 の提出と同時で足りるか、先に文面だけ直すかは本人の判断）

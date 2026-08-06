@@ -1,7 +1,7 @@
 # Privacy Policy / プライバシーポリシー
 
 **RepoShout** — Chrome extension
-Last updated / 最終更新: 2026-08-06（1.1.5）
+Last updated / 最終更新: 2026-08-06（1.1.6）
 
 ---
 

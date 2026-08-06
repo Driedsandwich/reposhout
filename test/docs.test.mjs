@@ -255,6 +255,20 @@ test('ストア文書のデータ申告が、正本と1つ残らず一致する'
   for (const { file, answerColumn } of DISCLOSURE_TABLES) {
     const got = answersFrom(file, answerColumn);
     for (const cat of DISCLOSURE.categories) {
+      /*
+       * 第7回監査 R7-002。本人の確認が要る欄を、文書側では確定した No として
+       * 見せていた。貼る人は文書しか見ないので、確認待ちのものを確定値で出さない。
+       */
+      if (cat.ownerMustConfirm) {
+        assert.equal(cat.answer, null, `${cat.label}: 確認待ちなのに正本が答えを持っている`);
+        assert.ok(['Yes', 'No'].includes(cat.proposedAnswer),
+          `${cat.label}: 案（proposedAnswer）が無い`);
+        assert.equal(got.get(cat.label), undefined,
+          `${file}: 確認待ちの「${cat.label}」が確定値として書かれている`);
+        assert.ok(new RegExp(`\\| ${cat.label} \\|[^\\n]*要確認`).test(read(file)),
+          `${file}: 「${cat.label}」に要確認の印が無い`);
+        continue;
+      }
       assert.ok(got.has(cat.label), `${file} に「${cat.label}」の行が無い`);
       assert.equal(got.get(cat.label), cat.answer,
         `${file} の「${cat.label}」が正本と違う: 文書=${got.get(cat.label)} 正本=${cat.answer}`);
@@ -262,12 +276,29 @@ test('ストア文書のデータ申告が、正本と1つ残らず一致する'
   }
 });
 
-test('データ申告の欄が9つそろっていて、答えが Yes / No のどちらかである', () => {
+test('確認待ちの欄に、確認結果を書く場所が用意してある', () => {
+  const pending = DISCLOSURE.categories.filter((c) => c.ownerMustConfirm);
+  assert.ok(pending.length >= 1, '確認待ちの欄が1つも無い');
+  for (const c of pending) {
+    const oc = c.ownerConfirmation;
+    assert.ok(oc, `${c.label}: ownerConfirmation が無い`);
+    for (const k of ['dashboardQuestionText', 'confirmedOn', 'chosen', 'reason']) {
+      assert.ok(k in oc, `${c.label}: ${k} の欄が無い`);
+    }
+  }
+});
+
+test('データ申告の欄が9つそろっている', () => {
   const labels = DISCLOSURE.categories.map((c) => c.label);
   assert.equal(labels.length, 9, `欄の数が違う: ${labels.length}`);
   assert.equal(new Set(labels).size, 9, '同じ欄が二重に入っている');
   for (const c of DISCLOSURE.categories) {
-    assert.ok(['Yes', 'No'].includes(c.answer), `${c.label} の答えが Yes / No でない: ${c.answer}`);
+    if (c.ownerMustConfirm) {
+      assert.equal(c.answer, null, `${c.label}: 確認待ちなら答えは持たない`);
+      assert.ok(['Yes', 'No'].includes(c.proposedAnswer), `${c.label} の案が Yes / No でない`);
+    } else {
+      assert.ok(['Yes', 'No'].includes(c.answer), `${c.label} の答えが Yes / No でない: ${c.answer}`);
+    }
     // コードの事実と、規約上の判断は別の欄に書く（どちらか片方で断定しない）
     assert.ok(c.codeFact && c.codeFact.length > 5, `${c.label} にコードの事実が無い`);
     assert.ok(c.policyBasis && c.policyBasis.length > 3, `${c.label} に規約上の根拠が無い`);
@@ -350,68 +381,10 @@ test('権限説明の検査が効いているかの対照', () => {
 });
 
 /*
- * 「まだ出していない」と書いた文書は、出したあとも同じことを言い続ける。
- * 1.1.4 は main へマージしてタグまで打ったのに、CHANGELOG と実装報告は
- * 「作業ツリーにあるだけ」のままだった（第6回監査 R6-005）。
- *
- * そこで、**タグが実在する版について**は、未公開だと読める書き方を禁止する。
- * タグの有無は git に聞く。タグを取っていないチェックアウト（CIの浅いclone等）では
- * 何も言えないので、そのときは黙って通す（嘘をつくよりは検査しないほうがまし）。
+ * 公開状態の検査は test/release-status.test.mjs へ移した（第7回監査 R7-003）。
+ * ここに置いていた「未リリース」等の禁止語方式は、1.1.5 が「作業ツリーのみ」と
+ * 書いた瞬間に素通りした。言い回しではなく git の実物と突き合わせる方式にしてある。
  */
-function localTags() {
-  try {
-    return execFileSync('git', ['tag', '-l', 'v*'], { cwd: ROOT, encoding: 'utf8' })
-      .split('\n').map((s) => s.trim()).filter(Boolean);
-  } catch (e) {
-    return [];
-  }
-}
-
-const UNRELEASED_WORDING = ['未リリース', '作業ツリーにあるだけ', 'commit も push もしていない',
-                            'commit も push もタグもしていない'];
-
-test('タグを打った版を「まだ出していない」と書いていない', () => {
-  const tags = new Set(localTags());
-  const lines = read('CHANGELOG.md').split('\n');
-  let checked = 0;
-  for (const line of lines) {
-    const m = /^## \[(\d+\.\d+\.\d+)\](.*)$/.exec(line);
-    if (!m || !tags.has(`v${m[1]}`)) continue;
-    checked++;
-    for (const w of UNRELEASED_WORDING) {
-      assert.ok(!m[2].includes(w),
-        `CHANGELOG: v${m[1]} のタグはあるのに「${w}」と書いてある: ${line.trim()}`);
-    }
-  }
-  // タグが1つも取れていない環境では何も検査していない。それを黙らせない
-  if (tags.size === 0) {
-    assert.ok(true, 'タグが無いチェックアウトなので、この検査は何も確かめていない');
-  } else {
-    assert.ok(checked > 0, `タグは ${tags.size} 本あるのに、CHANGELOG の節と1つも対応しなかった`);
-  }
-});
-
-test('公開状態の正本があり、欄が分かれている', () => {
-  const body = read('RELEASE_STATUS.md');
-  for (const col of ['main へマージ', 'タグ', 'GitHub Release', 'ストアへ提出', 'ストアで公開中']) {
-    assert.ok(body.includes(col), `RELEASE_STATUS.md に「${col}」の欄が無い`);
-  }
-  // 「タグを打った＝公開した」と読める混同をしていないこと
-  assert.ok(body.includes('全部べつの出来事'), '欄を分ける理由が書いていない');
-  // 現行版が表に載っていること
-  const v = JSON.parse(read('manifest.json')).version;
-  assert.ok(body.includes(`| ${v} |`), `RELEASE_STATUS.md に ${v} の行が無い`);
-});
-
-test('公開状態の検査が効いているかの対照', () => {
-  const tags = new Set(localTags());
-  if (tags.size === 0) return;               // 検査できない環境
-  const fake = '## [1.1.4] — 未リリース（作業ツリーにあるだけ）';
-  const m = /^## \[(\d+\.\d+\.\d+)\](.*)$/.exec(fake);
-  assert.ok(tags.has(`v${m[1]}`), '対照に使う版のタグが無い');
-  assert.ok(UNRELEASED_WORDING.some((w) => m[2].includes(w)),
-    '対照が成立していない＝この検査は古い書き方を捕まえられない');
-});
 
 test('バージョンが manifest / package.json / CHANGELOG / ストア文書で揃っている', () => {
   const manifest = JSON.parse(read('manifest.json'));

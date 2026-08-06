@@ -202,6 +202,25 @@ test('PRのCIは提出候補の成果物を残さない', () => {
     'PRの base SHA を記録へ渡していない');
 });
 
+/*
+ * 「作れること」のステップが、何も作らないまま成功していた（2026-08-06・CIで発覚）。
+ * 直接実行の判定を `file://${process.argv[1]}` で書いていたため、Windows では
+ * 絶対に一致せず、CLIの出口が丸ごと動いていなかった。走らなかったのか成功したのかを
+ * 出力から見分けられない、いちばん危ない失敗の形。
+ */
+test('スクリプトの直接実行の判定が、Windowsのパスでも成立する', () => {
+  const src = readFileSync(join(ROOT, 'scripts/package.mjs'), 'utf8');
+  assert.ok(!/import\.meta\.url === `file:\/\/\$\{process\.argv\[1\]\}`/.test(src),
+    'file://${process.argv[1]} との比較は Windows で一致しない');
+  assert.ok(/pathToFileURL\(process\.argv\[1\]\)\.href/.test(src),
+    'pathToFileURL でURL同士を比べていない');
+
+  // 対照: 旧い書き方は Windows 形式のパスで実際に一致しない
+  const winPath = 'D:\\a\\repo\\scripts\\package.mjs';
+  const winUrl = 'file:///D:/a/repo/scripts/package.mjs';
+  assert.notEqual(winUrl, `file://${winPath}`, '対照が成立していない');
+});
+
 test('配布するファイルに CRLF が混ざっていない', () => {
   /*
    * 改行が混ざると、同じコミットでもOSによってZIPの中身が変わり、

@@ -3,6 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+    # タグを打った直後にも走らせる。公開状態の検査は、タグが実在する状態でしか
+    # 何も確かめられない（第7回監査 R7-003）。成果物は main への push のときだけ残す。
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -23,9 +26,10 @@ jobs:
         with:
           # チェックアウト後にトークンを .git/config へ残さない
           persist-credentials: false
-          # タグも取る。「タグを打った版を『まだ出していない』と書いていない」検査は、
-          # タグが見えないチェックアウトでは何も確かめられないため（第6回監査 R6-005）
-          fetch-tags: true
+          # 履歴とタグを全部取る。公開状態の検査は「タグの指す先」と「そのコミットが
+          # main にあるか」を git に聞くので、浅いチェックアウトでは何も確かめられない
+          # （第7回監査 R7-003）。このリポジトリは小さいので全部取る
+          fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
@@ -37,6 +41,22 @@ jobs:
         run: npm run test:unit
       - name: 配布物を作れること（Windows）
         run: npm run package
+
+      # 自作の読み手だけに頼らない。標準実装でも開けることを確かめる
+      # （第7回監査 R7-004: 自作readerがCRCを見ておらず、標準の unzip が拒否するZIPを通していた）
+      - name: 標準の実装でもZIPを開けること（Windows）
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist/*.zip | Select-Object -First 1
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $out = Join-Path $env:RUNNER_TEMP 'unpacked'
+          [System.IO.Compression.ZipFile]::ExtractToDirectory($zip.FullName, $out)
+          if (-not (Test-Path (Join-Path $out 'manifest.json'))) {
+            Write-Error '展開したフォルダの直下に manifest.json がありません'
+            exit 1
+          }
+          $n = (Get-ChildItem -Recurse -File $out).Count
+          Write-Host ("展開できたファイル数: " + $n)
 
   test:
     runs-on: ubuntu-latest
@@ -51,9 +71,10 @@ jobs:
         with:
           # チェックアウト後にトークンを .git/config へ残さない
           persist-credentials: false
-          # タグも取る。「タグを打った版を『まだ出していない』と書いていない」検査は、
-          # タグが見えないチェックアウトでは何も確かめられないため（第6回監査 R6-005）
-          fetch-tags: true
+          # 履歴とタグを全部取る。公開状態の検査は「タグの指す先」と「そのコミットが
+          # main にあるか」を git に聞くので、浅いチェックアウトでは何も確かめられない
+          # （第7回監査 R7-003）。このリポジトリは小さいので全部取る
+          fetch-depth: 0
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -89,6 +110,21 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: npm run package
+
+      # 自作の読み手だけに頼らない。標準実装でも開けることを確かめる
+      # （第7回監査 R7-004: 自作readerがCRCを見ておらず、標準の unzip が拒否するZIPを通していた）
+      - name: 標準の実装でもZIPを開けること（Ubuntu）
+        run: |
+          ZIP=$(ls dist/*.zip | head -1)
+          unzip -t "$ZIP"
+          OUT="$RUNNER_TEMP/unpacked"
+          mkdir -p "$OUT"
+          unzip -q "$ZIP" -d "$OUT"
+          test -f "$OUT/manifest.json" || {
+            echo "展開したフォルダの直下に manifest.json がありません" >&2
+            exit 1
+          }
+          echo "展開できたファイル数: $(find "$OUT" -type f | wc -l)"
 
       - name: 同じ内容から同じZIPができることを確かめる
         env:

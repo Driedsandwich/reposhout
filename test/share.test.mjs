@@ -136,6 +136,60 @@ test('資格情報らしきハッシュを名前によらず落とす（T3-003�
   }
 });
 
+/*
+ * 資格情報らしきハッシュは、何重にエンコードされていても落とす。
+ *
+ * 1回だけ解いて判定していたため、`#client_secret%253Ddummy`（二重エンコード）は
+ * 1回解いても `%3D` のままで「= を含まない」と判定され、そのままXへ渡っていた
+ * （第7回監査 R7-001）。パスの二重エンコードは第4回で塞いだのに、
+ * フラグメント側は同じ穴が残っていた。
+ */
+test('何重にエンコードしても資格情報らしきハッシュは落とす（R7-001の回帰）', () => {
+  const keys = ['client_secret', 'access_token', 'password', 'state', 'code', 'id_token'];
+  const pages = ['https://github.com/o/r/issues/12', 'https://github.com/o/r',
+                 'https://github.com/o/r/blob/main/a.js'];
+  // = を1〜3回エンコードした形と、鍵の名前側もエンコードした形
+  const encodings = [
+    (k) => `${k}=secretvalue`,
+    (k) => `${k}%3Dsecretvalue`,
+    (k) => `${k}%253Dsecretvalue`,
+    (k) => `${k}%25253Dsecretvalue`,
+    (k) => `${encodeURIComponent(k).replace(/_/g, '%255F')}%253Dsecretvalue`
+  ];
+  let checked = 0;
+  for (const k of keys) {
+    for (const enc of encodings) {
+      for (const page of pages) {
+        const url = `${page}#${enc(k)}`;
+        const out = GXS.canonicalUrl(url, null);
+        assert.ok(!out.includes('#'), `ハッシュが残った: ${url} → ${out}`);
+        assert.ok(!out.includes('secretvalue'), `値が残った: ${url} → ${out}`);
+        // 共有そのものからも漏れないこと（canonicalUrl だけでなく最終形で見る）
+        const s = GXS.buildShare(url, 'T · GitHub');
+        assert.ok(!s || !s.url.includes('secretvalue'), `共有URLに値が残った: ${url}`);
+        checked++;
+      }
+    }
+  }
+  assert.ok(checked >= 90, `検査した件数が少なすぎる: ${checked}`);
+
+  // 対照: 正当なアンカーは何重エンコードでも落とさない（全部落としているだけではないこと）
+  for (const h of ['#readme', '#L10-L20', '#issuecomment-99', '#user-content-x',
+                   '#' + encodeURIComponent('日本語の見出し')]) {
+    assert.ok(GXS.canonicalUrl('https://github.com/o/r/issues/12' + h, null).endsWith(h), h);
+  }
+});
+
+test('解ききれないハッシュは載せない（判定できないものは共有しない）', () => {
+  // 上限（5回）を超えて解ける形が残るものは、判定できないので落とす
+  let deep = 'client_secret=x';
+  for (let i = 0; i < 7; i++) deep = encodeURIComponent(deep);
+  const out = GXS.canonicalUrl('https://github.com/o/r/issues/12#' + deep, null);
+  assert.ok(!out.includes('#'), `解ききれないハッシュが残った: ${out}`);
+  // 壊れたエンコードも落とす
+  assert.ok(!GXS.canonicalUrl('https://github.com/o/r/issues/12#%ZZ', null).includes('#'));
+});
+
 test('エンコードされた機微パスを共有しない（T3-003の回帰）', () => {
   const blocked = [
     'https://github.com/%73ettings/tokens',
