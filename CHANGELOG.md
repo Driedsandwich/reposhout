@@ -30,6 +30,10 @@
   黙って終わらせず、**値もURLも出さない案内**を表示する（`role="status"`・数秒で消える）。
   ツールバー／ショートカットからも、service worker が**理由の語だけ**を content script へ
   送って同じ案内を出す
+- **提出前の関門が、手元だけのコミットでも通り得た（R12-003・P2）** —
+  strict で `origin` が対象のリポジトリか、`HEAD` が `origin/main` と同じか、
+  そのコミットの CI が **test と windows の両方 success** かを、GitHub の API を
+  read-only で引いて確かめる。取れなかったら**通さない**（警告で流さない）
 - あわせて、ツールチップ等の文言を実際の動作へ寄せた
   （`Post this page to X` → `Send this page's title and URL to X's composer`）
 

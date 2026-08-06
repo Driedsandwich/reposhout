@@ -75,6 +75,48 @@ const metadata = head
       dirty: git(['status', '--porcelain']) !== '' }
   : null;
 
+/*
+ * strict では、リモートの main と、そのコミットのCIまで見る
+ * （第12回監査 R12-003）。取れなかったら通さない。
+ */
+const EXPECTED_ORIGIN = 'Driedsandwich/reposhout';
+let remote = null;
+let metadataCi = null;
+if (strict) {
+  const originUrl = git(['remote', 'get-url', 'origin']);
+  const lsRemote = git(['ls-remote', 'origin', 'refs/heads/main']);
+  remote = {
+    originUrl,
+    originMainSha: lsRemote ? lsRemote.split(/\s+/)[0] : null,
+    expectedOrigin: EXPECTED_ORIGIN
+  };
+  metadataCi = fetchCiFor(head);
+}
+
+/* GitHub の API を read-only で引く。失敗は error として返す（黙って通さない） */
+function fetchCiFor(sha) {
+  if (!sha) return { error: 'HEAD が取れない' };
+  try {
+    const runsRaw = execFileSync('gh',
+      ['api', `repos/${EXPECTED_ORIGIN}/actions/runs?head_sha=${sha}&per_page=20`],
+      { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
+    const runs = JSON.parse(runsRaw).workflow_runs || [];
+    const run = runs.find((r) => r.event === 'push' && r.head_branch === 'main');
+    if (!run) return { error: `このコミットの main への push の run が見つからない: ${sha}` };
+    const jobsRaw = execFileSync('gh',
+      ['api', `repos/${EXPECTED_ORIGIN}/actions/runs/${run.id}/jobs`],
+      { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
+    const jobs = {};
+    for (const j of JSON.parse(jobsRaw).jobs || []) jobs[j.name] = j.conclusion;
+    return {
+      conclusion: run.conclusion, event: run.event, branch: run.head_branch,
+      headSha: run.head_sha, runId: String(run.id), jobs
+    };
+  } catch (e) {
+    return { error: `GitHub API を引けなかった: ${e.message.split('\n')[0]}` };
+  }
+}
+
 const result = validateStoreReadiness({
   mode: strict ? 'strict' : 'preflight',
   disclosure: JSON.parse(read('store/DATA_DISCLOSURE.json')),
@@ -89,6 +131,8 @@ const result = validateStoreReadiness({
   audit,
   auditReportSha256,
   metadata,
+  remote,
+  metadataCi,
   sha256,
   readZipStrict: (buf) => readZip(buf)
 });
