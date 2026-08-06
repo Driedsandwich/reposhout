@@ -221,6 +221,31 @@ test('スクリプトの直接実行の判定が、Windowsのパスでも成立�
   assert.notEqual(winUrl, `file://${winPath}`, '対照が成立していない');
 });
 
+/*
+ * タグを打ったときに走るCIが、そのタグ自身を検証していなかった（第8回監査 R8-004）。
+ * 過去の確定済みの行を突き合わせるだけでは、いま付けたタグが正しいかを見ていない。
+ * 別の版のタグを同じコミットへ付けても通る構造だった。
+ */
+test('タグpushのCIが、いま付けたタグ自身を検証する', () => {
+  const wf = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8').replace(/\r\n/g, '\n');
+  const i = wf.indexOf('いま付けたタグを検証する');
+  assert.ok(i > 0, 'タグ検証のステップが無い');
+  const step = wf.slice(i, wf.indexOf('\n      - name:', i + 10));
+
+  assert.match(step, /if:\s*startsWith\(github\.ref, 'refs\/tags\/v'\)/,
+    'タグpushのときだけ走る条件になっていない');
+  for (const [needle, why] of Object.entries({
+    'v$VERSION': 'タグ名と manifest の版の一致',
+    '^{}': 'タグの指す先（peeled）',
+    'GITHUB_SHA': '走っているコミットとの一致',
+    'merge-base --is-ancestor': 'main に入っていること'
+  })) {
+    assert.ok(step.includes(needle), `タグ検証に「${why}」が無い: ${needle}`);
+  }
+  // 失敗したら止まること（警告で流さない）
+  assert.equal((step.match(/exit 1/g) || []).length, 3, '3つの判定すべてで停止していない');
+});
+
 test('配布するファイルに CRLF が混ざっていない', () => {
   /*
    * 改行が混ざると、同じコミットでもOSによってZIPの中身が変わり、
