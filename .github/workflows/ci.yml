@@ -156,13 +156,35 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
+          # 2回目を「前の dist を消してから」走らせる。消さずに読み直すと、
+          # 2回目が何もしなくても同じハッシュが読めて通ってしまう（第9回監査 R9-006）。
+          FIRST_ZIP=$(ls dist/*.zip | head -1)
           FIRST=$(cat dist/*.zip.sha256 | cut -d' ' -f1)
+          cp "$FIRST_ZIP" "$RUNNER_TEMP/first.zip"
+
+          rm -rf dist
           npm run package --silent > /dev/null
+
+          test -f dist/release-manifest.json || {
+            echo "2回目のビルドが記録を作っていません（何も作っていない疑い）" >&2
+            exit 1
+          }
+          N=$(find dist -maxdepth 1 -type f | wc -l)
+          test "$N" -eq 3 || {
+            echo "2回目のビルドの出力が3点ではありません: $N" >&2
+            exit 1
+          }
+
+          SECOND_ZIP=$(ls dist/*.zip | head -1)
           SECOND=$(cat dist/*.zip.sha256 | cut -d' ' -f1)
           echo "1回目: $FIRST"
           echo "2回目: $SECOND"
           test "$FIRST" = "$SECOND" || {
             echo "同じ入力から違うZIPができました。決定論が壊れています。" >&2
+            exit 1
+          }
+          cmp "$RUNNER_TEMP/first.zip" "$SECOND_ZIP" || {
+            echo "ハッシュは同じですがバイト列が違います。" >&2
             exit 1
           }
 
@@ -178,6 +200,8 @@ jobs:
           name: reposhout-package-${{ github.sha }}
           path: dist/
           retention-days: 14
+          # 何も無いまま成功しないようにする（第9回監査 R9-006）
+          if-no-files-found: error
 
       - name: 成果物を残さなかったことを表示する（main への push 以外）
         if: github.event_name != 'push' || github.ref != 'refs/heads/main'
