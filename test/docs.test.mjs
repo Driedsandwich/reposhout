@@ -241,6 +241,22 @@ test('QA手順の検査が効いているかの対照', () => {
     '対照が成立していない＝旧手順でも通ってしまう');
 });
 
+test('プライバシーポリシーに Limited Use の遵守声明がある', () => {
+  const p = read('PRIVACY.md');
+  for (const [needle, why] of [
+    ['adheres to the Chrome Web Store User Data Policy', '英語の遵守声明'],
+    ['Limited Use', 'Limited Use の明記'],
+    ['ユーザーデータポリシー（Limited Use の要件を含む）に従います', '日本語の遵守声明'],
+    ['creditworthiness', '信用力判断に使わないこと'],
+    ['人がこのデータを読むことはありません', '人が読まないこと']
+  ]) {
+    assert.ok(p.includes(needle), `PRIVACY.md に「${why}」が無い: ${needle}`);
+  }
+  // ストアへ貼るポリシーURLがこの文書を指していること
+  assert.ok(read('store/LISTING.md').includes('blob/main/PRIVACY.md'),
+    'ストア文書のポリシーURLが PRIVACY.md を指していない');
+});
+
 test('公式コーパスを走らせている範囲が、READMEに書いてある', () => {
   for (const [f, needles] of Object.entries({
     'README.md': ['validate.yml', 'counting sections', 'pinned upstream commit'],
