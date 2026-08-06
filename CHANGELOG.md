@@ -24,6 +24,11 @@
   not_required）に分けた。あわせて提出前の関門 `npm run verify:store-readiness` を新設し、
   確認待ち・答えと記録の不一致・設問文や日付や理由の空欄・遵守声明の欠落・
   文書間の食い違いがあれば終了コードを0以外にする
+- **差分文書が手元ビルドを提出用として案内していた（R9-003・P2）** —
+  `store/LISTING.md` は「手元のZIPは提出しない」と正しく書いてあるのに、
+  `store/STORE_DASHBOARD_CHANGES.md` §4 が `npm run package` で作れると書いていた。
+  補助文書のほうを見た人が、存在しない通常名のZIPを探すか、`NON-SUBMITTABLE` を
+  改名して出しかねない。CIの成果物から取る形へ統一した
 
 ## [1.1.7] — main `405b3c6`・タグ `v1.1.7`
 

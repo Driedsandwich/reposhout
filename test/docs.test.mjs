@@ -257,6 +257,16 @@ test('プライバシーポリシーに Limited Use の遵守声明がある', (
     'ストア文書のポリシーURLが PRIVACY.md を指していない');
 });
 
+test('ストア文書が、手元ビルドを提出用として案内していない', () => {
+  for (const f of ['store/LISTING.md', 'store/STORE_DASHBOARD_CHANGES.md']) {
+    const body = read(f);
+    assert.ok(!body.includes('`npm run package` で作れます'),
+      `${f} が手元ビルドを提出用として案内している`);
+    assert.ok(body.includes('reposhout-package-'),
+      `${f} に、どの成果物を出すかが書いていない`);
+  }
+});
+
 test('公式コーパスを走らせている範囲が、READMEに書いてある', () => {
   for (const [f, needles] of Object.entries({
     'README.md': ['validate.yml', 'counting sections', 'pinned upstream commit'],
