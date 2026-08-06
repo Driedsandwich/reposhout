@@ -19,9 +19,9 @@ Share GitHub repos, issues and PRs to X with a pre-filled post.
 |---|---|
 | Repository pages | The **Share** button, to the left of Pin / Watch / Fork / Star |
 | Issues and pull requests | The **Share** button, to the left of New issue / Code |
-| Anywhere else on GitHub | Toolbar icon, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> (<kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> on macOS) |
+| Other shareable GitHub pages | Toolbar icon, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> (<kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> on macOS) |
 
-The toolbar icon and the shortcut work on every GitHub page, including the ones that already show a button.
+The toolbar icon and the shortcut work on shareable GitHub pages, including the ones that already show a button. **Sensitive pages — authentication, account, settings and organisation administration — are refused at every entry point**, so pressing the icon or the shortcut there does nothing.
 
 Changed your mind? Press <kbd>Esc</kbd> in the share window to dismiss it.
 

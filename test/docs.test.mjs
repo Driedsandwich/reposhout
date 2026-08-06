@@ -278,13 +278,158 @@ test('プライバシーポリシーに Limited Use の遵守声明がある', (
     ['Limited Use', 'Limited Use の明記'],
     ['ユーザーデータポリシー（Limited Use の要件を含む）に従います', '日本語の遵守声明'],
     ['creditworthiness', '信用力判断に使わないこと'],
-    ['人がこのデータを読むことはありません', '人が読まないこと']
+    ["human review by the developer or", '人手閲覧を開発者側に限定していること'],
+    ['開発者または開発者のために行動する者の人手閲覧', '日本語側の同じ限定']
   ]) {
-    assert.ok(p.includes(needle), `PRIVACY.md に「${why}」が無い: ${needle}`);
+    assert.ok(p.replace(/\s+/g, ' ').includes(needle), `PRIVACY.md に「${why}」が無い: ${needle}`);
   }
   // ストアへ貼るポリシーURLがこの文書を指していること
   assert.ok(read('store/LISTING.md').includes('blob/main/PRIVACY.md'),
     'ストア文書のポリシーURLが PRIVACY.md を指していない');
+});
+
+/*
+ * 第10回監査 R10-001。同じ文書が「Xへ渡る」と書いているのに「人は誰も読まない」
+ * 「受け取れるサーバーは無い」「何も保存しない」と断定していた。約束できるのは
+ * 開発者側だけで、X側で誰が読むかも、session storage に何が残るかも別の話。
+ */
+test('プライバシーポリシーが、保証できない範囲まで断定していない', () => {
+  const flat = read('PRIVACY.md').replace(/\s+/g, ' ');
+  assert.ok(/X receives|Xへ渡/.test(flat), '前提が崩れている（Xへ渡ると書いていない）');
+  for (const [re, why] of [
+    [/No human [\u2014-] including the developer/, '「人は誰も読まない」と断定している'],
+    [/開発者を含め、人がこのデータを読むことはありません/, '同（日本語）'],
+    [/there is no server that could receive it/i, '「受け取れるサーバーは無い」と限定なしに断定している'],
+    [/受け取れるサーバーも存在しません/, '同（日本語）'],
+    [/nothing is retained/i, '「何も保存しない」と断定している（ウィンドウIDと時刻は保存する）']
+  ]) {
+    assert.ok(!re.test(flat), `PRIVACY.md が言い過ぎている: ${why}`);
+  }
+  // Xが受け取ったあとの扱いは、Xのポリシーの話だと書いてあること
+  assert.ok(/X's own policies/i.test(flat) && /Xのポリシーに従って/.test(flat),
+    'X側の扱いについての限定が無い');
+});
+
+/*
+ * 第10回監査 R10-001。content script の表が「ボタン行を探すためだけに読む」と
+ * だけ書いていたが、押された時点で location.href と document.title を読む。
+ */
+test('content script の表が、押されたときに読む2つを書いている', () => {
+  /*
+   * 文書のどこかにあるか、ではなく**その行にあるか**を見る。英語の行から消しても
+   * 日本語の行に同じ語が残っていて通ってしまった（この検査を作ったときの変異で実測）。
+   */
+  const rows = read('PRIVACY.md').split('\n')
+    .filter((l) => l.startsWith('| `https://github.com/*`'));
+  assert.equal(rows.length, 2, `GitHub側の行が2つ（英日）でない: ${rows.length}`);
+  for (const row of rows) {
+    for (const needle of ['location.href', 'document.title']) {
+      assert.ok(row.includes(needle), `PRIVACY.md の表の行に「${needle}」が無い: ${row.slice(0, 60)}…`);
+    }
+  }
+  assert.ok(rows.some((r) => r.includes('trusted click')), '英語の行に trusted click が無い');
+  assert.ok(rows.some((r) => r.includes('利用者の操作によるクリック')), '日本語の行に同じ説明が無い');
+});
+
+/*
+ * 第10回監査 R10-004。冒頭に「更新なら §1 と §2 だけを直せば足ります」と書いてあった。
+ * 今回の 1.0.1 → 1.1.7 では §3（Privacy practices）も必須で、掲載中の申告は
+ * 9項目すべて No のままなので、飛ばすと事実と違う申告を残して提出することになる。
+ */
+test('更新の手順が、Privacy practices まで必須と書いてある', () => {
+  const listing = read('store/LISTING.md');
+  assert.ok(/§0[^\n]*§3/.test(listing), 'store/LISTING.md が §3 まで必須と書いていない');
+  assert.ok(/すべて No/.test(listing), '掲載中の古い申告（すべてNo）を直す指示が無い');
+  assert.ok(!/§1 と §2 だけを直せば足ります/.test(listing),
+    '「§1と§2だけで足りる」が残っている');
+  // 対照: 旧文面は同じ判定を通らない
+  const old = 'ページの手順。更新のときは §1 のアップロードと §2 の掲載文だけを直せば足ります。';
+  assert.ok(!/§0[^\n]*§3/.test(old), '対照が成立していない＝旧文面でも通ってしまう');
+});
+
+/*
+ * 第10回監査 R10-006。ストア文書は SUBMISSION_CANDIDATE.json と
+ * 一致し、いまの main の位置（すぐ古くなる）を書かない。
+ */
+test('ストア文書が、正本の成果物と一致していて、可変な main を書いていない', () => {
+  const cand = JSON.parse(read('store/SUBMISSION_CANDIDATE.json'));
+  const known = [cand.sourceCommit, cand.treeSha, cand.innerSha256];
+  for (const f of ['store/LISTING.md', 'store/STORE_DASHBOARD_CHANGES.md']) {
+    const body = read(f);
+    assert.ok(body.includes(cand.artifactName), `${f} に正本の成果物名が無い`);
+    assert.ok(body.includes(cand.innerSha256), `${f} に正本のSHA-256が無い`);
+    const strays = [...new Set((body.match(/\b[0-9a-f]{7,40}\b/g) || [])
+      .filter((h) => !known.some((k) => k && k.startsWith(h))))];
+    assert.deepEqual(strays, [], `${f} に、正本に無いコミットが書いてある: ${strays.join(', ')}`);
+  }
+});
+
+/*
+ * 第10回監査 R10-005。READMEの冒頭は「ツールバーとショートカットはGitHubのどの
+ * ページでも使える」と書いていた。実装は認証・アカウント・設定・組織管理を
+ * 全入口で拒否するので、事実と違う。
+ *
+ * 第9回で入れた検査は**文書のどこかに正しい文があるか**しか見ていなかったので、
+ * 巻末の「制約」に正しい説明があることで通ってしまい、冒頭の矛盾を見逃した。
+ * ここでは**その節だけを切り出して**判定する。
+ */
+function section(body, heading) {
+  const i = body.indexOf(heading);
+  assert.ok(i >= 0, `見出しが無い: ${heading}`);
+  const rest = body.slice(i + heading.length);
+  const next = rest.search(/\n## /);
+  return rest.slice(0, next === -1 ? undefined : next);
+}
+
+/* 節に対する判定。対照（旧文面）でも同じ関数を使う */
+function topSectionProblems(sec, forbidden, required) {
+  const problems = [];
+  for (const [needle, why] of forbidden) if (sec.includes(needle)) problems.push(`言い過ぎ: ${why}`);
+  for (const [needle, why] of required) if (!sec.includes(needle)) problems.push(`不足: ${why}`);
+  return problems;
+}
+
+const TOP_RULES = {
+  'README.md': {
+    heading: '## What it does',
+    forbidden: [['every GitHub page', '「どのページでも使える」'],
+                ['Anywhere else on GitHub', '「GitHubのそれ以外どこでも」']],
+    required: [['shareable GitHub pages', '共有できるページに限る、と書くこと'],
+               ['refused at every entry point', '機微なページを全入口で拒否すること']]
+  },
+  'README.ja.md': {
+    heading: '## できること',
+    forbidden: [['どのページでも使えます', '「どのページでも使える」'],
+                ['| その他のGitHubページ |', '「その他のGitHubページ」（共有可能の限定が無い）']],
+    required: [['共有可能なGitHubページ', '共有できるページに限る、と書くこと'],
+               ['すべての入口で拒否', '機微なページを全入口で拒否すること']]
+  }
+};
+
+test('READMEの冒頭の節が、実装と食い違っていない', () => {
+  for (const [f, rule] of Object.entries(TOP_RULES)) {
+    const sec = section(read(f), rule.heading);
+    const problems = topSectionProblems(sec, rule.forbidden, rule.required);
+    assert.deepEqual(problems, [], `${f} の冒頭: ${problems.join(' / ')}`);
+  }
+});
+
+test('冒頭の節の検査が効いているかの対照', () => {
+  /*
+   * 旧文面（巻末には正しい説明があるが冒頭は矛盾している状態）を作って、
+   * 同じ判定に掛ける。落ちなければ、この検査は矛盾を捕まえられていない。
+   */
+  const old = {
+    'README.md': '\n| Anywhere else on GitHub | Toolbar icon |\n\n' +
+                 'The toolbar icon and the shortcut work on every GitHub page.\n',
+    'README.ja.md': '\n| その他のGitHubページ | ツールバーのアイコン |\n\n' +
+                    'ツールバーアイコンとショートカットは、GitHubのどのページでも使えます。\n'
+  };
+  for (const [f, rule] of Object.entries(TOP_RULES)) {
+    const problems = topSectionProblems(old[f], rule.forbidden, rule.required);
+    assert.ok(problems.length >= 2,
+      `対照が成立していない＝旧文面でも通ってしまう: ${f} / ${problems.join(' / ')}`);
+  }
 });
 
 test('ストア文書が、手元ビルドを提出用として案内していない', () => {

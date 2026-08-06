@@ -19,9 +19,9 @@ English: [README.md](README.md)
 |---|---|
 | リポジトリページ | 画面内の **Share** ボタン（Pin / Watch / Fork / Star の左） |
 | Issue・プルリクエスト | 画面内の **Share** ボタン（New issue / Code の左） |
-| その他のGitHubページ | ツールバーのアイコン、または <kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>（Windows/Linuxは <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>） |
+| その他の共有可能なGitHubページ | ツールバーのアイコン、または <kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>（Windows/Linuxは <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>） |
 
-ツールバーアイコンとショートカットは、ボタンが出ているページも含めてGitHubのどのページでも使えます。
+ツールバーアイコンとショートカットは、ボタンが出ているページも含めて**共有可能なGitHubページ**で使えます。**認証・アカウント・設定・組織管理の画面は、すべての入口で拒否**するので、そこでアイコンやショートカットを押しても何も起きません。
 
 やっぱりやめたくなったら、共有ウィンドウで <kbd>Esc</kbd> を押すと閉じます。
 

@@ -18,8 +18,8 @@ import { mkdtempSync, readdirSync, readFileSync, existsSync, writeFileSync, mkdi
 import { tmpdir } from 'node:os';
 import { join, basename, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
-import { inflateRawSync } from 'node:zlib';
 import { makePackage, realIo } from '../scripts/package.mjs';
+import { readZip } from '../scripts/zip-read.mjs';
 
 /* 「未コミットの変更なし・既知のコミット」を装う git */
 const CLEAN_COMMIT = '4db83f086735db360443f4d45512702f38ca5936';
@@ -339,90 +339,11 @@ test('同じ入力からは同じZIPが出来る（決定論）', () => {
 });
 
 /*
- * ZIPを読む最小限の実装。書く側（scripts/package.mjs）と別に用意して、
- * 「書いたものが本当に読めるか」を独立に確かめる。
- *
- * 第7回監査 R7-004: 最初の版は CRC32 を見ておらず、標準の unzip が
- * 「bad CRC」で拒否する壊れたZIPを素通りさせていた。読み手が甘いと、
- * 「11ファイルあってハッシュも一致」という報告が壊れた成果物にも出てしまう。
- * 中央ディレクトリとローカルヘッダの食い違いも見る。
+ * ZIPを読む最小限の実装は scripts/zip-read.mjs へ切り出した（第10回監査 R10-002）。
+ * 提出前の確認でも、ダウンロードした実物の成果物を同じ厳しさで開く必要が出たため。
+ * 書く側（scripts/package.mjs）とは別実装のままで、この後の変異テストはこの読み手が
+ * 壊れたZIPを拒むことを確かめている。
  */
-function readZip(buf) {
-  const eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
-  if (eocd < 0) throw new Error('ZIPの終端レコードが見つからない');
-  const count = buf.readUInt16LE(eocd + 10);
-  let p = buf.readUInt32LE(eocd + 16);
-  const out = [];
-  const seen = new Set();
-  for (let i = 0; i < count; i++) {
-    if (buf.readUInt32LE(p) !== 0x02014b50) throw new Error('中央ディレクトリの署名が違う');
-    const cFlags = buf.readUInt16LE(p + 8);
-    const cMethod = buf.readUInt16LE(p + 10);
-    const cCrc = buf.readUInt32LE(p + 16);
-    const cComp = buf.readUInt32LE(p + 20);
-    const cRaw = buf.readUInt32LE(p + 24);
-    const nameLen = buf.readUInt16LE(p + 28);
-    const extraLen = buf.readUInt16LE(p + 30);
-    const commentLen = buf.readUInt16LE(p + 32);
-    const offset = buf.readUInt32LE(p + 42);
-    const name = buf.subarray(p + 46, p + 46 + nameLen).toString('utf8');
-
-    if (cFlags & 0x0001) throw new Error(`暗号化されている: ${name}`);
-    if (cFlags & 0x0008) throw new Error(`data descriptor 付きは受け取らない: ${name}`);
-    if (cMethod !== 0 && cMethod !== 8) throw new Error(`知らない圧縮方式 ${cMethod}: ${name}`);
-    if (seen.has(name)) throw new Error(`同じ名前が2度入っている: ${name}`);
-    seen.add(name);
-    if (name.startsWith('/') || /^[A-Za-z]:/.test(name) || name.includes('\\') ||
-        name.split('/').includes('..')) {
-      throw new Error(`危険な名前: ${name}`);
-    }
-
-    if (offset + 30 > buf.length || buf.readUInt32LE(offset) !== 0x04034b50) {
-      throw new Error(`ローカルヘッダの署名が違う: ${name}`);
-    }
-    const lFlags = buf.readUInt16LE(offset + 6);
-    const lMethod = buf.readUInt16LE(offset + 8);
-    const lCrc = buf.readUInt32LE(offset + 14);
-    const lComp = buf.readUInt32LE(offset + 18);
-    const lRaw = buf.readUInt32LE(offset + 22);
-    const lNameLen = buf.readUInt16LE(offset + 26);
-    const lExtraLen = buf.readUInt16LE(offset + 28);
-    const lName = buf.subarray(offset + 30, offset + 30 + lNameLen).toString('utf8');
-
-    // 中央ディレクトリとローカルヘッダが食い違うZIPは受け取らない
-    if (lName !== name) throw new Error(`名前が食い違う: ${name} / ${lName}`);
-    if (lMethod !== cMethod) throw new Error(`圧縮方式が食い違う: ${name}`);
-    if (lCrc !== cCrc) throw new Error(`CRCが食い違う: ${name}`);
-    if (lComp !== cComp || lRaw !== cRaw) throw new Error(`サイズが食い違う: ${name}`);
-    if (lFlags !== cFlags) throw new Error(`フラグが食い違う: ${name}`);
-
-    const dataAt = offset + 30 + lNameLen + lExtraLen;
-    if (dataAt + cComp > buf.length) throw new Error(`データが足りない: ${name}`);
-    const body = buf.subarray(dataAt, dataAt + cComp);
-    const data = cMethod === 0 ? Buffer.from(body) : inflateRawSync(body);
-    if (data.length !== cRaw) throw new Error(`展開後の長さが違う: ${name}`);
-    if (crc32(data) !== cCrc) throw new Error(`CRCが合わない: ${name}`);
-    out.push({ name, data });
-    p += 46 + nameLen + extraLen + commentLen;
-  }
-  return out;
-}
-
-/* CRC-32（ZIPが要求するもの）。書く側とは別に、ここで独立に持つ */
-const CRC_TABLE = (() => {
-  const t = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c >>> 0;
-  }
-  return t;
-})();
-function crc32(b) {
-  let c = 0xFFFFFFFF;
-  for (let i = 0; i < b.length; i++) c = CRC_TABLE[(c ^ b[i]) & 0xFF] ^ (c >>> 8);
-  return (c ^ 0xFFFFFFFF) >>> 0;
-}
 
 /*
  * 提出物のQAで実際に起きる形を、そのまま再現する。
@@ -561,4 +482,54 @@ test('収録するのは allowlist のファイルだけ', () => {
     assert.ok(!f.name.startsWith('store/'), `ストア文書が混ざっている: ${f.name}`);
     assert.ok(!f.name.includes('node_modules'), `依存が混ざっている: ${f.name}`);
   }
+});
+
+/*
+ * 外側の成果物ZIPだけ、data descriptor 付きを許す（第10回監査 R10-002）。
+ *
+ * GitHub Actions からダウンロードする容れ物は書きながら送る作りで、ローカル
+ * ヘッダのCRCとサイズが 0 のまま来る（実測。これで --artifact が最初に落ちた）。
+ * 自分たちが作る配布ZIPには許さないままにし、緩めるのは容れ物を開くときだけ。
+ * **緩めてもCRCの検証は落とさない**ことを、壊した容れ物で確かめる。
+ */
+test('data descriptor 付きは、既定では拒否し、明示したときだけ開ける', () => {
+  const r = makePackage({ distDir: freshDist(), git: fakeGit(), env: {} });
+  const good = readFileSync(r.file);
+
+  /* 中央ディレクトリとローカルヘッダの両方に「data descriptor 付き」の印を立てる */
+  const dd = Buffer.from(good);
+  const eocd = dd.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  const count = dd.readUInt16LE(eocd + 10);
+  let p = dd.readUInt32LE(eocd + 16);
+  for (let i = 0; i < count; i++) {
+    const nameLen = dd.readUInt16LE(p + 28);
+    const extraLen = dd.readUInt16LE(p + 30);
+    const commentLen = dd.readUInt16LE(p + 32);
+    const offset = dd.readUInt32LE(p + 42);
+    dd.writeUInt16LE(dd.readUInt16LE(p + 8) | 0x0008, p + 8);        // central flags
+    dd.writeUInt16LE(dd.readUInt16LE(offset + 6) | 0x0008, offset + 6); // local flags
+    dd.writeUInt32LE(0, offset + 14);   // local CRC
+    dd.writeUInt32LE(0, offset + 18);   // local 圧縮後サイズ
+    dd.writeUInt32LE(0, offset + 22);   // local 展開後サイズ
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+
+  assert.throws(() => readZip(dd), /data descriptor/,
+    '配布ZIPの読み手が data descriptor を素通りさせている');
+  const entries = readZip(dd, { allowDataDescriptor: true });
+  assert.equal(entries.length, r.files.length, '緩めた読み手で収録数が合わない');
+
+  /* 緩めてもCRCは見る: 中身を1バイト変えたら落ちる */
+  const broken = Buffer.from(dd);
+  const firstOffset = (() => {
+    const q = dd.readUInt32LE(eocd + 16);
+    return dd.readUInt32LE(q + 42);
+  })();
+  const nameLen = broken.readUInt16LE(firstOffset + 26);
+  const extraLen = broken.readUInt16LE(firstOffset + 28);
+  const dataAt = firstOffset + 30 + nameLen + extraLen;
+  broken[dataAt] = broken[dataAt] ^ 0xFF;
+  assert.throws(() => readZip(broken, { allowDataDescriptor: true }),
+    /CRC|展開後の長さ|invalid|incorrect/i,
+    '緩めた読み手が、壊れた中身を通してしまう');
 });
