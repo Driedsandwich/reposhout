@@ -214,7 +214,7 @@ A second review of the published 1.0.1 raised four findings. Each was reproduced
 ## Known limitations
 
 - **Narrow windows hide the button**, because GitHub hides its own Fork/Star row at those widths. This is deliberate — fighting GitHub's layout is how extensions break.
-- **Pages other than repositories, issues and pull requests have no in-page button** when signed in — Actions runs, file views, notifications and settings have no action row the button belongs in. The toolbar icon and shortcut cover them.
+- **Pages other than repositories, issues and pull requests have no in-page button** when signed in — Actions runs, file views and notifications have no action row the button belongs in. The toolbar icon and shortcut cover other shareable pages. **Settings, authentication, account and organisation-administration pages are refused at every entry point**, including the toolbar icon and the shortcut, so they are never shared.
 - **Open / Merged / Closed state is not included in the post text.** The value read for the same pull request differed between signed-in and signed-out pages during testing, so it is omitted rather than risk publishing something false.
 - `github.com` only. GitHub Enterprise and Gist are out of scope.
 - **The extension cannot tell a private repository from a public one by its URL.** It refuses GitHub's authentication and settings pages, but on an ordinary repository page it is your call whether the title and URL should reach X.

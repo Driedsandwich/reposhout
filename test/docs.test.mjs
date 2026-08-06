@@ -241,6 +241,36 @@ test('QA手順の検査が効いているかの対照', () => {
     '対照が成立していない＝旧手順でも通ってしまう');
 });
 
+/*
+ * 第9回監査 R9-005。禁止語の一覧方式は、語の間に別の語が挟まると一致しない。
+ * 日本語READMEの「公式の conformance コーパスは npm パッケージに同梱されていないため、
+ * 走らせていません」は、禁止語「公式 conformance コーパスは走らせていない」と一字違いで
+ * 素通りしていた。**書いてあるべきことを積極的に要求する**形へ変える。
+ */
+test('READMEが、実装と一致する事実を積極的に書いている', () => {
+  const must = {
+    'README.md': [
+      ['validate.yml', '走らせている公式コーパスの名前'],
+      ['counting sections', '走らせている範囲'],
+      ['pinned upstream commit', '固定していること'],
+      ['refused at every entry point', '設定・認証ページを全入口で拒否すること']
+    ],
+    'README.ja.md': [
+      ['validate.yml', '走らせている公式コーパスの名前'],
+      ['文字数の3節', '走らせている範囲'],
+      ['配布物には入りません', '配布物に入らないこと'],
+      ['すべての入口で拒否', '設定・認証ページを全入口で拒否すること'],
+      ['文字数の3節は実際に走らせています', '走らせている事実（否定形で書かない）']
+    ]
+  };
+  for (const [f, pairs] of Object.entries(must)) {
+    const body = read(f);
+    for (const [needle, why] of pairs) {
+      assert.ok(body.includes(needle), `${f} に「${why}」が書いていない: ${needle}`);
+    }
+  }
+});
+
 test('プライバシーポリシーに Limited Use の遵守声明がある', () => {
   const p = read('PRIVACY.md');
   for (const [needle, why] of [
