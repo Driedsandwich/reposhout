@@ -238,6 +238,46 @@ test('アカウント名は「入る場合がある」と書いてある（「�
   assert.match(pii.codeFact, /場合がある/, '正本が「必ず入る」と読める書き方になっている');
 });
 
+/*
+ * ダッシュボードへ貼るホスト権限の説明を、実装と揃える。
+ *
+ * README と PRIVACY は直したのに、**実際に審査へ出す文面だけ**が
+ * 「ページを読むのはボタン行を探すためだけで、要素を1つ足す」のまま残っていた
+ * （第6回監査 R6-002）。人が読み直す運用では、貼る文面ほど見落とす。
+ */
+test('ストアへ貼る github.com の権限説明が、実装と揃っている', () => {
+  const body = read('store/LISTING.md');
+  const i = body.indexOf('**Host permission: github.com**');
+  assert.ok(i > 0, 'github.com の権限説明が無い');
+  const section = body.slice(i, body.indexOf('**Host permission: x.com**', i));
+
+  const must = {
+    'action row': 'どこを探すのか',
+    '<style>': '足す style 要素',
+    'wrapper': 'ボタンを包む要素',
+    '<li> or a <div>': 'コンテナによって li か div になること',
+    'location.href': '読む値（URL）',
+    'document.title': '読む値（タイトル）',
+    'event.isTrusted': '合成クリックを拒否すること',
+    'activeTab': 'ツールバー/ショートカットは別経路であること'
+  };
+  for (const [needle, why] of Object.entries(must)) {
+    assert.ok(section.includes(needle), `github.com の権限説明に「${why}」が書いていない: ${needle}`);
+  }
+
+  // 旧文の言い回しが残っていないこと
+  for (const stale of ['adds a single <li> element', 'reads\nthe page only to locate']) {
+    assert.ok(!section.includes(stale), `旧い説明が残っている: ${stale}`);
+  }
+});
+
+test('権限説明の検査が効いているかの対照', () => {
+  const old = "The content script reads the page only to locate the button row, and adds a single <li> element.";
+  for (const needle of ['<style>', 'location.href', 'document.title', 'event.isTrusted']) {
+    assert.ok(!old.includes(needle), `対照が成立していない＝旧文でも通ってしまう: ${needle}`);
+  }
+});
+
 test('バージョンが manifest / package.json / CHANGELOG / ストア文書で揃っている', () => {
   const manifest = JSON.parse(read('manifest.json'));
   const pkg = JSON.parse(read('package.json'));

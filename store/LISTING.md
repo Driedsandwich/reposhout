@@ -240,11 +240,28 @@ which any web page could copy.
 **Host permission: github.com**（content script の欄がある場合）
 
 ```
-The in-page Share button is injected into GitHub's repository header so that
-sharing takes one click from where the user already is. The content script reads
-the page only to locate the button row, and adds a single <li> element. It never
-modifies or removes any existing GitHub element, and does nothing at all if the
-expected container is not found.
+The in-page Share button is injected into GitHub's own action row so that
+sharing takes one click from where the user already is.
+
+What the content script does on github.com:
+
+- It locates GitHub's action row. It reads the page structure only to find that
+  row, and it does not inspect the body content of the page.
+- It adds one <style> element to the document head, and one wrapper containing
+  one Share button. The wrapper is an <li> or a <div>, depending on which
+  container GitHub uses on that page. It does not modify, delete, or replace any
+  existing GitHub element, and it does nothing at all if the expected container
+  is not found.
+- When -- and only when -- the user activates that button with a real click, it
+  reads location.href and document.title in order to build the X Web Intent
+  link. A click synthesised by page JavaScript is refused (event.isTrusted).
+- It does not read cookies or form fields, runs no analytics, and makes no
+  network request of its own.
+
+The toolbar icon and the keyboard shortcut are a separate path: they do not use
+this content script at all. They read the current tab's URL and title through
+the activeTab permission, which is granted only at the moment the user invokes
+the extension, and only for that one tab.
 ```
 
 **Host permission: x.com**
