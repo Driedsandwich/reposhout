@@ -92,7 +92,7 @@ RepoShout is narrower than RepoCast on purpose (one destination, no side panel, 
 Browser extensions that inject UI into GitHub have a habit of dying when GitHub redesigns — as the abandoned predecessors listed above show. RepoShout is built to limit *how* it breaks rather than to pretend it won't.
 
 - **If the anchor element isn't found, it does nothing.** No error, no fallback DOM surgery, no broken GitHub page.
-- **GitHub's existing DOM is read, never modified.** The extension adds one wrapper holding one button — an `<li>` inside the repository page's `<ul>`, a `<div>` inside the flex row on issues and pull requests — plus a single `<style>` element in the document head. It removes and replaces nothing.
+- **GitHub's existing DOM is read, never modified.** The extension adds one `<style>` element in the document head and one wrapper holding one button — an `<li>` inside the repository page's `<ul>`, a `<div>` inside the flex row on issues and pull requests. It deletes and replaces nothing of GitHub's own.
 - **It never inspects which buttons are present.** Signed-in and signed-out GitHub show different button sets; prepending to the container works identically for both, and for whatever GitHub adds next.
 - **The toolbar icon and keyboard shortcut don't touch the DOM at all.** They work from the tab's URL and title, so they keep working even if the in-page button stops appearing.
 - Colours are read from GitHub's own theme variables (`--button-default-*`), so light and dark mode follow automatically.
@@ -112,7 +112,7 @@ Content scripts run on two sites:
 
 | Site | Purpose |
 |---|---|
-| `github.com` | Add the Share button. Reads the page only to find the button row; adds one element, changes nothing else. |
+| `github.com` | Add the Share button. Reads the page only to find the button row; adds one `<style>` element and one wrapper holding one button, and changes nothing else. |
 | `x.com` | **Listen for the Escape key, nothing else** — so you can dismiss a share window you didn't want. |
 
 The X script never reads page content. Before closing a window it asks the service worker one question: *is this window one you opened?* The answer comes from the window ID that `chrome.windows.create()` returned, and from nothing else. A page cannot read or forge that ID.
@@ -134,7 +134,7 @@ test/fixtures.js         Expected values — shared by the Node and browser runn
 test/*.test.mjs          Node test suites
 test/share.test.html     Browser runner over the same fixtures (manual, optional)
 scripts/package.mjs      Deterministic ZIP builder
-scripts/package-files.mjs The nine files that ship
+scripts/package-files.mjs The list of files that ship (the single source of truth)
 ```
 
 ## Tests
@@ -147,7 +147,7 @@ npm test          # unit + oracle + real-extension E2E
 npm run package   # dist/reposhout-<version>.zip and its SHA-256
 ```
 
-Requirements: Node 22+, Chrome or Chromium (found via `CHROME_PATH` or the usual locations), and `openssl` for the E2E's throwaway certificate. No runtime or build dependencies are installed — `package.json` has none.
+Requirements: Node 22+, Chrome or Chromium (found via `CHROME_PATH` or the usual locations), and `openssl` for the E2E's throwaway certificate. **The extension itself has no runtime dependencies** — `package.json` lists none, and nothing from `node_modules/` is shipped. `npm ci` installs one test-only dev dependency, `twitter-text` 3.1.0, which the counting tests use as an oracle.
 
 | Suite | Command | What it covers |
 |---|---|---|
@@ -155,7 +155,7 @@ Requirements: Node 22+, Chrome or Chromium (found via `CHROME_PATH` or the usual
 | Official conformance | `npm run test:conformance` | The counting sections of Twitter's own `conformance/validate.yml`, vendored at a pinned upstream commit and checked by SHA-256 |
 | Packaging | `npm run test:package` | Builds with each write deliberately failed in turn, and checks that the previous artifact survives, that nothing partial is left, and that a `-dirty` build is named `-dirty` in its manifest too |
 | Manifest and package | included above | Manifest V3 validity, the permission list (the test fails if a permission is added), no remote-code patterns, the exact list of shipped files |
-| Real-extension E2E | `npm run test:e2e` | 10 tests. Loads the nine shipped files into real Chrome via `Extensions.loadUnpacked`, with `x.com` and `github.com` mapped to a local HTTPS server, and drives the real service worker |
+| Real-extension E2E | `npm run test:e2e` | 10 tests. Loads exactly the files listed in `scripts/package-files.mjs` into real Chrome via `Extensions.loadUnpacked`, with `x.com` and `github.com` mapped to a local HTTPS server, and drives the real service worker |
 | Browser runner | open `test/share.test.html` | The same fixtures, rendered as a table — useful for reading the actual output |
 
 On character counting: across the official corpus and the generated adversarial corpus, **no case was found where the counter falls below X's own**. That is a finite regression check, not a proof over all inputs.
@@ -171,7 +171,7 @@ The E2E is the one that matters for the Escape behaviour, because that behaviour
 | Shift+Esc | does not close |
 | After the window is closed, its ID is forgotten | not reusable |
 
-Measured 2026-08-05 on 1.1.2: unit 54 passed / 0 failed, E2E 10 passed / 0 failed. The counts move; `npm test` prints the current ones. Both Escape cases were also run against the 1.0.1 implementations to confirm they fail there — a test that cannot fail proves nothing.
+Measured 2026-08-06 on 1.1.4: unit 90 passed / 0 failed, E2E 10 passed / 0 failed. The counts move; `npm test` prints the current ones. Both Escape cases were also run against the 1.0.1 implementations to confirm they fail there — a test that cannot fail proves nothing.
 
 ## Verification status
 

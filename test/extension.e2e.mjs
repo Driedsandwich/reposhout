@@ -1,7 +1,7 @@
 /*
  * 実拡張のE2Eテスト
  *
- * 出荷する9ファイルだけを別ディレクトリへ並べ、それを本物のChromeへ
+ * 出荷するファイル（scripts/package-files.mjs の一覧）だけを別ディレクトリへ並べ、それを本物のChromeへ
  * Extensions.loadUnpacked で読み込む。manifest・service worker・
  * runtime message・chrome.windows を通した状態で挙動を確かめる。
  *
@@ -131,7 +131,7 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
 
   /* ---- テスト ---- */
 
-  it('出荷する9ファイルだけで拡張として読み込める', async () => {
+  it('出荷する一覧のファイルだけで拡張として読み込める', async () => {
     assert.match(extId, /^[a-p]{32}$/);
   });
 

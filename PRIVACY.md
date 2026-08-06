@@ -1,7 +1,7 @@
 # Privacy Policy / プライバシーポリシー
 
 **RepoShout** — Chrome extension
-Last updated / 最終更新: 2026-08-05（1.1.3）
+Last updated / 最終更新: 2026-08-06（1.1.4）
 
 ---
 
@@ -58,7 +58,7 @@ RepoShout also runs content scripts on two sites:
 
 | Site | What the script does |
 |---|---|
-| `https://github.com/*` | Adds the Share button. Reads the page only to locate the button row; adds a single element (an `<li>` or a `<div>`, matching the container) and modifies nothing else. |
+| `https://github.com/*` | Adds the Share button. Reads the page only to locate the button row; adds one `<style>` element and one wrapper holding one button (an `<li>` or a `<div>`, matching the container) and modifies nothing else. It deletes and replaces nothing of GitHub's own. |
 | `https://x.com/*` | **Listens for the Escape key, and nothing else.** It closes the share window this extension opened. It does not read, store, or transmit anything from X. |
 
 The X script is deliberately blind to page content. Before closing anything it asks the service worker whether this window is one the extension itself opened, and the only evidence accepted is the window ID recorded at creation time. **If it does not match — which is the case for every X tab you opened yourself — it does nothing.** It cannot close your normal X tabs.
@@ -126,7 +126,7 @@ RepoShout はバックグラウンドでの通信を行わず、独自のサー�
 
 | サイト | スクリプトがすること |
 |---|---|
-| `https://github.com/*` | Share ボタンを追加します。ページを読むのはボタン行の位置を探すためだけで、要素を1つ足す以外は何も変更しません（コンテナに合わせて `<li>` または `<div>`）。 |
+| `https://github.com/*` | Share ボタンを追加します。ページを読むのはボタン行の位置を探すためだけで、`<style>` を1つとボタン1個を包む要素を1つ足す以外は何も変更しません（包む要素はコンテナに合わせて `<li>` または `<div>`）。GitHub側の要素は消しも置き換えもしません。 |
 | `https://x.com/*` | **Escキーの検知だけを行います。** 拡張が開いた共有用ウィンドウを閉じるためです。Xから何かを読み取ることも、保存することも、送信することもありません。 |
 
 X側のスクリプトは、意図的にページの中身を見ません。閉じる前に、service worker へ「このウィンドウは拡張が開いたものか」とだけ尋ねます。根拠として使うのは、開いた時点で記録したウィンドウIDだけです。**一致しない場合（＝あなたが自分で開いたXのタブはすべてこれに当たります）、何もしません。** 通常のXのタブを閉じることはできません。

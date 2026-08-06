@@ -1,17 +1,17 @@
 # Chrome ウェブストア 提出手順書
 
-更新: 2026-08-05 / 対象: RepoShout **1.1.3**（未提出。ストアで公開中なのは 1.0.1・2026-08-03通過。1.1.0〜1.1.2 はタグのみで提出していない）
+更新: 2026-08-06 / 対象: RepoShout **1.1.4**（未提出。ストアで公開中なのは 1.0.1・2026-08-03通過で、2026-08-06 に配布中のCRXを取得して実測。1.1.0〜1.1.3 はタグのみで提出していない）
 **この文書は原稿と手順です。提出（Submit for review）はあなたが実行します。**
 
 > **提出の前提（2026-08-05 決定）**: 外部監査（ChatGPT の GPT-5.6 Sol Pro）に**合格してから**提出する。
-> 現時点の最新監査は第4回で、判定は `CONDITIONAL_FAIL`／`NOT_READY_FOR_CHROME_WEB_STORE_SUBMISSION`。
+> 現時点の最新監査は第5回で、判定は `CONDITIONAL_FAIL`／`NOT_READY_FOR_CHROME_WEB_STORE_SUBMISSION`。
 > 次の監査で合格が出るまで、この手順は実行しない。
 初回提出と更新提出の両方でこの文書を使います。更新のときは §1 のアップロードと、変えた機能に関わる §2 の掲載文だけを直せば足ります。
 
 デベロッパーダッシュボードの画面順に並べてあります。上から順に進めてください。
 各欄はコードブロックをそのままコピペできます。
 
-- 提出用ZIP: リポジトリで `npm run package` を実行すると `dist/reposhout-<版>.zip` ができます（9ファイル・allowlist方式）。同じ内容なら何度作っても同じZIPになるので、`dist/*.zip.sha256` の値で手元と提出物の一致を確かめられます
+- 提出用ZIP: リポジトリで `npm run package` を実行すると `dist/reposhout-<版>.zip` ができます（収録一覧は `scripts/package-files.mjs`・allowlist方式）。同じ内容なら何度作っても同じZIPになるので、`dist/*.zip.sha256` の値で手元と提出物の一致を確かめられます
 - 公開リポジトリ: https://github.com/Driedsandwich/reposhout
 - ダッシュボード: https://chrome.google.com/webstore/devconsole
 
@@ -29,7 +29,7 @@
 **「新しいアイテムを追加」→ ZIPをドラッグ**
 
 ```
-dist/reposhout-1.1.3.zip
+dist/reposhout-1.1.4.zip
 ```
 
 ### どのZIPを出すか（2026-08-06 追加・第5回監査 R5-003）
@@ -38,11 +38,11 @@ dist/reposhout-1.1.3.zip
 仮に合わせた**一時的なコミット**を作り、CIはそこからZIPを作ります。そのコミットは main のどれとも
 一致しないので、あとから「提出したものはどのコミットか」を辿れません。
 
-1.1.3 からは、機械側でも人間側でも見分けられるようにしてあります。
+1.1.4 からは、機械側でも人間側でも見分けられるようにしてあります。
 
 | 見るところ | 提出してよいもの | 出してはいけないもの |
 |---|---|---|
-| ファイル名 | `reposhout-1.1.3.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty.zip` |
+| ファイル名 | `reposhout-1.1.4.zip` | `…-NON-SUBMITTABLE.zip` / `…-dirty.zip` |
 | `dist/release-manifest.json` の `submittable` | `true` | `false` |
 | 同 `ci.eventName` | `push`（main）または `workflow_dispatch` | `pull_request` |
 | 同 `sourceCommit` | main のコミットと一致 | 一致しない |
@@ -52,17 +52,17 @@ CI が残した `reposhout-package-<コミットSHA>`** です。手順は次の
 
 1. Actions で main の該当 run を開き、成果物 `reposhout-package-<SHA>` をダウンロードする
 2. 展開して `release-manifest.json` を開き、上の表の4点を確かめる
-3. `shasum -a 256 reposhout-1.1.3.zip` の値が、同梱の `.sha256` と一致することを確かめる
+3. `shasum -a 256 reposhout-1.1.4.zip` の値が、同梱の `.sha256` と一致することを確かめる
 4. その展開物をそのまま「パッケージ化されていない拡張機能」として読み込み、動作を見る
 5. **そのZIPをアップロードする**（手元で作り直したものと差し替えない）
 
-同梱物は9ファイル（`npm run package` の出力に一覧が出ます）。`store/` `test/` `scripts/` `.github/` と文書は動作に不要なので、収録一覧（allowlist）に入れていません。
+同梱物は `scripts/package-files.mjs` に挙げたファイルだけです（`npm run package` の出力に一覧と件数が出ます）。`store/` `test/` `scripts/` `.github/` と文書は動作に不要なので、収録一覧（allowlist）に入れていません。
 アップロード後、名前は `manifest.json` から自動で入ります（入力欄はありません）。
 
 | 自動で入る値 | 内容 |
 |---|---|
 | Name | `RepoShout — Share GitHub repos, issues & PRs to X`（49文字 / 上限75） |
-| Version | `1.1.3`（manifest の値。前回より大きくないと弾かれます） |
+| Version | `1.1.4`（manifest の値。前回より大きくないと弾かれます） |
 | Short description | 下の §2 と同一（manifest の `description`・117文字 / 上限132） |
 
 ---
