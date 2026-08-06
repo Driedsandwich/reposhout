@@ -107,7 +107,7 @@ function buildZip(entries) {
   return Buffer.concat([...locals, centralBuf, eocd]);
 }
 
-export function makePackage({ dryRun = false } = {}) {
+export function makePackage({ dryRun = false, allowDirty = false } = {}) {
   const manifest = JSON.parse(readFileSync(join(ROOT, 'manifest.json'), 'utf8'));
   const entries = PACKAGE_FILES.map((name) => {
     const p = join(ROOT, name);
@@ -117,7 +117,7 @@ export function makePackage({ dryRun = false } = {}) {
 
   const zip = buildZip(entries);
   const sha = createHash('sha256').update(zip).digest('hex');
-  const outName = `reposhout-${manifest.version}.zip`;
+  const outName = `reposhout-${manifest.version}.zip`;   // dirty のときは後で -dirty を挟む
 
   /*
    * どのコミットから作ったZIPなのかを一緒に残す。
@@ -157,11 +157,24 @@ export function makePackage({ dryRun = false } = {}) {
     written: false
   };
 
+  const finalName = provenance.dirty ? `reposhout-${manifest.version}-dirty.zip` : outName;
+  report.file = join('dist', finalName);
+
   if (!dryRun) {
+    /*
+     * 未コミットの変更があるまま「提出用」の名前でZIPを作らない。
+     * 手元だけにある変更が入った成果物を、あとから履歴と突き合わせられなくなる。
+     * 試したいときは --allow-dirty を付ける（名前に -dirty が入る）。
+     */
+    if (provenance.dirty && !allowDirty) {
+      throw new Error(
+        '未コミットの変更があります。コミットしてから作るか、--allow-dirty を付けてください。'
+      );
+    }
     if (existsSync(DIST)) rmSync(DIST, { recursive: true, force: true });
     mkdirSync(DIST, { recursive: true });
-    writeFileSync(join(DIST, outName), zip);
-    writeFileSync(join(DIST, `${outName}.sha256`), `${sha}  ${outName}\n`);
+    writeFileSync(join(DIST, finalName), zip);
+    writeFileSync(join(DIST, `${finalName}.sha256`), `${sha}  ${finalName}\n`);
     writeFileSync(join(DIST, 'release-manifest.json'), JSON.stringify(provenance, null, 2) + '\n');
     report.written = true;
   }
@@ -170,7 +183,8 @@ export function makePackage({ dryRun = false } = {}) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const dryRun = process.argv.includes('--dry-run');
-  const r = makePackage({ dryRun });
+  const allowDirty = process.argv.includes('--allow-dirty');
+  const r = makePackage({ dryRun, allowDirty });
   console.log(`RepoShout ${r.version} — ${dryRun ? '収録予定' : '生成しました'}`);
   for (const f of r.files) console.log(`  ${String(f.bytes).padStart(7)} B  ${f.name}`);
   console.log(`  ---`);
