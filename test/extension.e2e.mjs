@@ -248,8 +248,16 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
     assert.equal(shown.text, messages.shareButtonLabel.message, JSON.stringify(shown));
     assert.equal(shown.title, messages.shareButtonTooltip.message, JSON.stringify(shown));
     assert.equal(shown.aria, messages.shareButtonAria.message, JSON.stringify(shown));
-    // 表示言語が英語なら、英語の文字列で出ていることまで言える
-    if (locale === 'en') assert.equal(shown.title, 'Post this page to X');
+    /*
+     * 表示言語が英語なら、英語の文字列で出ていることまで言える。
+     * ここはわざと直書きする（言語ファイルから取ると「ファイルとファイルを
+     * 比べているだけ」になる）。文言を変えたらここも直す——実際、第12回監査
+     * R12-002 で変えたときに直し忘れ、日本語環境の手元では通り、英語環境の
+     * CI でだけ落ちた。
+     */
+    if (locale === 'en') {
+      assert.equal(shown.title, "Send this page's title and URL to X's composer");
+    }
 
     const isNewShareWindow = (t) =>
       t.type === 'page' && t.url.startsWith('https://x.com/intent/') && !before.has(t.targetId);
