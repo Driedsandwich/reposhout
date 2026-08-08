@@ -21,6 +21,11 @@
   **残すのは値の集合を数えられるもの（int / bool / enum）だけ**にした。
   トークンの形も GitLab / OpenAI / Stripe / npm / Shopify / SendGrid まで広げ、
   `api.key=` のような書き方も拾えるようにした（`.` を区切りとして扱う）
+- **文書が旧仕様のままだった（R13-002・P2）** — README・ストア掲載文・PRIVACY が
+  「検索語や下書きの title / body を残す」と書き、`QUERY_ALLOW` を正本と呼び、
+  x.com のスクリプトを「Escapeだけを聞く」と説明していた。実装（`QUERY_RULES`・
+  自由文を落とす・keydown を受けて key を見てから捨てる）に合わせて直し、
+  **節ごとの積極的な要求**として検査する
 
 ### 出す成果物
 

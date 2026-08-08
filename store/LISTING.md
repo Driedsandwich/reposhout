@@ -164,9 +164,11 @@ Changed your mind? Press Escape in the share window to dismiss it.
     Issue        →  Title (Issue #123 · owner/repo)
     Pull request →  Title (PR #123 · owner/repo)
 • Authentication, account, settings and organisation admin pages are never shared
-• Query strings are handled per page type: filters on issue lists, ?plain=1 on a
-  Markdown file and a prepared pull request's title and body are kept, while
-  tracking parameters are dropped. Line, comment and README section anchors are kept
+• Query strings are handled per page type, and only values whose set can be
+  enumerated or checked mechanically are kept (page numbers, open/closed state,
+  sort order, ?plain=1, ?diff=split&w=1). Search terms and a prepared pull
+  request's title and body are never shared. Line, comment and README section
+  anchors are kept
 • Character counting follows X's published rules, including Japanese, Chinese and
   Korean text, emoji and links. No under-count was found against twitter-text 3.1.0
   in the pinned counting sections of the official corpus, the regression fixtures or
@@ -188,9 +190,11 @@ placed in X's own composer link and reach X when the composer opens, before you
 decide whether to post. Authentication, account, settings and organisation
 admin pages are refused outright and are never shared.
 
-It runs a script on x.com for one reason only: to listen for the Escape key so
-you can dismiss the share window. That script reads nothing from X, and it will
-only close a window this extension itself opened -- never a tab you opened.
+It runs a script on x.com for one reason only: it registers a single keydown
+listener and checks event.key on each press, ignoring anything other than an
+unmodified Escape, so you can dismiss the share window. That script reads no
+field values or page content from X, and it will only close a window this
+extension itself opened -- never a tab you opened.
 
 Full policy: https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md
 
@@ -335,8 +339,9 @@ the extension, and only for that one tab.
 **Host permission: x.com**
 
 ```
-This script has exactly one job: listen for the Escape key so the user can
-dismiss the share window the extension just opened, if they change their mind.
+This script has exactly one job: it registers a single keydown listener, checks
+event.key on each press and immediately ignores anything other than an unmodified
+Escape, so the user can dismiss the share window the extension just opened.
 
 It reads no page content from X. This script itself stores nothing and transmits
 nothing; the extension's storage permission is used only by its service worker,
