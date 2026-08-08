@@ -26,7 +26,7 @@ This is a side project maintained by one person. There is no bounty and no guara
 In scope — anything in this repository, in particular:
 
 - The Escape-to-close path on `x.com`. The rule is that only a window the extension opened itself may be closed. A page-controlled way to close a window the user opened is a vulnerability.
-- The URL policy in `src/share.js`. A URL whose credentials, tokens or OAuth parameters survive into a draft post is a vulnerability.
+- The outbound policy in `src/share.js`. Both the shared URL and the post text are checked, before and after the extension transforms them. A page title or URL that carries credentials, tokens or OAuth parameters into a draft post is a vulnerability, and so is any transformation of ours -- truncation, normalisation, decoding -- that moves such a value past a check that would otherwise have caught it. Detection is by defined patterns, not a guarantee that every secret is recognised, so a report that names a shape we do not yet cover is welcome and in scope.
 - Anything that causes the extension to post without the user pressing Post on X.
 
 Out of scope:
@@ -63,7 +63,7 @@ Out of scope:
 対象に含まれるもの——このリポジトリの内容すべて。特に次の3つ。
 
 - `x.com` 上のEscで閉じる処理。ルールは「拡張自身が開いたウィンドウだけを閉じてよい」です。ページ側の操作で利用者のウィンドウを閉じられるなら、それは脆弱性です
-- `src/share.js` のURL方針。資格情報・トークン・OAuthのパラメータが投稿の下書きまで残るURLがあれば、それは脆弱性です
+- `src/share.js` の出口の方針。共有するURLと投稿本文の両方を、こちらが変換する前と後で検査しています。資格情報・トークン・OAuthのパラメータが投稿の下書きまで残るタイトルやURLがあれば、それは脆弱性です。**こちらの変換（切り詰め・正規化・デコード）のせいで、本来当たるはずの検査をすり抜ける**場合も同じく脆弱性です。検出は「定義したパターンに当たるか」で行っており、あらゆる秘密を見つけられるという意味ではありません。まだ拾えていない形の指摘も対象に含みます
 - 利用者がX側で投稿ボタンを押していないのに投稿が行われる経路
 
 対象外——GitHub や X 自体の挙動、改造した拡張を利用者が自分で入れることを前提とする攻撃、機能が無いこと（例: 代理投稿をしないのは意図的な設計です）。

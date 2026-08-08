@@ -755,3 +755,119 @@ test('資格情報の判定は、ほどける段数に上限がある（止ま�
   GXS.credentialLikeValue(deep);
   assert.ok(Date.now() - t0 < 1000, '判定が長すぎる');
 });
+
+/*
+ * ============================================================
+ * 第14回監査 R14-001 — 変換の前も見る／正規化してから照合する
+ * ============================================================
+ *
+ * 1.1.8 の配布ZIP（inner SHA-256 5ecec372…）で、次がXの投稿画面まで届いた。
+ * 値はすべてダミーで、実在の資格情報は使っていない。
+ *
+ *   ・Basic 認証つきURLを表題に置く
+ *   ・;jsessionid= / PHPSESSID= / X-Amz-Signature= をパスに置く
+ *   ・全角の ＝ ： や全角英字で書く
+ *   ・長い表題の末尾にトークンを置き、**切り詰めでトークンを短くする**
+ *   ・既知の形の途中にゼロ幅スペースを入れる
+ */
+
+/* 見えない文字。ソースにそのまま書くと読めないのでコードポイントで組み立てる */
+const ZWSP = String.fromCharCode(0x200B);
+const GH_TOKEN = ['gh', 'p_', 'a'.repeat(24)].join('');
+
+test('Basic 認証つきURLを表題に置いても共有しない（R14-001）', () => {
+  const title = `https://user:${DUMMY}@example.com · Issue #1 · o/r`;
+  assert.equal(GXS.buildShare('https://github.com/o/r/issues/1', title), null);
+  assert.equal(GXS.buildShareResult('https://github.com/o/r/issues/1', title).reason,
+    'credential_like');
+  /* 対照: 合言葉のない userinfo と、ただの @ を含むパスは共有できる */
+  assert.ok(GXS.buildShare('https://github.com/o/r/issues/1',
+    `https://user@example.com の話 · Issue #1 · o/r`), 'user@ だけで拒否している');
+  assert.ok(GXS.buildShare('https://github.com/o/r/blob/main/a@b.txt', 'r/a@b.txt at main · o/r'),
+    'a@b.txt を拒否している');
+});
+
+test('セッションIDと署名付きURLの名前をパスに置いても共有しない（R14-001）', () => {
+  /* X-Amz-Signature は区切りを落とすと xamzsignature で、'signature' には当たらない */
+  for (const seg of [`foo;jsessionid=${DUMMY}`, `PHPSESSID=${DUMMY}`,
+                     `X-Amz-Signature=${DUMMY}`, `X-Amz-Credential=${DUMMY}`,
+                     `AWSAccessKeyId=${DUMMY}`]) {
+    const url = `https://github.com/o/r/blob/main/${seg}`;
+    assert.equal(GXS.canonicalUrl(url, null), null, `パスが通ってしまう: ${seg}`);
+    assert.equal(outboundParts(url, 'r/o at main · GitHub'), null, `共有できてしまう: ${seg}`);
+  }
+});
+
+test('全角・ゼロ幅で崩した書き方も、正規化してから照合する（R14-001）', () => {
+  const cases = [
+    ['全角の等号', `access_token＝${DUMMY}`],
+    ['全角のコロン', `access_token：${DUMMY}`],
+    ['小字形の等号', `access_token﹦${DUMMY}`],
+    ['全角の英字', `ａｃｃｅｓｓ＿ｔｏｋｅｎ=${DUMMY}`],
+    ['トークンをゼロ幅で割る', `gh${ZWSP}p_${'a'.repeat(24)}`]
+  ];
+  for (const [label, payload] of cases) {
+    const title = `${payload} · Issue #1 · o/r`;
+    assert.equal(GXS.buildShare('https://github.com/o/r/issues/1', title), null,
+      `共有できてしまう: ${label}`);
+  }
+  /* 対照: 全角のコロンを含む普通の日本語の表題は共有できる */
+  assert.ok(GXS.buildShare('https://github.com/o/r/issues/1', '全角の日本語：コロン · Issue #1 · o/r'),
+    '普通の日本語の表題を拒否している');
+});
+
+test('切り詰めでトークンが短くなっても、断片をXへ渡さない（R14-001）', () => {
+  /*
+   * 検査が切り詰めのあとだけだと、こちらの変換そのものが検出を外す。
+   * 1.1.8 では prefix 211〜226 文字の16通りで断片が最終本文に残った（実測）。
+   */
+  const routes = [
+    ['issue', 'https://github.com/o/r/issues/1', ' · Issue #1 · o/r'],
+    ['repo', 'https://github.com/o/r', ' · GitHub'],
+    ['discussion', 'https://github.com/o/r/discussions/1', ' · Discussion #1 · o/r']
+  ];
+  for (const [label, url, tail] of routes) {
+    const leaks = [];
+    for (let n = 150; n <= 280; n++) {
+      const s = GXS.buildShare(url, `${'x'.repeat(n)} ${GH_TOKEN}${tail}`);
+      if (s && s.text.includes(GH_TOKEN.slice(0, 4))) leaks.push(n);
+    }
+    assert.deepEqual(leaks, [], `${label}: 切り詰め後に断片が残る長さ ${leaks.length} 通り`);
+  }
+  /* 対照: 同じ長さでトークンを含まない表題は、これまでどおり共有できる */
+  const plain = GXS.buildShare('https://github.com/o/r/issues/1',
+    `${'x'.repeat(211)} ふつうの続き · Issue #1 · o/r`);
+  assert.ok(plain && plain.text.length > 0, '長いだけの表題まで拒否している');
+});
+
+test('変換前の生のタイトルを見る入口がある（R14-001）', () => {
+  assert.equal(GXS.credentialLikeInbound(`access_token=${DUMMY}`), 'credential_like');
+  assert.equal(GXS.credentialLikeInbound('ふつうの表題'), null);
+  assert.equal(GXS.credentialLikeInbound(''), null);
+  assert.equal(GXS.credentialLikeInbound(null), null);
+});
+
+test('走査用の正規化は、出て行く文面を変えない（R14-001）', () => {
+  /* 正規化はあくまで照合のため。全角の表題はそのままXへ渡す */
+  const s = GXS.buildShare('https://github.com/o/r/issues/1', 'ＡＢＣ 全角の表題 · Issue #1 · o/r');
+  assert.ok(s, '共有できていない');
+  assert.ok(s.text.includes('ＡＢＣ'), `本文が正規化されてしまっている: ${s.text}`);
+  assert.equal(GXS.normalizeForScan('ＡＢＣ'), 'ABC');
+  assert.equal(GXS.normalizeForScan(`gh${ZWSP}p_x`), 'ghp_x');
+});
+
+test('普通のGitHubページは、これまでどおり共有できる（R14-001の逆方向の対照）', () => {
+  const ordinary = [
+    ['https://github.com/facebook/react', 'GitHub - facebook/react: The library · GitHub'],
+    ['https://github.com/nodejs/node/issues/12345', 'Segfault in native module · Issue #12345 · nodejs/node'],
+    ['https://github.com/rust-lang/rust/pull/9876', 'Fix ICE by ferris · Pull Request #9876 · rust-lang/rust'],
+    ['https://github.com/o/r/blob/main/README.md?plain=1#L14', 'r/README.md at main · o/r · GitHub'],
+    ['https://github.com/o/r/issues?state=open&page=2', 'Issues · o/r · GitHub'],
+    ['https://github.com/o/r/issues/4', 'Add https://example.com to the docs · Issue #4 · o/r'],
+    ['https://github.com/o/r/issues/5', 'git@github.com:o/r.git does not clone · Issue #5 · o/r'],
+    ['https://github.com/o/r/issues/2', 'Emoji 🎉 in the title · Issue #2 · o/r']
+  ];
+  for (const [url, title] of ordinary) {
+    assert.ok(GXS.buildShare(url, title), `共有できなくなっている: ${url}`);
+  }
+});

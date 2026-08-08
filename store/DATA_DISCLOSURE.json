@@ -74,7 +74,7 @@
       "id": "authentication_information",
       "label": "Authentication information",
       "labelJa": "認証情報",
-      "codeFact": "cookie・フォームの入力値は読まない。共有URLに残すのは値の形を機械的に確かめられるものだけで、検索語や作成中の本文などの自由文（q / query / discussions_q / title / body）は落とす（第12回監査 R12-001）。残ったURL全体（パス・クエリ・断片）に資格情報の形——名前つきの代入（access_token= / clientSecret: など・区切りと大文字小文字は正規化して照合）、GitHub・Bearer・AWS・Slack・JWT・秘密鍵のトークン形——があればURLごと共有せず、値を出さない案内を表示する。**この検査は「ここに挙げた形」を拒むもので、あらゆる秘密の検出を保証するものではない**（だから自由文は検査ではなく破棄する）。認証・設定・組織管理の画面は、Xの投稿画面を開く前に拒否する。**ただし、拒否の判定をする前に、操作されたときは現在のタブのURL全体をいったん受け取る**（ツールバー/ショートカットは activeTab 経由）",
+      "codeFact": "cookie・フォームの入力値は読まない。共有URLに残すのは値の集合を数えられるものだけ（int / bool / enum）で、検索語や作成中の本文などの自由文（q / query / discussions_q / title / body）も、識別子のように見える値（labels / author / branch / path / milestone / category / template）も落とす（第12回監査 R12-001・第13回監査 R13-001）。そのうえで、**出て行くURLと投稿本文に加えて、こちらが変換する前の生のタイトル**も同じ規則で見る（第14回監査 R14-001。切り詰めで既知のトークンが短くなり、パターンの最小長を下回って断片が渡った実例があったため）。照合は素のままと、見えない文字を落として NFKC 正規化した形の両方で行う。当たる形は、名前つきの代入（access_token= / clientSecret: / api.key= など・区切りと大文字小文字は正規化して照合。セッションIDと署名の名前 jsessionid / PHPSESSID / X-Amz-Signature ほかを含む）、Basic 認証つきURL、GitHub・GitLab・OpenAI・Stripe・npm・Shopify・SendGrid・Bearer・AWS・Slack・JWT・秘密鍵のトークン形。1つでも当たれば投稿画面を開かず、値を出さない案内を表示する（案内が届かないページではツールバーに `!` を数秒出す）。**この検査は「ここに挙げた形」を拒むもので、あらゆる秘密の検出を保証するものではない**（だから自由文は検査ではなく破棄する）。認証・設定・組織管理の画面は、Xの投稿画面を開く前に拒否する。**ただし、拒否の判定をする前に、操作されたときは現在のタブのURL全体をいったん受け取る**（ツールバー/ショートカットは activeTab 経由で、Chrome が渡してきたそのタブだけを見る・第14回監査 R14-002）",
       "policyBasis": "資格情報そのものは扱わないと判断した。ただし handle には use が含まれ、拒否の前段でURL全体を受け取ってはいるので、現行の設問文で最終確認が要る",
       "proposedAnswer": "No",
       "answer": null,
