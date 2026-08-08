@@ -676,3 +676,4 @@ test('バージョンが manifest / package.json / CHANGELOG / ストア文書�
     }
   }
 });
+
