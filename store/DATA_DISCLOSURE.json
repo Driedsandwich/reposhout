@@ -18,7 +18,7 @@
     "確認した記録が残らなかった（第9回監査 R9-002）。",
     "confirmed にするときは answer と ownerConfirmation.chosen を一致させ、",
     "ownerConfirmation の4欄（読んだ設問文・確認日・選んだ答え・理由）をすべて埋める。",
-    "提出前に npm run verify:store-readiness で確かめる。"
+    "提出前に npm run verify:store-preflight と verify:submission-ready で確かめる。"
   ],
   "version": "1.1.8",
   "dashboardSection": "Privacy practices › Data usage",

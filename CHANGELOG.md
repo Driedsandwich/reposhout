@@ -4,7 +4,44 @@
 
 **どこまで出したかは [RELEASE_STATUS.md](RELEASE_STATUS.md) が正本。** ここに書くのは「何を変えたか」だけにする（公開状態をここへ書くと、マージやタグのあとに必ず古くなる）。確定した版の見出しにはタグ名を書く——`test/release-status.test.mjs` が git と突き合わせる。
 
-## [1.1.8] — 未リリース（タグ未作成・配布物を作り直し中）
+## [1.1.8] — 未リリース（タグ未作成・配布物をもう一度作り直し中）
+
+2026-08-08 の第13回監査で出た5件への対応を含む。**再現できた4件はすべて配布ZIPで再現した。**
+版は 1.1.8 のまま（未提出・タグ未作成なので成果物を差し替える）。
+直前の成果物（`reposhout-package-4cb4523…` / `91c5e798…`）は**提出しない**。
+
+### 第13回監査で直したもの
+
+- **投稿本文を検査していなかった（R13-001・P1）** — 検査していたのはURLだけで、
+  `document.title` から作る投稿本文は素通りだった。Issue の表題が
+  `access_token=<dummy>` だと、そのままXの投稿画面の text に載った（配布ZIPで実測）。
+  **出口を1つにまとめ、URLと本文の両方を同じ規則で最後に見る。**
+  あわせて、識別子のつもりで残していた `labels` `author` `branch` `path` `milestone`
+  `category` `template` に `sk_live_…` `npm_…` `glpat-…` を入れられたので、
+  **残すのは値の集合を数えられるもの（int / bool / enum）だけ**にした。
+  トークンの形も GitLab / OpenAI / Stripe / npm / Shopify / SendGrid まで広げ、
+  `api.key=` のような書き方も拾えるようにした（`.` を区切りとして扱う）
+- **文書が旧仕様のままだった（R13-002・P2）** — README・ストア掲載文・PRIVACY が
+  「検索語や下書きの title / body を残す」と書き、`QUERY_ALLOW` を正本と呼び、
+  x.com のスクリプトを「Escapeだけを聞く」と説明していた。実装（`QUERY_RULES`・
+  自由文を落とす・keydown を受けて key を見てから捨てる）に合わせて直し、
+  **節ごとの積極的な要求**として検査する
+- **ツールバーとショートカットが、Chrome の渡すタブを捨てていた（R13-003・P2）** —
+  `chrome.tabs.query` で引き直していたので、渡されたタブと違うタブを共有しうる。
+  `chrome.action.onClicked(tab)` / `chrome.commands.onCommand(command, tab)` の
+  タブをそのまま使い、無いときだけ引き直す
+- **（R13-004）データ申告2欄は本人の確認待ちのまま。** 答えは1文字も入れていない
+- **廃止した npm run を案内していた（R13-005・P3）** — `npm run package` の出力と
+  `DATA_DISCLOSURE.json` が、いまは存在しない `verify:store-readiness` を案内していた。
+  2段（preflight / submission-ready）へ直し、**文書が名指しするスクリプトが
+  package.json に実在するか**を機械で見る検査を足した
+
+### 出す成果物
+
+**まだ存在しない。** `store/SUBMISSION_CANDIDATE.json` は `pending_main_ci` に戻し、
+却下した成果物は理由つきで `history` に残した。
+
+## [1.1.8-第12回対応] — 未リリース（記録）
 
 2026-08-07 の第12回監査で出た5件への対応を含む。**5件とも現物で再現した。**
 版は 1.1.8 のまま（未提出・タグ未作成なので、成果物を差し替える）。
@@ -164,7 +201,8 @@ main への push で走った CI（run 31117148744）が作ったものを、ダ
   `ownerMustConfirm` 1つで両方を表していたので、本人が確認して答えを入れると
   「確認は要らない」へ変えるしかなく、**確認した記録が残らなかった**。
   `requiresOwnerConfirmation`（要否）と `confirmationStatus`（pending / confirmed /
-  not_required）に分けた。あわせて提出前の関門 `npm run verify:store-readiness` を新設し、
+  not_required）に分けた。あわせて提出前の関門 `verify:store-readiness`（当時の名前。第11回で
+  `verify:store-preflight` と `verify:submission-ready` の2段へ分けた）を新設し、
   確認待ち・答えと記録の不一致・設問文や日付や理由の空欄・遵守声明の欠落・
   文書間の食い違いがあれば終了コードを0以外にする
 - **差分文書が手元ビルドを提出用として案内していた（R9-003・P2）** —

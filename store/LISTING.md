@@ -93,29 +93,37 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 **今回出す正本**（正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json)）:
 
 ```
-成果物 : reposhout-package-4cb45239e8ed9358593f09efb1ed6f6c74e994f7
-中のZIP : reposhout-1.1.8.zip
-大きさ : 33,576 B / 11ファイル
-SHA-256 : 91c5e7983d383f33dfe8c38ab40262af1c828c1f97bce8bddffad767e6256dba
+状態     : pending_main_ci（出せる成果物はまだ存在しません）
+版       : 1.1.8
+中のZIP  : reposhout-1.1.8.zip
+成果物名 : 未定（main への push で CI が作ってから決まります）
+SHA-256  : 未定（同上）
 ```
 
-main への push で走った CI（run 31232139027）が作ったものを、ダウンロードして実測した値です。
-**タグはまだ打っていません**（外部監査に合格してから打ちます）。1.1.7 と、第12回監査で
-却下した 1.1.8 の先の成果物は提出しません（理由は正本の `history` にあります）。
+**また作り直しています。** 第13回監査 R13-001（投稿本文を検査していなかった・識別子として
+残していた値にトークンを入れられた）と R13-003（ツールバーとショートカットが Chrome の渡す
+タブを使っていなかった）のため、直前の成果物（`reposhout-package-4cb4523…` /
+SHA-256 `91c5e798…`）は**提出しません**。却下した成果物は正本の `history` に理由つきで
+残しています。
 
-**「最新の main」で成果物を選ばないでください。** main は文書・テスト・CIの変更でも進むので、
-同じ版の成果物が複数残ります。選ぶ基準は上の成果物名とSHA-256です（第10回監査 R10-006）。
-実物が正本どおりかは、次で機械的に確かめられます（`preflight` だけでは足りません）。
+成果物が出たら、次の順で確定します。
+
+1. main の該当 run から `reposhout-package-<コミットSHA>` をダウンロードする
+2. `store/SUBMISSION_CANDIDATE.json` に、実測した成果物名・コミット・tree・run・
+   中のZIPの大きさ・収録数・SHA-256 を書く
+3. 次で、書いた値と実物が合っているかを機械的に確かめる
 
 ```
-npm run verify:submission-ready -- --artifact <ダウンロードした成果物.zip> \
+npm run verify:submission-ready -- --artifact <成果物.zip> \
     --audit-report <監査報告書> --audit-attestation <監査申告.json>
 ```
 
-**手元に控えを残す**（提出後に「何を出したか」を後から確かめられるようにするため）:
-ダウンロードした成果物のZIPそのもの・`release-manifest.json`・`reposhout-1.1.8.zip`・
-`reposhout-1.1.8.zip.sha256` の4点を、Actions の保存期限（14日）が切れる前に手元へ保存して
-おいてください。GitHub Release は作りません。
+**「最新の main」で成果物を選ばないでください。** 選ぶ基準は正本に書いた成果物名と
+SHA-256 です（第10回監査 R10-006）。
+
+**手元に控えを残す**: ダウンロードした成果物のZIPそのもの・`release-manifest.json`・
+`reposhout-1.1.8.zip`・`reposhout-1.1.8.zip.sha256` の4点を、Actions の保存期限（14日）が
+切れる前に手元へ保存しておいてください。GitHub Release は作りません。
 
 やってはいけないこと: ダウンロードした成果物のフォルダをそのまま読み込む／リポジトリの
 フォルダで代わりに動作確認する／手元で作り直したZIPを出す／ハッシュを確かめていないZIPを出す。
@@ -156,9 +164,11 @@ Changed your mind? Press Escape in the share window to dismiss it.
     Issue        →  Title (Issue #123 · owner/repo)
     Pull request →  Title (PR #123 · owner/repo)
 • Authentication, account, settings and organisation admin pages are never shared
-• Query strings are handled per page type: filters on issue lists, ?plain=1 on a
-  Markdown file and a prepared pull request's title and body are kept, while
-  tracking parameters are dropped. Line, comment and README section anchors are kept
+• Query strings are handled per page type, and only values whose set can be
+  enumerated or checked mechanically are kept (page numbers, open/closed state,
+  sort order, ?plain=1, ?diff=split&w=1). Search terms and a prepared pull
+  request's title and body are never shared. Line, comment and README section
+  anchors are kept
 • Character counting follows X's published rules, including Japanese, Chinese and
   Korean text, emoji and links. No under-count was found against twitter-text 3.1.0
   in the pinned counting sections of the official corpus, the regression fixtures or
@@ -180,9 +190,11 @@ placed in X's own composer link and reach X when the composer opens, before you
 decide whether to post. Authentication, account, settings and organisation
 admin pages are refused outright and are never shared.
 
-It runs a script on x.com for one reason only: to listen for the Escape key so
-you can dismiss the share window. That script reads nothing from X, and it will
-only close a window this extension itself opened -- never a tab you opened.
+It runs a script on x.com for one reason only: it registers a single keydown
+listener and checks event.key on each press, ignoring anything other than an
+unmodified Escape, so you can dismiss the share window. That script reads no
+field values or page content from X, and it will only close a window this
+extension itself opened -- never a tab you opened.
 
 Full policy: https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md
 
@@ -327,8 +339,9 @@ the extension, and only for that one tab.
 **Host permission: x.com**
 
 ```
-This script has exactly one job: listen for the Escape key so the user can
-dismiss the share window the extension just opened, if they change their mind.
+This script has exactly one job: it registers a single keydown listener, checks
+event.key on each press and immediately ignores anything other than an unmodified
+Escape, so the user can dismiss the share window the extension just opened.
 
 It reads no page content from X. This script itself stores nothing and transmits
 nothing; the extension's storage permission is used only by its service worker,

@@ -500,7 +500,9 @@ test('パス・ブランチ・ファイル名に入った資格情報は、URL�
     ['ディレクトリの代入', `https://github.com/o/r/tree/client_secret=${DUMMY}`],
     ['ファイル名がトークン', `https://github.com/o/r/blob/main/${DUMMY_TOKENS.github}`],
     ['compareのブランチ名', `https://github.com/o/r/compare/main...access_token=${DUMMY}`],
-    ['エンコードされたパス', `https://github.com/o/r/blob/main/${encodeURIComponent('api_key=' + DUMMY)}`]
+    ['エンコードされたパス', `https://github.com/o/r/blob/main/${encodeURIComponent('api_key=' + DUMMY)}`],
+    ['ドット区切りの名前', `https://github.com/o/r/blob/main/api.key=${DUMMY}`],
+    ['ドット区切り・別名', `https://github.com/o/r/blob/main/client.secret=${DUMMY}`]
   ];
   for (const [label, url] of cases) {
     const r = outboundOf(url);
@@ -578,7 +580,9 @@ test('型に合う値だけが残る', () => {
     ['桁が多すぎるページ', 'https://github.com/o/r/issues?page=1234567', 'page='],
     ['一覧に無い状態', 'https://github.com/o/r/issues?state=whatever', 'state='],
     ['真偽値でない', 'https://github.com/o/r/blob/main/a.md?plain=maybe', 'plain='],
-    ['長すぎるラベル', `https://github.com/o/r/issues?labels=${'a'.repeat(200)}`, 'labels=']
+    ['ラベル（値の集合を数えられない）', 'https://github.com/o/r/issues?labels=bug', 'labels='],
+    ['作成者', 'https://github.com/o/r/commits/main?author=octocat', 'author='],
+    ['ブランチ', 'https://github.com/o/r/commits/main?branch=main', 'branch=']
   ];
   for (const [label, url, needle] of drop) {
     const out = String(GXS.canonicalUrl(url, null));
@@ -632,6 +636,116 @@ test('判定の理由が、値を含まない決まった語で返る（R12-002�
   const ok = GXS.buildShareResult('https://github.com/o/r', 'T');
   assert.equal(ok.ok, true);
   assert.ok(ok.share.intentUrl.startsWith('https://x.com/intent/post?'));
+});
+
+/* ============================================================
+ * 第13回監査 R13-001 — 出て行くのはURLだけではない
+ * ============================================================
+ *
+ * 1.1.8 の配布ZIPで、次が X の投稿画面の text に載ることを実測した。
+ * URLは検査していたが、**document.title から作る投稿本文**は素通りだった。
+ *
+ *   Issue の表題が `access_token=<dummy>` → 本文にそのまま載る
+ *   リポジトリの説明にトークンの形    → 本文にそのまま載る
+ *
+ * また、識別子のつもりで残していた値（labels・author・branch・path など）に
+ * `sk_live_…` `npm_…` `glpat-…` を入れられた。**値の集合を数えられないものは
+ * 残さない**方針へ変え、int / bool / enum だけにした。
+ */
+const VENDOR_TOKENS = {
+  gitlab: ['gl', 'pat-', 'abcdefghijklmnopqrst'].join(''),
+  openai: ['sk-', 'proj-', 'abcdefghijklmnopqrstuvwx'].join(''),
+  stripe: ['sk_', 'live_', 'abcdefghijklmnopqrstuvwx'].join(''),
+  npmToken: ['npm', '_', 'abcdefghijklmnopqrstuvwxyz0123456789'].join(''),
+  shopify: ['shp', 'at_', 'abcdefghijklmnopqrstuvwx'].join(''),
+  sendgrid: ['SG', '.', 'abcdefghijklmnop', '.', 'qrstuvwxyz012345'].join('')
+};
+
+/* 出て行くもの全部（URL・本文・intent）を1つに集める */
+function outboundParts(url, title) {
+  const s = GXS.buildShare(url, title);
+  if (!s) return null;
+  const parts = [s.url, s.text, s.intentUrl].map(String);
+  const decoded = parts.map((x) => { try { return decodeURIComponent(x); } catch (e) { return x; } });
+  return parts.concat(decoded).join('\n');
+}
+
+test('投稿本文に資格情報の形があれば、共有しない（R13-001）', () => {
+  const cases = [
+    ['Issueの表題が代入', 'https://github.com/o/r/issues/1', `access_token=${DUMMY} · Issue #1 · o/r`],
+    ['PRの表題がコロン', 'https://github.com/o/r/pull/1', `client_secret:${DUMMY} · Pull Request #1 · o/r`],
+    ['Discussionの表題', 'https://github.com/o/r/discussions/3', `api_key=${DUMMY} · Discussion #3 · o/r`],
+    ['リポジトリ説明がトークン', 'https://github.com/o/r', `GitHub - o/r: ${DUMMY_TOKENS.github} · GitHub`],
+    ['表題にGitLabのトークン', 'https://github.com/o/r/issues/2', `${VENDOR_TOKENS.gitlab} · Issue #2 · o/r`],
+    ['表題にJWT', 'https://github.com/o/r/issues/3', `${DUMMY_TOKENS.jwt} · Issue #3 · o/r`]
+  ];
+  for (const [label, url, title] of cases) {
+    assert.equal(GXS.buildShare(url, title), null, `共有できてしまう: ${label}`);
+    const r = GXS.buildShareResult(url, title);
+    assert.equal(r.ok, false, `${label}: ok になっている`);
+    assert.equal(r.reason, 'credential_like', `${label}: 理由が違う`);
+  }
+});
+
+test('普通の表題は、これまでどおり共有できる（対照）', () => {
+  const keep = [
+    ['普通のIssue', 'https://github.com/o/r/issues/12', 'Fix the parser · Issue #12 · o/r'],
+    ['言及だけ', 'https://github.com/o/r/issues/13', 'How to use access_token · Issue #13 · o/r'],
+    ['リポジトリ', 'https://github.com/o/r', 'GitHub - o/r: A small tool · GitHub'],
+    ['記号を含む', 'https://github.com/o/r/issues/14', 'Support C++ 100% coverage · Issue #14 · o/r']
+  ];
+  for (const [label, url, title] of keep) {
+    assert.ok(GXS.buildShare(url, title), `落としてはいけないものを落とした: ${label}`);
+  }
+});
+
+test('ベンダのトークンの形は、URLでも本文でも出て行かない', () => {
+  for (const [label, token] of Object.entries(VENDOR_TOKENS)) {
+    const inPath = outboundParts(`https://github.com/o/r/blob/main/${token}`, 'T');
+    assert.equal(inPath, null, `${label}: パスから出て行った`);
+    const inTitle = outboundParts('https://github.com/o/r/issues/9', `${token} · Issue #9 · o/r`);
+    assert.equal(inTitle, null, `${label}: 本文から出て行った`);
+  }
+});
+
+test('値の集合を数えられないクエリは残さない（R13-001）', () => {
+  /*
+   * 以前は「識別子っぽい文字種」だけを見て残していたので、
+   * labels=sk_live_… や author=npm_… がそのまま共有URLに載った。
+   */
+  const drop = [
+    ['labels', `https://github.com/o/r/issues?labels=${VENDOR_TOKENS.stripe}`, 'labels='],
+    ['author', `https://github.com/o/r/commits/main?author=${VENDOR_TOKENS.npmToken}`, 'author='],
+    ['branch', `https://github.com/o/r/commits/main?branch=${VENDOR_TOKENS.gitlab}`, 'branch='],
+    ['path', `https://github.com/o/r/commits/main?path=${VENDOR_TOKENS.openai}`, 'path='],
+    ['milestone', 'https://github.com/o/r/issues?milestone=v1', 'milestone='],
+    ['category', 'https://github.com/o/r/discussions?category=general', 'category='],
+    ['template', 'https://github.com/o/r/compare/a...b?quick_pull=1&template=bug.md', 'template=']
+  ];
+  for (const [label, url, needle] of drop) {
+    const out = String(GXS.canonicalUrl(url, null));
+    assert.ok(!out.includes(needle), `${label} が残っている: ${out}`);
+    assert.ok(!out.includes('sk_') && !out.includes('npm_') && !out.includes('glpat-'),
+      `${label}: トークンが残っている`);
+  }
+  /* 数えられるものは残る（対照） */
+  for (const [url, needle] of [
+    ['https://github.com/o/r/issues?page=2&state=open', 'page=2'],
+    ['https://github.com/o/r/pull/12/files?diff=split&w=1', 'diff=split'],
+    ['https://github.com/search?type=code', 'type=code']
+  ]) {
+    assert.ok(String(GXS.canonicalUrl(url, null)).includes(needle), `落ちてはいけない: ${needle}`);
+  }
+});
+
+test('型の表に残っているのは int / bool / enum だけ', () => {
+  for (const [route, rules] of Object.entries(GXS.QUERY_RULES)) {
+    if (!rules) continue;
+    for (const [name, rule] of Object.entries(rules)) {
+      assert.ok(['int', 'bool', 'enum'].includes(rule.type),
+        `${route}.${name} の型が数えられない: ${rule.type}`);
+    }
+  }
 });
 
 test('資格情報の判定は、ほどける段数に上限がある（止まらなくならない）', () => {

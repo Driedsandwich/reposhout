@@ -395,6 +395,61 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
     await cdp.send('Target.closeTarget', { targetId: r.pageId });
   });
 
+  /*
+   * 第13回監査 R13-003。ツールバーとショートカットは、Chrome が
+   * **そのとき対象になったタブ**を渡してくる。以前はそれを捨てて
+   * chrome.tabs.query で引き直していたので、渡されたタブと違うタブを
+   * 共有しうる状態だった。
+   *
+   * 実物のツールバー押下は CDP から駆動できない（activeTab が付かない）ので、
+   * service worker の shareTab(tab) に**Chromeが渡すのと同じ形のタブ**を
+   * 渡して、渡した側のURLで開くことを見る。対照として、資格情報の形の
+   * タブでは開かないことも見る。
+   */
+  const shareViaSw = async (tab) => {
+    const before = new Set((await targets()).map((t) => t.targetId));
+    await evalInSw(`self.GXS_BG.shareTab(${JSON.stringify(tab)})`);
+    const isNew = (t) =>
+      t.type === 'page' && t.url.startsWith('https://x.com/intent/') && !before.has(t.targetId);
+    let opened = [];
+    for (let i = 0; i < 15; i++) {
+      opened = (await targets()).filter(isNew);
+      if (opened.length) break;
+      await sleep(200);
+    }
+    return opened;
+  };
+
+  it('渡されたタブのURLで共有する（R13-003）', async () => {
+    const passed = { id: 999999, url: 'https://github.com/o/r/issues?state=open', title: 'Issues · o/r' };
+    const opened = await shareViaSw(passed);
+    assert.equal(opened.length, 1, `渡したタブで開かなかった: ${opened.length} 個`);
+    const shared = decodeURIComponent(opened[0].url);
+    assert.ok(shared.includes('github.com/o/r/issues'), `別のURLを共有した: ${shared}`);
+    assert.ok(shared.includes('state=open'), `型に合う値が落ちている: ${shared}`);
+    await waitLoaded(opened[0].targetId);
+    assert.ok(await escapeUntilClosed(opened[0].targetId), '窓が閉じない');
+  });
+
+  it('渡されたタブが資格情報の形なら開かない（R13-003の対照）', async () => {
+    const opened = await shareViaSw({
+      id: 999999,
+      url: 'https://github.com/o/r/blob/main/access_token=dummy-secret',
+      title: 'access_token=dummy-secret'
+    });
+    assert.equal(opened.length, 0, `投稿画面が開いた: ${opened.map((t) => t.url).join(' | ')}`);
+  });
+
+  it('タブが渡されないときだけ引き直す（この環境では url が取れないので開かない）', async () => {
+    /*
+     * activeTab はツールバー操作でしか付かないので、この harness では
+     * 引き直した結果に url が無い。**開かないのが正しい**。
+     * 上の2件と合わせて、「渡されたタブを使う」経路が生きていることが分かる。
+     */
+    const opened = await shareViaSw({ id: 999999, url: undefined, title: 'x' });
+    assert.equal(opened.length, 0, '引き直した結果で開いてしまった');
+  });
+
   it('ウィンドウを閉じると記録が消える（ID再利用への備え）', async () => {
     const { windowId } = await openShareWindowFromSw();
     assert.equal(await evalInSw(`self.GXS_BG.isShareWindow(${windowId})`), true);

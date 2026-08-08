@@ -676,3 +676,82 @@ test('バージョンが manifest / package.json / CHANGELOG / ストア文書�
     }
   }
 });
+
+/*
+ * 第13回監査 R13-005。npm run package の出力と DATA_DISCLOSURE が、
+ * 廃止した `verify:store-readiness` を案内していた（実在しない）。
+ * **文書や出力が名指しするスクリプトは、package.json に在ることを機械で見る。**
+ */
+test('案内している npm run のスクリプトが、すべて実在する', () => {
+  const scripts = Object.keys(JSON.parse(read('package.json')).scripts);
+  const sources = ['scripts/package.mjs', 'scripts/verify-store-readiness.mjs',
+                   'store/DATA_DISCLOSURE.json', 'store/LISTING.md',
+                   'store/STORE_DASHBOARD_CHANGES.md', 'README.md', 'README.ja.md',
+                   'CHANGELOG.md', 'PRIVACY.md'];
+  const missing = [];
+  for (const f of sources) {
+    for (const m of read(f).matchAll(/npm run ([a-z][a-z0-9:-]*)/g)) {
+      if (!scripts.includes(m[1])) missing.push(`${f}: ${m[1]}`);
+    }
+  }
+  assert.deepEqual(missing, [], `実在しないスクリプトを案内している: ${missing.join(' / ')}`);
+  /* 対照: 実在しない名前を混ぜれば必ず見つかる */
+  const control = 'npm run this-script-does-not-exist';
+  const found = [...control.matchAll(/npm run ([a-z][a-z0-9:-]*)/g)].map((m) => m[1]);
+  assert.deepEqual(found, ['this-script-does-not-exist'], '対照が成立していない');
+  assert.ok(!scripts.includes('this-script-does-not-exist'));
+});
+
+/*
+ * 第13回監査 R13-002。README・ストア掲載文・PRIVACY が旧仕様のままだった
+ * （検索語や下書きの title / body を残すと宣伝し、x.com のスクリプトを
+ * 「Escapeだけを聞く」と説明していた）。**文書のどこかにあるか**ではなく、
+ * その説明をしている箇所に正しい記述があることを要求する。
+ */
+test('文書が、いまの共有方針を正しく説明している（R13-002）', () => {
+  const must = {
+    'README.md': [
+      ['Everything free-text is dropped', '自由文を落とすこと'],
+      ['QUERY_RULES', '正本の名前'],
+      ["One `keydown` listener", 'x.com の listener の実態']
+    ],
+    'README.ja.md': [
+      ['自由に書ける欄はすべて落とします', '自由文を落とすこと'],
+      ['QUERY_RULES', '正本の名前']
+    ],
+    'PRIVACY.md': [
+      ['Registers one `keydown` listener', 'x.com の listener の実態（英語）'],
+      ['`keydown` を1つ登録し', '同（日本語）'],
+      ['The same check is applied to the post text', '投稿本文も検査すること'],
+      ['投稿本文にも掛けます', '同（日本語）']
+    ],
+    'store/LISTING.md': [
+      ['Search terms and a prepared pull\n  request\'s title and body are never shared',
+       '検索語と下書きを共有しないこと'],
+      ['registers a single keydown listener', 'x.com の listener の実態']
+    ]
+  };
+  for (const [f, pairs] of Object.entries(must)) {
+    const body = read(f);
+    for (const [needle, why] of pairs) {
+      assert.ok(body.includes(needle), `${f} に「${why}」が無い: ${needle}`);
+    }
+  }
+});
+
+test('文書が、もう残さない値を「残す」と書いていない（R13-002）', () => {
+  const forbidden = {
+    'README.md': ["the `quick_pull`/`title`/`body` of a prepared pull request",
+                  '`QUERY_ALLOW`'],
+    'README.ja.md': ['下書き中のプルリクエストの `quick_pull`/`title`/`body`', '`QUERY_ALLOW`'],
+    'store/LISTING.md': ["prepared pull request's title and body are kept",
+                         'listen for the Escape key so'],
+    'PRIVACY.md': ['Listens for the Escape key, and nothing else', 'Escキーの検知だけを行います']
+  };
+  for (const [f, list] of Object.entries(forbidden)) {
+    const body = read(f);
+    for (const needle of list) {
+      assert.ok(!body.includes(needle), `${f} に古い説明が残っている: ${needle}`);
+    }
+  }
+});

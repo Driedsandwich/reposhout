@@ -120,7 +120,6 @@
   function enumRule(values) { return { type: 'enum', values: values }; }
   function intRule() { return { type: 'int' }; }
   function boolRule() { return { type: 'bool' }; }
-  function slugRule(maxLen) { return { type: 'slug', maxLen: maxLen || 64 }; }
 
   var SORT_VALUES = ['created', 'updated', 'comments', 'reactions', 'interactions',
                      'author-date', 'committer-date', 'best-match', 'stars', 'forks',
@@ -140,34 +139,27 @@
     'user': { tab: enumRule(USER_TAB_VALUES) },
     'search': {
       type: enumRule(SEARCH_TYPE_VALUES), s: enumRule(SORT_VALUES),
-      o: enumRule(DIRECTION_VALUES), l: slugRule(40), p: intRule()
+      o: enumRule(DIRECTION_VALUES), p: intRule()
     },
     'repo': {},
     'issue-list': {
       page: intRule(), sort: enumRule(SORT_VALUES), direction: enumRule(DIRECTION_VALUES),
-      state: enumRule(STATE_VALUES), labels: slugRule(80), milestone: slugRule(40),
-      assignee: slugRule(40), author: slugRule(40), type: slugRule(20)
+      state: enumRule(STATE_VALUES)
     },
     'pr-list': {
       page: intRule(), sort: enumRule(SORT_VALUES), direction: enumRule(DIRECTION_VALUES),
-      state: enumRule(STATE_VALUES), labels: slugRule(80), milestone: slugRule(40),
-      assignee: slugRule(40), author: slugRule(40)
+      state: enumRule(STATE_VALUES)
     },
-    'discussion-list': { category: slugRule(40), page: intRule() },
+    'discussion-list': { page: intRule() },
     'issue': {},
     'pr': { diff: enumRule(DIFF_VALUES), w: boolRule() },
     'discussion': {},
     'blob': { plain: boolRule() },
     'tree': {},
     'compare': {
-      quick_pull: boolRule(), labels: slugRule(80), milestone: slugRule(40),
-      assignees: slugRule(80), projects: slugRule(80), template: slugRule(60),
-      expand: boolRule(), diff: enumRule(DIFF_VALUES), w: boolRule()
+      quick_pull: boolRule(), expand: boolRule(), diff: enumRule(DIFF_VALUES), w: boolRule()
     },
-    'commits': {
-      author: slugRule(40), since: slugRule(30), until: slugRule(30),
-      path: slugRule(120), branch: slugRule(60)
-    },
+    'commits': {},
     'commit': { diff: enumRule(DIFF_VALUES), w: boolRule() },
     'actions': { page: intRule() },
     'releases': { page: intRule() },
@@ -183,17 +175,18 @@
    */
   var FREE_TEXT_PARAMS = ['q', 'query', 'discussions_q', 'title', 'body'];
 
-  var SLUG_RE = /^[A-Za-z0-9._\-\/,:+@ ]+$/;
-
+  /*
+   * 残せるのは int / bool / enum だけ。第13回監査 R13-001 で、識別子のつもりで
+   * 残していた slug（labels・author・branch・path・milestone・template など）に
+   * `sk_live_…` `npm_…` `glpat-…` のようなトークンをそのまま入れられることが
+   * 実配布物で示された。**値の集合を数えられないものは残さない。**
+   */
   function valueFitsRule(rule, value) {
     if (!rule) return false;
     if (typeof value !== 'string' || value === '') return false;
     if (rule.type === 'int') return /^[0-9]{1,6}$/.test(value) && Number(value) > 0;
     if (rule.type === 'bool') return ['0', '1', 'true', 'false'].indexOf(value) !== -1;
     if (rule.type === 'enum') return rule.values.indexOf(value) !== -1;
-    if (rule.type === 'slug') {
-      return value.length <= rule.maxLen && SLUG_RE.test(value) && value.indexOf('=') === -1;
-    }
     return false;
   }
 
@@ -685,7 +678,8 @@
     'accesstoken', 'refreshtoken', 'idtoken', 'oauthtoken', 'authtoken',
     'clientsecret', 'apikey', 'apisecret', 'secret', 'password', 'passwd', 'pwd',
     'sessiontoken', 'sessionid', 'authorization', 'credential', 'credentials',
-    'privatekey', 'token', 'passphrase', 'sig', 'signature'
+    'privatekey', 'token', 'passphrase', 'sig', 'signature', 'key', 'apisecret',
+    'clientid', 'bearer', 'auth'
   ];
 
   /*
@@ -695,8 +689,14 @@
    */
   var ASSIGNMENT_RE = /(?:^|[^A-Za-z0-9])["']?([A-Za-z][A-Za-z0-9_-]{1,30})["']?[ \t]*[:=][ \t]*["']?([^\s"',&]+)/g;
 
+  /*
+   * 区切りと大文字小文字を落として照合する。
+   * **名前に '.' は含めない**——含めると `main...access_token=` が
+   * 「mainaccesstoken」という1語として読まれ、照合から外れる（実測）。
+   * '.' は区切りとして扱い、`api.key=` は 'key' として当たる。
+   */
   function normalizeKey(name) {
-    return String(name).toLowerCase().replace(/[-_]/g, '');
+    return String(name).toLowerCase().replace(/[-_.]/g, '');
   }
 
   /*
@@ -712,7 +712,13 @@
     /xox[baprs]-[A-Za-z0-9-]{10,}/i,                       // Slack
     /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{5,}/,   // JWT
     /AIza[0-9A-Za-z_\-]{20,}/,                             // Google API キー
-    /-----BEGIN[ A-Z]*PRIVATE KEY/                         // PEM
+    /-----BEGIN[ A-Z]*PRIVATE KEY/,                        // PEM
+    /glpat-[A-Za-z0-9_\-]{10,}/,                           // GitLab
+    /sk-(?:proj-|ant-|live-)?[A-Za-z0-9_\-]{16,}/,         // OpenAI / Anthropic 等
+    /sk_(?:live|test)_[A-Za-z0-9]{10,}/,                   // Stripe
+    /npm_[A-Za-z0-9]{20,}/,                                // npm
+    /shp(?:at|ss|pa)_[A-Za-z0-9]{16,}/,                    // Shopify
+    /SG\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}/         // SendGrid
   ];
 
   /* 制御文字。普通のURLには入らない */
@@ -775,6 +781,19 @@
 
   function credentialLikeValue(value) {
     return scanEncodedLayers(value, VALUE_MAX_DECODE_ROUNDS) !== null;
+  }
+
+  /*
+   * **出て行くものを1か所で見る**（第13回監査 R13-001）。
+   * これまで見ていたのはURLだけで、document.title から作る**投稿本文**は
+   * 検査していなかった。Issue の表題が `access_token=<値>` だと、そのまま
+   * Xの投稿画面の text に載った（1.1.8 の配布ZIPで実測）。
+   */
+  function credentialLikeOutbound(shareUrl, text) {
+    var byUrl = credentialLikeShareUrl(shareUrl);
+    if (byUrl) return byUrl;
+    if (scanEncodedLayers(String(text || ''), VALUE_MAX_DECODE_ROUNDS)) return 'credential_like';
+    return null;
   }
 
   /*
@@ -959,7 +978,13 @@
     var res = canonicalResult(rawUrl);
     if (!res.ok) return { ok: false, reason: res.reason };
     var share = buildShare(rawUrl, rawTitle);
-    if (!share) return { ok: false, reason: 'unsupported' };
+    if (!share) {
+      /*
+       * canonicalResult が通ったのに buildShare が null＝本文側で止まった、
+       * ということ（第13回監査 R13-001）。理由は同じ語で返す。
+       */
+      return { ok: false, reason: 'credential_like' };
+    }
     return { ok: true, share: share };
   }
 
@@ -986,6 +1011,12 @@
     if (!base && !suffix) base = info.repo || url;
     var text = base ? truncateWithSuffix(base, suffix) : truncate(suffix.trim());
 
+    /*
+     * ここが**唯一の出口**。URLと本文の両方を、同じ規則で最後に見る。
+     * どちらかに資格情報の形があれば、投稿画面は開かない（R13-001）。
+     */
+    if (credentialLikeOutbound(url, text)) return null;
+
     return {
       kind: info.kind,
       repo: info.repo,
@@ -1006,6 +1037,7 @@
     buildShareResult: buildShareResult,
     canonicalResult: canonicalResult,
     credentialLikeShareUrl: credentialLikeShareUrl,
+    credentialLikeOutbound: credentialLikeOutbound,
     QUERY_RULES: QUERY_RULES,
     FREE_TEXT_PARAMS: FREE_TEXT_PARAMS,
     credentialLikeValue: credentialLikeValue,
