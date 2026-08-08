@@ -20,8 +20,8 @@
     "description": "Accessible name of the in-page Share button."
   },
   "noticeCredential": {
-    "message": "This URL may contain sensitive credentials, so the X composer was not opened. Nothing was sent to X.",
-    "description": "Shown when sharing is refused because the URL looks like it carries a credential. Must not include the URL or any value."
+    "message": "This page's title or URL may contain sensitive authentication information, so the X composer was not opened. Nothing was sent to X.",
+    "description": "Shown when sharing is refused because the page title or the URL matches one of the credential patterns. Must not include the title, the URL or any value."
   },
   "noticeUnsupported": {
     "message": "This page cannot be shared. Nothing was sent to X.",

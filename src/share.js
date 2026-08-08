@@ -679,7 +679,15 @@
     'clientsecret', 'apikey', 'apisecret', 'secret', 'password', 'passwd', 'pwd',
     'sessiontoken', 'sessionid', 'authorization', 'credential', 'credentials',
     'privatekey', 'token', 'passphrase', 'sig', 'signature', 'key', 'apisecret',
-    'clientid', 'bearer', 'auth'
+    'clientid', 'bearer', 'auth',
+    /*
+     * 第14回監査 R14-001。セッションIDと署名付きURLの名前。
+     * `X-Amz-Signature` は区切りを落とすと 'xamzsignature' になり、
+     * 既にある 'signature' には**当たらない**（実測）ので個別に並べる。
+     */
+    'jsessionid', 'phpsessid', 'aspsessionid', 'sessid',
+    'xamzsignature', 'xamzcredential', 'xamzsecuritytoken', 'awsaccesskeyid',
+    'csrftoken', 'xsrftoken'
   ];
 
   /*
@@ -724,6 +732,41 @@
   /* 制御文字。普通のURLには入らない */
   var CONTROL_RE = /[\u0000-\u001F\u007F]/;
 
+  /*
+   * `scheme://利用者:合言葉@ホスト` の形（第14回監査 R14-001）。
+   * `//` の直後から `@` までに `/` を挟まないので、`/blob/main/a@b` のような
+   * 普通のパスには当たらない。
+   */
+  var BASIC_URI_RE = /[A-Za-z][A-Za-z0-9+.\-]*:\/\/[^\s\/@]*:[^\s\/@]+@/;
+
+  /*
+   * **見えない文字**。表示上は同じに見えるのに、既知の形の途中へ入れると
+   * パターンから外れる（GitHub トークンの接頭辞の間にゼロ幅スペースを入れると
+   * 素通りした・実測）。ゼロ幅・方向制御・ソフトハイフン・BOM。
+   */
+  var IGNORABLE_RE = /[­͏؜᠎​-‏‪-‮⁠-⁤⁦-⁯﻿]/g;
+
+  /*
+   * **走査のためだけに整えた文字列**を返す（出力は一切変えない）。
+   *
+   * ・見えない文字を落とす……既知の形を割って隠せないようにする
+   * ・NFKC……全角の `＝` `：` や全角英字を半角へ寄せる。
+   *   `access_token＝<値>` `access_token：<値>` `ａｃｃｅｓｓ＿ｔｏｋｅｎ=<値>`
+   *   はどれも 1.1.8 の配布ZIPで素通りしていた（実測）
+   *
+   * 元の文字列も別に見る。正規化は当てる幅を広げるためのもので、
+   * 正規化した結果だけを見ると、逆に見落とす形を作りかねないため。
+   */
+  function normalizeForScan(text) {
+    var s = String(text).replace(IGNORABLE_RE, '');
+    try {
+      s = s.normalize('NFKC');
+    } catch (e) {
+      /* normalize を持たない環境では素のまま照合する */
+    }
+    return s;
+  }
+
   /* まだほどける（有効な %HH が残っている）か */
   var HAS_ESCAPE_RE = /%[0-9A-Fa-f]{2}/;
 
@@ -736,8 +779,10 @@
   var VALUE_MAX_DECODE_ROUNDS = 6;
   var PATH_MAX_DECODE_ROUNDS = 4;
 
-  function looksLikeCredential(text) {
+  /* 1つの文字列そのものを見る。正規化はここでは行わない（呼び出し側の責任） */
+  function matchesCredentialShape(text) {
     if (CONTROL_RE.test(text)) return true;
+    if (BASIC_URI_RE.test(text)) return true;
     for (var i = 0; i < CREDENTIAL_TOKEN_RES.length; i++) {
       if (CREDENTIAL_TOKEN_RES[i].test(text)) return true;
     }
@@ -747,6 +792,13 @@
       if (CREDENTIAL_KEYS.indexOf(normalizeKey(m[1])) !== -1) return true;
     }
     return false;
+  }
+
+  /* 素のままと、走査用に整えた形の両方で見る（第14回監査 R14-001） */
+  function looksLikeCredential(text) {
+    if (matchesCredentialShape(text)) return true;
+    var normalized = normalizeForScan(text);
+    return normalized !== text && matchesCredentialShape(normalized);
   }
 
   /*
@@ -789,10 +841,31 @@
    * 検査していなかった。Issue の表題が `access_token=<値>` だと、そのまま
    * Xの投稿画面の text に載った（1.1.8 の配布ZIPで実測）。
    */
-  function credentialLikeOutbound(shareUrl, text) {
+  function credentialLikeOutbound(shareUrl, text, rawTitle) {
     var byUrl = credentialLikeShareUrl(shareUrl);
     if (byUrl) return byUrl;
     if (scanEncodedLayers(String(text || ''), VALUE_MAX_DECODE_ROUNDS)) return 'credential_like';
+    /* 変換する前の形も見る（第14回監査 R14-001。下の credentialLikeInbound 参照） */
+    if (arguments.length > 2 && credentialLikeInbound(rawTitle)) return 'credential_like';
+    return null;
+  }
+
+  /*
+   * **変換する前の生のタイトルも見る**（第14回監査 R14-001）。
+   *
+   * 出口だけで見ていると、こちらの変換そのものが検出を外せてしまう。実際、
+   * 長いタイトルの末尾に GitHub トークンを置くと、切り詰めでトークンが
+   * 短くなり、**最小長を下回って検出パターンから外れた**まま断片がXへ渡った
+   * （1.1.8 の配布ZIPで prefix 211〜226 文字の16通り・issue/repo/discussion の
+   * どの種別でも再現）。
+   *
+   * 生のURLは**ここでは見ない**。落とすはずのクエリまで拒否の理由にすると、
+   * `?q=access_token` を検索して結果ページを共有する——値は落ちるので安全な
+   * 操作——まで拒否してしまうため。URL側は、実際に出て行く正規形を
+   * credentialLikeShareUrl が全体（パス・残すクエリ・フラグメント）で見る。
+   */
+  function credentialLikeInbound(rawTitle) {
+    if (scanEncodedLayers(String(rawTitle || ''), VALUE_MAX_DECODE_ROUNDS)) return 'credential_like';
     return null;
   }
 
@@ -994,6 +1067,7 @@
 
     var res = canonicalResult(rawUrl);
     if (!res.ok) return null;                  // 理由つきが要るときは buildShareResult を使う
+
     var url = res.url;
     var title = cleanTitle(info.kind, rawTitle);
     var suffix = '';
@@ -1012,10 +1086,11 @@
     var text = base ? truncateWithSuffix(base, suffix) : truncate(suffix.trim());
 
     /*
-     * ここが**唯一の出口**。URLと本文の両方を、同じ規則で最後に見る。
-     * どちらかに資格情報の形があれば、投稿画面は開かない（R13-001）。
+     * ここが**唯一の出口**。出て行くURLと本文に加えて、**変換する前の生の
+     * タイトル**も、同じ規則で最後に見る（R13-001・第14回監査 R14-001）。
+     * 1つでも資格情報の形があれば、投稿画面は開かない。
      */
-    if (credentialLikeOutbound(url, text)) return null;
+    if (credentialLikeOutbound(url, text, rawTitle)) return null;
 
     return {
       kind: info.kind,
@@ -1038,6 +1113,8 @@
     canonicalResult: canonicalResult,
     credentialLikeShareUrl: credentialLikeShareUrl,
     credentialLikeOutbound: credentialLikeOutbound,
+    credentialLikeInbound: credentialLikeInbound,
+    normalizeForScan: normalizeForScan,
     QUERY_RULES: QUERY_RULES,
     FREE_TEXT_PARAMS: FREE_TEXT_PARAMS,
     credentialLikeValue: credentialLikeValue,

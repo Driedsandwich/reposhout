@@ -722,8 +722,9 @@ test('文書が、いまの共有方針を正しく説明している（R13-002�
     'PRIVACY.md': [
       ['Registers one `keydown` listener', 'x.com の listener の実態（英語）'],
       ['`keydown` を1つ登録し', '同（日本語）'],
-      ['The same check is applied to the post text', '投稿本文も検査すること'],
-      ['投稿本文にも掛けます', '同（日本語）']
+      ['The same check is applied to the post text built from the page title, and to the raw title before it is shortened',
+       '投稿本文と、変換前の生のタイトルも検査すること'],
+      ['投稿本文と、切り詰める前の生のタイトルにも掛けます', '同（日本語）・変換前も見ること']
     ],
     'store/LISTING.md': [
       ['Search terms and a prepared pull\n  request\'s title and body are never shared',
@@ -753,5 +754,76 @@ test('文書が、もう残さない値を「残す」と書いていない（R1
     for (const needle of list) {
       assert.ok(!body.includes(needle), `${f} に古い説明が残っている: ${needle}`);
     }
+  }
+});
+
+/*
+ * ============================================================
+ * 第14回監査 R14-003 — 案内文と文書が実装とずれていた
+ * ============================================================
+ *
+ *   ・案内は「このURLには」と言うが、止める理由はタイトル側のこともある
+ *   ・README は機微なページで「何も起きません」と書くが、実際は案内が出る
+ *   ・README の表が実拡張E2Eを「10テスト」と固定で書いていた（実際は増えている）
+ */
+
+test('拒否の案内が、タイトルとURLの両方を理由として言う（R14-003）', () => {
+  const en = JSON.parse(read('_locales/en/messages.json'));
+  const ja = JSON.parse(read('_locales/ja/messages.json'));
+
+  assert.ok(/title or URL/i.test(en.noticeCredential.message),
+    `英語の案内がURLだけを理由にしている: ${en.noticeCredential.message}`);
+  assert.ok(en.noticeCredential.message.includes('Nothing was sent to X'),
+    '何も送っていないことを言っていない');
+  assert.ok(ja.noticeCredential.message.includes('タイトルまたはURL'),
+    `日本語の案内がURLだけを理由にしている: ${ja.noticeCredential.message}`);
+  assert.ok(ja.noticeCredential.message.includes('Xへは何も送っていません'),
+    '何も送っていないことを言っていない');
+
+  /* 値やURLそのものを混ぜる余地を残していないこと（差し込みは使わない） */
+  for (const [lang, m] of [['en', en], ['ja', ja]]) {
+    for (const key of ['noticeCredential', 'noticeUnsupported']) {
+      assert.ok(!/\$\d|\$[A-Za-z]+\$/.test(m[key].message),
+        `${lang}/${key} に差し込みがある: ${m[key].message}`);
+      assert.ok(!m[key].placeholders, `${lang}/${key} に placeholders がある`);
+    }
+  }
+});
+
+test('README が、機微なページで「何も起きない」と書いていない（R14-003）', () => {
+  /*
+   * 実装は理由の語を送って案内を出し、届かなければバッジを出す。
+   * 「何も起きない」と書いたままだと、利用者は壊れたと思う。
+   */
+  const en = read('README.md');
+  const ja = read('README.ja.md');
+  assert.ok(!/shortcut there does nothing/.test(en),
+    'README.md にまだ「押しても何も起きない」がある');
+  assert.ok(!/the button and the shortcut simply do nothing there/.test(en),
+    'README.md にまだ「ボタンもショートカットも何もしない」がある');
+  assert.ok(!/アイコンやショートカットを押しても何も起きません/.test(ja),
+    'README.ja.md にまだ「押しても何も起きません」がある');
+  assert.ok(!/ボタンもショートカットも何も起きません/.test(ja),
+    'README.ja.md にまだ「ボタンもショートカットも何も起きません」がある');
+
+  /* 代わりに、案内とバッジのことが書いてあること */
+  assert.ok(/shows a short notice/.test(en) && /badge/.test(en),
+    'README.md が案内とバッジを説明していない');
+  assert.ok(/短い案内/.test(ja) && /`!`/.test(ja),
+    'README.ja.md が案内とバッジを説明していない');
+});
+
+test('README の表が、E2Eの件数を固定の数で書いていない（R14-003）', () => {
+  /*
+   * 件数は毎回動く。表に数を書くと、書いた瞬間から古くなる
+   * （1.1.8 では「10テスト」のまま実際は15件だった）。
+   * 実測値は日付と版を添えた記録の行に置く。
+   */
+  for (const [file, row] of [['README.md', /\| Real-extension E2E \|[^|]*\|([^|]*)\|/],
+                             ['README.ja.md', /\| 実拡張E2E \|[^|]*\|([^|]*)\|/]]) {
+    const m = read(file).match(row);
+    assert.ok(m, `${file}: 実拡張E2Eの行が見つからない`);
+    assert.ok(!/\d+\s*(tests|テスト)/.test(m[1]),
+      `${file}: 表に固定の件数が書いてある: ${m[1].trim().slice(0, 60)}`);
   }
 });

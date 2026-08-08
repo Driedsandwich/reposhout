@@ -62,6 +62,13 @@ export function validateStoreReadiness(input) {
     metadata = null,          // いまの文書側の位置 {sourceCommit, treeSha, dirty}
     remote = null,            // {originUrl, originMainSha, expectedOrigin}
     metadataCi = null,        // {error} または {conclusion, event, branch, headSha, jobs:{...}}
+    /*
+     * 正本が名指ししている run と成果物が、GitHub 上に本当にあるか
+     * （第14回監査 R14-005）。{error} または
+     * {run:{id,path,event,branch,headSha,conclusion,jobs}, artifact:{name,expired,digest}}
+     */
+    runtime = null,
+    expectedWorkflowPath = '.github/workflows/ci.yml',
     sha256, readZipStrict = null
   } = input;
 
@@ -354,6 +361,54 @@ export function validateStoreReadiness(input) {
           metadataCi.jobs && metadataCi.jobs[job] === 'success',
           `${job}=${metadataCi.jobs && metadataCi.jobs[job]}`);
       }
+    }
+  }
+
+  /* ---- 9.6 正本が名指しする run と成果物の実在（第14回監査 R14-005） ---- */
+  if (strict && !pending) {
+    /*
+     * ここまでの照合は、正本・成果物・記録という**手元にあるものどうし**だった。
+     * 3つとも手元で作れるので、突き合わせが揃っていても「GitHub にその run が
+     * ある」ことの証拠にはならない。run と成果物を外から引いて、
+     * **落としてきた実バイトのハッシュ**まで一致させる。
+     */
+    if (!runtime || runtime.error) {
+      /* 引けなかったら通さない（警告で続けない） */
+      problems.push(`正本の run — 確かめられなかった: ${(runtime && runtime.error) || '渡していない'}`);
+    } else {
+      const run = runtime.run || {};
+      const art = runtime.artifact || {};
+      check('正本の run が実在し、番号が一致',
+        String(run.id) === String(candidate.runId),
+        `GitHub上=${run.id} / 正本=${candidate.runId}`);
+      check('正本の run が期待するワークフロー',
+        run.path === expectedWorkflowPath,
+        `path=${run.path} ≠ ${expectedWorkflowPath}`);
+      check('正本の run が main への push',
+        run.event === 'push' && run.branch === 'main',
+        `event=${run.event} branch=${run.branch}`);
+      check('正本の run が正本のコミットのもの',
+        run.headSha === candidate.sourceCommit,
+        `${run.headSha} ≠ ${candidate.sourceCommit}`);
+      check('正本の run が success', run.conclusion === 'success', `conclusion=${run.conclusion}`);
+      for (const job of ['test', 'windows']) {
+        check(`正本の run（${job}）`,
+          run.jobs && run.jobs[job] === 'success',
+          `${job}=${run.jobs && run.jobs[job]}`);
+      }
+      check('正本の成果物がその run にある',
+        art.name === candidate.artifactName,
+        `GitHub上=${art.name} / 正本=${candidate.artifactName}`);
+      check('正本の成果物が失効していない', art.expired === false, `expired=${art.expired}`);
+      /*
+       * GitHub 側の digest と、**いま渡された成果物の実バイト**を突き合わせる。
+       * 成果物を渡していない（＝実バイトが無い）なら、比べようがないので落とす。
+       */
+      const outer = artifact && artifact.outerSha256;
+      check('正本の成果物の中身が GitHub 側と同じ',
+        Boolean(outer) && typeof art.digest === 'string' &&
+        art.digest.replace(/^sha256:/, '') === outer,
+        `GitHub上=${art.digest} / 実測=${outer || '成果物を渡していない'}`);
     }
   }
 

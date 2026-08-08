@@ -147,7 +147,30 @@ function fakeArtifact(cand, over = {}) {
     { name: `${cand.innerName}.sha256`,
       data: Buffer.from(`${sha256(inner)}  ${cand.innerName}\n`, 'utf8') }
   ];
-  return { outerName: over.outerName || cand.artifactName, files };
+  return {
+    outerName: over.outerName || cand.artifactName,
+    outerSha256: over.outerSha256 || OUTER_SHA,
+    files
+  };
+}
+
+/* 外側の成果物の実バイトのハッシュ。GitHub 側の digest と突き合わせる（R14-005） */
+const OUTER_SHA = 'f'.repeat(64);
+
+/*
+ * 正本が名指しする run と成果物が GitHub 上に在る、という状態
+ * （第14回監査 R14-005）。ここから1つずつ壊して、落ちることを見る。
+ */
+function goodRuntime(cand, over = {}) {
+  return {
+    run: {
+      id: cand.runId, path: '.github/workflows/ci.yml', event: 'push', branch: 'main',
+      headSha: cand.sourceCommit, conclusion: 'success',
+      jobs: { test: 'success', windows: 'success' }
+    },
+    artifact: { name: cand.artifactName, expired: false, digest: `sha256:${OUTER_SHA}` },
+    ...over
+  };
 }
 
 /* strict が通る状態を1つ作る。ここから1箇所ずつ壊す */
@@ -168,6 +191,7 @@ function strictInputs(over = {}) {
     mode: 'strict',
     remote: { ...GOOD_REMOTE },
     metadataCi: { ...GOOD_CI },
+    runtime: goodRuntime(cand),
     disclosure: confirmedDisclosure(),
     candidate: cand,
     manifestVersion: JSON.parse(read('manifest.json')).version,
@@ -594,4 +618,116 @@ test('外部監査の日付が未来なら落ちる', () => {
   const audit = goodAudit(cand);
   audit.auditDate = '2026-08-08';
   failsWith(strictInputs({ candidate: cand, audit, today: '2026-08-07' }), '外部監査の日付が未来でない');
+});
+
+/* ---- 正本が名指しする run と成果物の実在（第14回監査 R14-005） ---------- */
+
+/*
+ * ここまでの照合は、正本・成果物・記録という**手元で全部作れるもの**どうしだった。
+ * run と成果物を GitHub から引いて、落としてきた実バイトのハッシュまで合わせる。
+ */
+
+test('正本の run が GitHub にあり、成果物のハッシュも一致すれば通る（R14-005）', () => {
+  const r = validateStoreReadiness(strictInputs());
+  assert.deepEqual(r.problems, [], r.problems.join('\n'));
+  assert.ok(r.ok.some((line) => line.includes('正本の run が実在')),
+    '検査そのものが走っていない');
+});
+
+test('run の番号が正本と違えば落ちる（R14-005）', () => {
+  const cand = readyCandidate();
+  failsWith(strictInputs({
+    runtime: goodRuntime(cand, { run: { ...goodRuntime(cand).run, id: '999999' } })
+  }), '正本の run が実在し、番号が一致');
+});
+
+test('別のワークフローの run なら落ちる（R14-005）', () => {
+  const cand = readyCandidate();
+  failsWith(strictInputs({
+    runtime: goodRuntime(cand, {
+      run: { ...goodRuntime(cand).run, path: '.github/workflows/release.yml' }
+    })
+  }), '期待するワークフロー');
+});
+
+test('main への push でない run なら落ちる（R14-005）', () => {
+  const cand = readyCandidate();
+  for (const over of [{ event: 'pull_request' }, { branch: 'feat/x' }]) {
+    failsWith(strictInputs({
+      runtime: goodRuntime(cand, { run: { ...goodRuntime(cand).run, ...over } })
+    }), '正本の run が main への push');
+  }
+});
+
+test('run のコミットが正本と違えば落ちる（R14-005）', () => {
+  const cand = readyCandidate();
+  failsWith(strictInputs({
+    runtime: goodRuntime(cand, { run: { ...goodRuntime(cand).run, headSha: '9'.repeat(40) } })
+  }), '正本の run が正本のコミットのもの');
+});
+
+test('run が success でなければ落ちる（R14-005）', () => {
+  const cand = readyCandidate();
+  failsWith(strictInputs({
+    runtime: goodRuntime(cand, { run: { ...goodRuntime(cand).run, conclusion: 'failure' } })
+  }), '正本の run が success');
+});
+
+test('片方のジョブしか success でなければ落ちる（R14-005）', () => {
+  const cand = readyCandidate();
+  for (const jobs of [{ test: 'success', windows: 'failure' },
+                      { test: 'failure', windows: 'success' },
+                      { test: 'success' }]) {
+    failsWith(strictInputs({
+      runtime: goodRuntime(cand, { run: { ...goodRuntime(cand).run, jobs } })
+    }), '正本の run（');
+  }
+});
+
+test('その run に正本の成果物が無ければ落ちる（R14-005）', () => {
+  const cand = readyCandidate();
+  failsWith(strictInputs({
+    runtime: goodRuntime(cand, { artifact: { name: null, expired: null, digest: null } })
+  }), '正本の成果物がその run にある');
+});
+
+test('成果物が失効していたら落ちる（R14-005）', () => {
+  const cand = readyCandidate();
+  failsWith(strictInputs({
+    runtime: goodRuntime(cand, {
+      artifact: { name: cand.artifactName, expired: true, digest: `sha256:${OUTER_SHA}` }
+    })
+  }), '失効していない');
+});
+
+test('GitHub 側の digest と実バイトが違えば落ちる（R14-005）', () => {
+  const cand = readyCandidate();
+  failsWith(strictInputs({
+    runtime: goodRuntime(cand, {
+      artifact: { name: cand.artifactName, expired: false, digest: `sha256:${'0'.repeat(64)}` }
+    })
+  }), 'GitHub 側と同じ');
+});
+
+test('成果物の実バイトを渡していなければ、digest は比べられないので落ちる（R14-005）', () => {
+  const cand = readyCandidate();
+  const art = fakeArtifact(cand);
+  delete art.outerSha256;
+  failsWith(strictInputs({ artifact: art }), 'GitHub 側と同じ');
+});
+
+test('GitHub API を引けなかったら通さない（R14-005）', () => {
+  for (const runtime of [{ error: 'Service Unavailable' }, { error: 'rate limit' }, null]) {
+    failsWith(strictInputs({ runtime }), '正本の run — 確かめられなかった');
+  }
+});
+
+test('候補がまだ無い（pending）ときは、run の照合を求めない（R14-005）', () => {
+  /* 作り直している最中に、存在しない run を要求して止めない */
+  const r = validateStoreReadiness(strictInputs({
+    candidate: { ...readyCandidate(), status: 'pending_main_ci' }, runtime: null
+  }));
+  /* 「正本の runId が空のまま」とは別物なので、needle を取り違えないこと */
+  assert.ok(!r.problems.some((p) => p.startsWith('正本の run —') || p.includes('正本の run が')),
+    `pending なのに run を求めている:\n${r.problems.join('\n')}`);
 });

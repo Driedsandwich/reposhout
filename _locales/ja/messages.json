@@ -20,7 +20,7 @@
     "description": "画面内Shareボタンの読み上げ名。"
   },
   "noticeCredential": {
-    "message": "このURLには機微な認証情報が含まれる可能性があるため、Xの投稿画面を開きませんでした。Xへは何も送っていません。",
+    "message": "このページのタイトルまたはURLに機微な認証情報が含まれる可能性があるため、Xの投稿画面を開きませんでした。Xへは何も送っていません。",
     "description": "Same as noticeCredential (Japanese)."
   },
   "noticeUnsupported": {
