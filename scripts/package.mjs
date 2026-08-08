@@ -237,7 +237,7 @@ export function makePackage({
      * submittable が見ているのは「この成果物の素性」だけ——main への push で走った
      * CIが、未コミットの変更が無い状態で作ったか。**ストアへ出してよいかではない**
      * （第10回監査 R10-002）。掲載文・データ申告・外部監査・本人の確認は
-     * npm run verify:store-readiness の側で見る。
+     * npm run verify:store-preflight / verify:submission-ready の側で見る。
      */
     submittableMeans: 'artifact provenance eligibility only — not Chrome Web Store submission readiness',
     notSubmittableBecause: submittable ? null : notSubmittableBecause,
@@ -377,7 +377,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   console.log(`  ビルド種別: ${r.provenance.ci.eventName}`);
   if (r.submittable) {
     console.log(`  提出可否: 技術的には提出候補（素性は問題なし）`);
-    console.log(`           ※ ストアへ出してよいかは別です。npm run verify:store-readiness で確かめてください`);
+    console.log(`           ※ ストアへ出してよいかは別です。`);
+    console.log(`             npm run verify:store-preflight（リポジトリ側だけ）`);
+    console.log(`             npm run verify:submission-ready -- --artifact <成果物.zip> …（提出直前）`);
   } else {
     console.log(`  提出可否: ★ストアへ提出しないでください — ${r.provenance.notSubmittableBecause.join(' / ')}`);
   }

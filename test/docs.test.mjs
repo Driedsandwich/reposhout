@@ -678,6 +678,31 @@ test('バージョンが manifest / package.json / CHANGELOG / ストア文書�
 });
 
 /*
+ * 第13回監査 R13-005。npm run package の出力と DATA_DISCLOSURE が、
+ * 廃止した `verify:store-readiness` を案内していた（実在しない）。
+ * **文書や出力が名指しするスクリプトは、package.json に在ることを機械で見る。**
+ */
+test('案内している npm run のスクリプトが、すべて実在する', () => {
+  const scripts = Object.keys(JSON.parse(read('package.json')).scripts);
+  const sources = ['scripts/package.mjs', 'scripts/verify-store-readiness.mjs',
+                   'store/DATA_DISCLOSURE.json', 'store/LISTING.md',
+                   'store/STORE_DASHBOARD_CHANGES.md', 'README.md', 'README.ja.md',
+                   'CHANGELOG.md', 'PRIVACY.md'];
+  const missing = [];
+  for (const f of sources) {
+    for (const m of read(f).matchAll(/npm run ([a-z][a-z0-9:-]*)/g)) {
+      if (!scripts.includes(m[1])) missing.push(`${f}: ${m[1]}`);
+    }
+  }
+  assert.deepEqual(missing, [], `実在しないスクリプトを案内している: ${missing.join(' / ')}`);
+  /* 対照: 実在しない名前を混ぜれば必ず見つかる */
+  const control = 'npm run this-script-does-not-exist';
+  const found = [...control.matchAll(/npm run ([a-z][a-z0-9:-]*)/g)].map((m) => m[1]);
+  assert.deepEqual(found, ['this-script-does-not-exist'], '対照が成立していない');
+  assert.ok(!scripts.includes('this-script-does-not-exist'));
+});
+
+/*
  * 第13回監査 R13-002。README・ストア掲載文・PRIVACY が旧仕様のままだった
  * （検索語や下書きの title / body を残すと宣伝し、x.com のスクリプトを
  * 「Escapeだけを聞く」と説明していた）。**文書のどこかにあるか**ではなく、

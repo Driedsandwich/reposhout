@@ -30,6 +30,11 @@
   `chrome.tabs.query` で引き直していたので、渡されたタブと違うタブを共有しうる。
   `chrome.action.onClicked(tab)` / `chrome.commands.onCommand(command, tab)` の
   タブをそのまま使い、無いときだけ引き直す
+- **（R13-004）データ申告2欄は本人の確認待ちのまま。** 答えは1文字も入れていない
+- **廃止した npm run を案内していた（R13-005・P3）** — `npm run package` の出力と
+  `DATA_DISCLOSURE.json` が、いまは存在しない `verify:store-readiness` を案内していた。
+  2段（preflight / submission-ready）へ直し、**文書が名指しするスクリプトが
+  package.json に実在するか**を機械で見る検査を足した
 
 ### 出す成果物
 
@@ -196,7 +201,8 @@ main への push で走った CI（run 31117148744）が作ったものを、ダ
   `ownerMustConfirm` 1つで両方を表していたので、本人が確認して答えを入れると
   「確認は要らない」へ変えるしかなく、**確認した記録が残らなかった**。
   `requiresOwnerConfirmation`（要否）と `confirmationStatus`（pending / confirmed /
-  not_required）に分けた。あわせて提出前の関門 `npm run verify:store-readiness` を新設し、
+  not_required）に分けた。あわせて提出前の関門 `verify:store-readiness`（当時の名前。第11回で
+  `verify:store-preflight` と `verify:submission-ready` の2段へ分けた）を新設し、
   確認待ち・答えと記録の不一致・設問文や日付や理由の空欄・遵守声明の欠落・
   文書間の食い違いがあれば終了コードを0以外にする
 - **差分文書が手元ビルドを提出用として案内していた（R9-003・P2）** —
