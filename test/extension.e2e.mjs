@@ -440,14 +440,50 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
     assert.equal(opened.length, 0, `投稿画面が開いた: ${opened.map((t) => t.url).join(' | ')}`);
   });
 
-  it('タブが渡されないときだけ引き直す（この環境では url が取れないので開かない）', async () => {
+  it('渡されたタブにURLが無ければ、そのタブに理由を出して終わる（R14-002 / R14-003）', async () => {
     /*
-     * activeTab はツールバー操作でしか付かないので、この harness では
-     * 引き直した結果に url が無い。**開かないのが正しい**。
-     * 上の2件と合わせて、「渡されたタブを使う」経路が生きていることが分かる。
+     * 第14回監査 R14-002。1.1.8 は `!tab || !tab.url` で引き直していたので、
+     * **タブは渡されているのに url だけ無い**とき、別のタブを共有しえた。
+     *
+     * 「別のタブへ移らない」ことそのものは、引き直しが**別のURLを返す**状況を
+     * 作れないとこの環境では見えない（activeTab はツールバー操作でしか付かず、
+     * ここでは引き直しても url の無いタブしか返らない）。その形は
+     * test/background.test.mjs が偽の chrome を与えて見ている。
+     *
+     * ここでは実拡張で見えるほうを見る——**渡されたタブに** `!` が出ること。
+     * 1.1.8 の実装はこの場合そのまま return するので、どこにも `!` は出ない。
+     * x.com 側には content script がいないので、案内はバッジへ回る（R14-003）。
      */
-    const opened = await shareViaSw({ id: 999999, url: undefined, title: 'x' });
-    assert.equal(opened.length, 0, '引き直した結果で開いてしまった');
+    const { targetId: otherId } = await cdp.send('Target.createTarget', { url: 'https://x.com/home' });
+    await waitLoaded(otherId);
+    const tabId = await evalInSw(
+      `(async () => { const ts = await chrome.tabs.query({}); ` +
+      `const t = ts.find((x) => x.id !== undefined); return t && t.id; })()`);
+    assert.equal(typeof tabId, 'number', `タブIDが取れない: ${tabId}`);
+    await evalInSw(`chrome.action.setBadgeText({ tabId: ${tabId}, text: '' })`);
+
+    const before = new Set((await targets()).map((t) => t.targetId));
+    await evalInSw(`self.GXS_BG.shareTab({ id: ${tabId}, title: 'x' })`);
+
+    let badge = '';
+    for (let i = 0; i < 15; i++) {
+      badge = await evalInSw(`chrome.action.getBadgeText({ tabId: ${tabId} })`);
+      if (badge) break;
+      await sleep(200);
+    }
+    assert.equal(badge, '!', `渡されたタブに理由が出ていない: ${JSON.stringify(badge)}`);
+
+    const opened = (await targets()).filter((t) =>
+      t.type === 'page' && t.url.startsWith('https://x.com/intent/') && !before.has(t.targetId));
+    assert.equal(opened.length, 0, `投稿画面が開いた: ${opened.map((t) => t.url).join(' | ')}`);
+
+    /* 見出しにもURLや値を出さない */
+    const title = await evalInSw(`chrome.action.getTitle({ tabId: ${tabId} })`);
+    for (const leak of ['http', 'github.com']) {
+      assert.ok(!String(title).includes(leak), `見出しに ${leak} が出ている: ${title}`);
+    }
+    await evalInSw(`chrome.action.setBadgeText({ tabId: ${tabId}, text: '' })`);
+    await cdp.send('Target.closeTarget', { targetId: otherId });
   });
 
   it('ウィンドウを閉じると記録が消える（ID再利用への備え）', async () => {

@@ -21,7 +21,7 @@ Share GitHub repos, issues and PRs to X with a pre-filled post.
 | Issues and pull requests | The **Share** button, to the left of New issue / Code |
 | Other shareable GitHub pages | Toolbar icon, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> (<kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> on macOS) |
 
-The toolbar icon and the shortcut work on shareable GitHub pages, including the ones that already show a button. **Sensitive pages — authentication, account, settings and organisation administration — are refused at every entry point**, so pressing the icon or the shortcut there does nothing.
+The toolbar icon and the shortcut work on shareable GitHub pages, including the ones that already show a button. **Sensitive pages — authentication, account, settings and organisation administration — are refused at every entry point**. Pressing the icon or the shortcut there does not open the composer; the page shows a short notice instead, and if that notice cannot be delivered the toolbar icon shows a `!` badge for a few seconds. Neither one repeats the URL or any value.
 
 Changed your mind? Press <kbd>Esc</kbd> in the share window to dismiss it.
 
@@ -42,7 +42,7 @@ octocat/Hello-World: My first repository on GitHub!
 https://github.com/octocat/Hello-World
 ```
 
-Authentication, account, settings and organisation-administration pages are not shared at all — the button and the shortcut simply do nothing there, because a page like *Personal access tokens* has a title and a path that have no business in a draft post. Path segments are decoded before that decision is made, so `/%73ettings/tokens` is refused too; a URL that cannot be decoded unambiguously is refused rather than guessed at.
+Authentication, account, settings and organisation-administration pages are not shared at all — the button and the shortcut refuse and say so, because a page like *Personal access tokens* has a title and a path that have no business in a draft post. Path segments are decoded before that decision is made, so `/%73ettings/tokens` is refused too; a URL that cannot be decoded unambiguously is refused rather than guessed at.
 
 Query strings on the pages that *are* shared are handled per route, and **only values whose set can be enumerated or checked mechanically are kept** — page numbers, open/closed state, sort order and direction, `?plain=1` on a Markdown file, `?diff=split&w=1` on a diff, `quick_pull` on a prepared pull request, the `type` of a GitHub search. **Everything free-text is dropped**: search terms (`q`, `query`, `discussions_q`), a prepared pull request's `title` and `body`, and identifier-shaped values such as `labels`, `author`, `branch`, `path`, `milestone`, `category` and `template` — because no finite list of patterns can prove that arbitrary text carries no secret. Anything not on that route's table is dropped too, which covers `?tab=readme-ov-file`, `notification_referrer_id` and `utm_*`. On authentication, account and settings routes the page is not shared at all, so an OAuth `client_id`/`state` or a token in a URL can never reach a draft post. Line anchors (`#L10-L20`), comment anchors and README section anchors are kept — including long Japanese headings, which percent-encode to well over a hundred characters — because those are the point of sharing. A fragment containing `=` is dropped whatever its name, which covers `#access_token=`, `#client_secret=`, `#api_key=` and anything else of that shape without having to enumerate them; so are fragments with broken percent-encoding, control characters, or more than 512 characters.
 
@@ -155,7 +155,7 @@ Requirements: Node 22+, Chrome or Chromium (found via `CHROME_PATH` or the usual
 | Official conformance | `npm run test:conformance` | The counting sections of Twitter's own `conformance/validate.yml`, vendored at a pinned upstream commit and checked by SHA-256 |
 | Packaging | `npm run test:package` | Builds with each write deliberately failed in turn, and checks that the previous artifact survives, that nothing partial is left, and that a `-dirty` build is named `-dirty` in its manifest too |
 | Manifest and package | included above | Manifest V3 validity, the permission list (the test fails if a permission is added), no remote-code patterns, the exact list of shipped files |
-| Real-extension E2E | `npm run test:e2e` | 10 tests. Loads exactly the files listed in `scripts/package-files.mjs` into real Chrome via `Extensions.loadUnpacked`, with `x.com` and `github.com` mapped to a local HTTPS server, and drives the real service worker |
+| Real-extension E2E | `npm run test:e2e` | Loads exactly the files listed in `scripts/package-files.mjs` into real Chrome via `Extensions.loadUnpacked`, with `x.com` and `github.com` mapped to a local HTTPS server, and drives the real service worker |
 | Browser runner | open `test/share.test.html` | The same fixtures, rendered as a table — useful for reading the actual output |
 
 On character counting: across the official corpus and the generated adversarial corpus, **no case was found where the counter falls below X's own**. That is a finite regression check, not a proof over all inputs.

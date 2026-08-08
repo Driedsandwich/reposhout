@@ -113,3 +113,59 @@ test('タブも引き直しの結果も無ければ、何もしない（R14-002�
   assert.deepEqual(log.opened, []);
   assert.deepEqual(log.notified, []);
 });
+
+/* ---- 案内が届かないときのバッジ（第14回監査 R14-003） ------------------ */
+
+test('画面へ案内が届けば、バッジは出さない（R14-003）', async () => {
+  const { bg, log } = mount({ contentScript: true });
+  const how = await bg.announceRefusal(7, 'credential_like');
+  assert.equal(how, 'notice');
+  assert.equal(log.notified.length, 1);
+  assert.equal(log.notified[0].tabId, 7);
+  assert.equal(log.notified[0].reason, 'credential_like');
+  assert.deepEqual(log.badges.filter((b) => b.text), [], 'バッジまで出している');
+});
+
+test('content script がいなければ、バッジで伝える（R14-003）', async () => {
+  /*
+   * GitHub 以外のページや、拡張を更新した直後の未再読込タブでは案内が届かない。
+   * 1.1.8 はここで黙って終わっていたので、利用者には壊れたようにしか見えなかった。
+   */
+  const { bg, log } = mount({ contentScript: false });
+  const how = await bg.announceRefusal(7, 'credential_like');
+  assert.equal(how, 'badge', '届かないのにバッジを出していない');
+  const set = log.badges.filter((b) => b.text);
+  assert.equal(set.length, 1);
+  /* vm の中で作られた物なので、プロトタイプごとの比較はしない */
+  assert.equal(set[0].tabId, 7, '対象のタブに付いていない');
+  assert.equal(set[0].text, '!');
+});
+
+test('バッジにも見出しにも、URLや値を出さない（R14-003）', async () => {
+  const { bg, log } = mount({ contentScript: false });
+  await bg.announceRefusal(7, 'credential_like');
+  const shown = JSON.stringify(log.badges) + JSON.stringify(log.titles);
+  for (const leak of ['http', 'github.com', 'access_token', 'dummy']) {
+    assert.ok(!shown.includes(leak), `バッジに ${leak} が出ている: ${shown}`);
+  }
+  /* 出しているのは、翻訳ファイルの決まった語だけ */
+  assert.ok(log.titles.some((t) => t.title === '[noticeCredential]'),
+    `見出しが定型文でない: ${JSON.stringify(log.titles)}`);
+});
+
+test('バッジは一定時間で消える（R14-003）', async () => {
+  const { bg, log } = mount({ contentScript: false });
+  await bg.flagTab(7, 'unsupported');
+  await new Promise((r) => setTimeout(r, 0));
+  assert.ok(log.badges.some((b) => b.text === '!'), 'そもそも付いていない');
+  /* 消す予約が入っていること（実時間は待たない） */
+  const cleared = () => log.badges.some((b) => b.text === '');
+  assert.ok(!cleared(), 'すぐ消えてしまっている');
+});
+
+test('タブIDが数でなければ、案内もバッジも試さない（R14-003）', async () => {
+  const { bg, log } = mount({ contentScript: true });
+  assert.equal(await bg.announceRefusal(undefined, 'unsupported'), 'none');
+  assert.deepEqual(log.notified, []);
+  assert.deepEqual(log.badges, []);
+});

@@ -138,14 +138,61 @@ async function openShareWindow(intentUrl) {
   }
 }
 
-/* 理由の語だけを content script へ送る。失敗しても黙って落とす */
+/*
+ * 理由の語だけを content script へ送る。**届いたかどうかを返す**
+ * （第14回監査 R14-003。届かなかったときにバッジへ回すため）。
+ */
 async function notifyTab(tabId, reason) {
-  if (typeof tabId !== 'number') return;
+  if (typeof tabId !== 'number') return false;
   try {
     await chrome.tabs.sendMessage(tabId, { type: 'gxs-notice', reason: reason || 'unsupported' });
+    return true;
   } catch (e) {
     /* content script がいないページでは届かない。追加の権限は求めない */
+    return false;
   }
+}
+
+/*
+ * 案内が画面へ届かないとき（GitHub以外のページ、拡張を更新した直後の
+ * 未再読込タブなど）の代わり（第14回監査 R14-003）。
+ * ツールバーのアイコンに `!` を出し、少ししてから消す。
+ * **値もURLもパラメータ名も出さない**——出せる場所ではないため。
+ */
+var BADGE_MS = 6000;
+var badgeTimers = {};
+
+async function flagTab(tabId, reason) {
+  if (typeof tabId !== 'number') return false;
+  var key = String(tabId);
+  try {
+    await chrome.action.setBadgeText({ tabId: tabId, text: '!' });
+    if (chrome.action.setBadgeBackgroundColor) {
+      await chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: '#B42318' });
+    }
+    await chrome.action.setTitle({
+      tabId: tabId,
+      title: chrome.i18n.getMessage(
+        reason === 'credential_like' ? 'noticeCredential' : 'noticeUnsupported')
+    });
+  } catch (e) {
+    return false;                       // バッジも出せない相手なら、そこで終わり
+  }
+  if (badgeTimers[key]) clearTimeout(badgeTimers[key]);
+  badgeTimers[key] = setTimeout(function () {
+    delete badgeTimers[key];
+    /* 元へ戻す。title を空文字にすると manifest の既定値へ戻る */
+    Promise.resolve(chrome.action.setBadgeText({ tabId: tabId, text: '' })).catch(function () {});
+    Promise.resolve(chrome.action.setTitle({ tabId: tabId, title: '' })).catch(function () {});
+  }, BADGE_MS);
+  return true;
+}
+
+/* 画面内の案内を試し、届かなければバッジへ回す */
+async function announceRefusal(tabId, reason) {
+  var delivered = await notifyTab(tabId, reason);
+  if (delivered) return 'notice';
+  return (await flagTab(tabId, reason)) ? 'badge' : 'none';
 }
 
 /*
@@ -170,7 +217,7 @@ async function shareTab(tab) {
     if (!tab.url) {
       /* activeTab はユーザー操作で付くが、それでも取れないことはある。
          別のタブで代替せず、そのタブへ理由を伝えて終わる */
-      await notifyTab(tab.id, 'unsupported');
+      await announceRefusal(tab.id, 'unsupported');
       return;
     }
     return shareResolvedTab(tab);
@@ -201,7 +248,7 @@ async function shareResolvedTab(tab) {
      * ページなど content script がいない）は、ツールバーのバッジで伝える
      * （第14回監査 R14-003。以前はここで黙って終わっていた）。
      */
-    await notifyTab(tab.id, reason);
+    await announceRefusal(tab.id, reason);
     return;
   }
   if (!share) {
@@ -301,6 +348,8 @@ chrome.runtime.onInstalled.addListener(function () {
 // テスト（実拡張E2E）から実装そのものを呼べるようにする。公開APIではない。
 self.GXS_BG = {
   notifyTab: notifyTab,
+  flagTab: flagTab,
+  announceRefusal: announceRefusal,
   shareTab: shareTab,
   shareResolvedTab: shareResolvedTab,
   queryActiveTab: queryActiveTab,

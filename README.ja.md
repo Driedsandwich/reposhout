@@ -21,7 +21,7 @@ English: [README.md](README.md)
 | Issue・プルリクエスト | 画面内の **Share** ボタン（New issue / Code の左） |
 | その他の共有可能なGitHubページ | ツールバーのアイコン、または <kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>（Windows/Linuxは <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>） |
 
-ツールバーアイコンとショートカットは、ボタンが出ているページも含めて**共有可能なGitHubページ**で使えます。**認証・アカウント・設定・組織管理の画面は、すべての入口で拒否**するので、そこでアイコンやショートカットを押しても何も起きません。
+ツールバーアイコンとショートカットは、ボタンが出ているページも含めて**共有可能なGitHubページ**で使えます。**認証・アカウント・設定・組織管理の画面は、すべての入口で拒否**します。そこでアイコンやショートカットを押しても投稿画面は開かず、代わりに画面へ短い案内が出ます。案内が届かないページでは、ツールバーのアイコンに数秒だけ `!` が付きます。どちらもURLや値そのものは出しません。
 
 やっぱりやめたくなったら、共有ウィンドウで <kbd>Esc</kbd> を押すと閉じます。
 
@@ -42,7 +42,7 @@ octocat/Hello-World: My first repository on GitHub!
 https://github.com/octocat/Hello-World
 ```
 
-認証・アカウント・設定・組織管理の画面では、そもそも共有しません。ボタンもショートカットも何も起きません。「Personal access tokens」のようなページは、タイトルもパスも投稿の下書きに入るべきものではないからです。パスはデコードしてから判定するので、`/%73ettings/tokens` のような書き方も同じく拒否します。デコードできないURLは、推測せずに共有しません。
+認証・アカウント・設定・組織管理の画面では、そもそも共有しません。ボタンもショートカットも拒否して、その理由を伝えます。「Personal access tokens」のようなページは、タイトルもパスも投稿の下書きに入るべきものではないからです。パスはデコードしてから判定するので、`/%73ettings/tokens` のような書き方も同じく拒否します。デコードできないURLは、推測せずに共有しません。
 
 共有する側のページでは、クエリはページの種類ごとに扱いを変え、**値の集合を数えられるもの・機械的に確かめられるものだけを残します**——ページ番号、open/closed の状態、並び順と向き、Markdownの `?plain=1`、差分表示の `?diff=split&w=1`、下書き中のプルリクエストの `quick_pull`、GitHub検索の `type` などです。**自由に書ける欄はすべて落とします**——検索語（`q`・`query`・`discussions_q`）、下書きの `title`・`body`、そして識別子のように見える `labels`・`author`・`branch`・`path`・`milestone`・`category`・`template` も落とします。有限の一覧では「自由文に秘密が入っていない」ことを示せないからです。そのページの表に無いものも落とすので、`?tab=readme-ov-file`・`notification_referrer_id`・`utm_*` は消えます。ログイン・アカウント・設定系のURLはそもそも共有しないため、OAuthの `client_id`/`state` やURLに載ったトークンが投稿の下書きへ入ることはありません。行番号アンカー（`#L10-L20`）・コメントアンカー・READMEの節アンカーは、共有したい位置そのものなので残します。日本語の見出しはパーセントエンコードで100文字を超えますが、それも残します。一方、`=` を含むハッシュは名前によらず落とします——`#access_token=` も `#client_secret=` も `#api_key=` も、名前を数え上げずに一括で落ちます。壊れたエンコード・制御文字・512文字超も同様です。
 
@@ -155,7 +155,7 @@ npm run package   # dist/reposhout-<version>.zip と SHA-256
 | 公式コーパス | `npm run test:conformance` | Twitter公式の `conformance/validate.yml` のうち**文字数の3節（44件）**を実際に走らせます。上流のコミットとSHA-256で固定して同梱しており、配布物には入りません |
 | 配布物の作成 | `npm run test:package` | 書き込みを1つずつ意図的に失敗させて、前の成果物が残ること・中途半端なものが残らないこと・`-dirty` で作ったZIPは記録上の名前も `-dirty` になることを検査します |
 | manifest・配布物 | 上に含まれる | Manifest V3 の妥当性、権限一覧（権限が増えると落ちます）、外部コードの混入検査、出荷ファイル一覧の固定 |
-| 実拡張E2E | `npm run test:e2e` | 10テスト。`scripts/package-files.mjs` に挙げたファイルだけを `Extensions.loadUnpacked` で本物のChromeへ読み込み、`x.com` と `github.com` をローカルのHTTPSサーバへ向けて、実際の service worker を通して確認します |
+| 実拡張E2E | `npm run test:e2e` | `scripts/package-files.mjs` に挙げたファイルだけを `Extensions.loadUnpacked` で本物のChromeへ読み込み、`x.com` と `github.com` をローカルのHTTPSサーバへ向けて、実際の service worker を通して確認します |
 | ブラウザ版 | `test/share.test.html` を開く | 同じ期待値を表で表示。実際の出力を目で見たいとき用 |
 
 文字数について: 公式コーパスと生成した敵対的コーパスを走らせた**範囲では、公式より少なく数えた例は出ていません**。有限の入力に対する回帰検査であって、全入力に対する証明ではありません。
