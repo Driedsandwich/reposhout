@@ -26,6 +26,10 @@
   x.com のスクリプトを「Escapeだけを聞く」と説明していた。実装（`QUERY_RULES`・
   自由文を落とす・keydown を受けて key を見てから捨てる）に合わせて直し、
   **節ごとの積極的な要求**として検査する
+- **ツールバーとショートカットが、Chrome の渡すタブを捨てていた（R13-003・P2）** —
+  `chrome.tabs.query` で引き直していたので、渡されたタブと違うタブを共有しうる。
+  `chrome.action.onClicked(tab)` / `chrome.commands.onCommand(command, tab)` の
+  タブをそのまま使い、無いときだけ引き直す
 
 ### 出す成果物
 

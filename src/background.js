@@ -148,15 +148,22 @@ async function notifyTab(tabId, reason) {
   }
 }
 
-async function shareActiveTab() {
-  var tabs;
-  try {
-    tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  } catch (e) {
-    return;
+/*
+ * ツールバーの押下・ショートカットは、Chrome が**そのとき対象になったタブ**を
+ * 渡してくる。第13回監査 R13-003 まではそれを捨てて chrome.tabs.query で
+ * 引き直していたので、
+ *
+ *   ・渡されたタブは正常なのに query の結果に url が無く、何も起きない
+ *   ・渡されたタブ A と query の結果 B が違い、**B のほうを共有する**
+ *
+ * ということが起きえた（activeTab は「操作されたタブ」にだけ付く）。
+ * 渡されたタブをそのまま使い、無いときだけ引き直す。
+ */
+async function shareTab(tab) {
+  if (!tab || !tab.url) {
+    var fallback = await queryActiveTab();
+    tab = fallback;
   }
-
-  var tab = tabs && tabs[0];
   // activeTab 権限はユーザー操作（アイコン押下・ショートカット）で付与される。
   // それでも url が取れない場合は何もしない。
   if (!tab || !tab.url) return;
@@ -192,13 +199,24 @@ async function shareActiveTab() {
   await openShareWindow(share.intentUrl);
 }
 
+/* 渡されなかったときだけ、いまのタブを引き直す */
+async function queryActiveTab() {
+  try {
+    var tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    return tabs && tabs[0];
+  } catch (e) {
+    return null;
+  }
+}
+
 // MV3のservice workerは停止と再開を繰り返すため、リスナーは必ずトップレベルで登録する
-chrome.action.onClicked.addListener(function () {
-  shareActiveTab();
+// Chrome が渡してくるタブをそのまま使う（第13回監査 R13-003）
+chrome.action.onClicked.addListener(function (tab) {
+  shareTab(tab);
 });
 
-chrome.commands.onCommand.addListener(function (command) {
-  if (command === 'share-to-x') shareActiveTab();
+chrome.commands.onCommand.addListener(function (command, tab) {
+  if (command === 'share-to-x') shareTab(tab);
 });
 
 /*
@@ -267,8 +285,10 @@ chrome.runtime.onInstalled.addListener(function () {
 // テスト（実拡張E2E）から実装そのものを呼べるようにする。公開APIではない。
 self.GXS_BG = {
   notifyTab: notifyTab,
+  shareTab: shareTab,
+  queryActiveTab: queryActiveTab,
   openShareWindow: openShareWindow,
-  shareActiveTab: shareActiveTab,
+  shareActiveTab: shareTab,   // 旧名（E2Eと互換）
   rememberShareWindow: rememberShareWindow,
   forgetShareWindow: forgetShareWindow,
   isShareWindow: isShareWindow,
