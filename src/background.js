@@ -160,14 +160,29 @@ async function notifyTab(tabId, reason) {
  * 渡されたタブをそのまま使い、無いときだけ引き直す。
  */
 async function shareTab(tab) {
-  if (!tab || !tab.url) {
-    var fallback = await queryActiveTab();
-    tab = fallback;
+  /*
+   * 第14回監査 R14-002。以前は `!tab || !tab.url` で引き直していたので、
+   * **タブは渡されているのに url だけ取れなかった**とき、別のタブ B を
+   * 引き直して B を共有し、B へ案内を送っていた（実測）。
+   * タブが渡されたら、そのタブ以外へは行かない。
+   */
+  if (tab !== undefined && tab !== null) {
+    if (!tab.url) {
+      /* activeTab はユーザー操作で付くが、それでも取れないことはある。
+         別のタブで代替せず、そのタブへ理由を伝えて終わる */
+      await notifyTab(tab.id, 'unsupported');
+      return;
+    }
+    return shareResolvedTab(tab);
   }
-  // activeTab 権限はユーザー操作（アイコン押下・ショートカット）で付与される。
-  // それでも url が取れない場合は何もしない。
-  if (!tab || !tab.url) return;
 
+  var fallback = await queryActiveTab();
+  if (!fallback || !fallback.url) return;
+  return shareResolvedTab(fallback);
+}
+
+/* ここから先は、渡された1つのタブだけを見る（URL・タイトル・案内先・判断） */
+async function shareResolvedTab(tab) {
   // 文面の組み立てで例外が出ても無反応にせず、URLだけの共有にフォールバックする
   var share = null;
   var threw = false;
@@ -183,7 +198,8 @@ async function shareTab(tab) {
     /*
      * 開かなかった理由を、そのタブの content script へ**語だけ**送る
      * （第12回監査 R12-002）。値もURLも送らない。届かない場合（GitHub以外の
-     * ページなど content script がいない）は、そのまま何もしない。
+     * ページなど content script がいない）は、ツールバーのバッジで伝える
+     * （第14回監査 R14-003。以前はここで黙って終わっていた）。
      */
     await notifyTab(tab.id, reason);
     return;
@@ -286,6 +302,7 @@ chrome.runtime.onInstalled.addListener(function () {
 self.GXS_BG = {
   notifyTab: notifyTab,
   shareTab: shareTab,
+  shareResolvedTab: shareResolvedTab,
   queryActiveTab: queryActiveTab,
   openShareWindow: openShareWindow,
   shareActiveTab: shareTab,   // 旧名（E2Eと互換）
