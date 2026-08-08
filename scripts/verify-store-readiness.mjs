@@ -27,23 +27,53 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (f) => readFileSync(join(ROOT, f), 'utf8').replace(/\r\n/g, '\n');
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
 
+/*
+ * 引数の読み方も fail-closed にする（第12回監査 R12-004）。
+ * 知らない指定・二度書き・値なし・日付として読めない --today は、
+ * 黙って無視せず終了コード2で止める。
+ */
 const argv = process.argv.slice(2);
-const strict = argv.includes('--strict');
-const argOf = (name) => {
-  const i = argv.indexOf(name);
-  if (i === -1) return null;
-  const v = argv[i + 1];
-  if (!v || v.startsWith('--')) {
-    console.error(`${name} のあとにパスが要ります`);
-    process.exit(2);
+const FLAGS = ['--strict'];
+const VALUED = ['--artifact', '--audit-report', '--audit-attestation', '--today', '--timezone'];
+const given = new Map();
+for (let i = 0; i < argv.length; i++) {
+  const a = argv[i];
+  if (FLAGS.includes(a)) {
+    if (given.has(a)) fail(`同じ指定が二度あります: ${a}`);
+    given.set(a, true);
+    continue;
   }
-  return v;
-};
+  if (VALUED.includes(a)) {
+    if (given.has(a)) fail(`同じ指定が二度あります: ${a}`);
+    const v = argv[i + 1];
+    if (!v || v.startsWith('--')) fail(`${a} のあとに値が要ります`);
+    given.set(a, v);
+    i++;
+    continue;
+  }
+  fail(`知らない指定です: ${a}`);
+}
+function fail(message) {
+  console.error(message);
+  process.exit(2);
+}
+const strict = given.get('--strict') === true;
+const argOf = (name) => (given.has(name) ? given.get(name) : null);
 
 const candidate = JSON.parse(read('store/SUBMISSION_CANDIDATE.json'));
 
 /* 確認日は本人の暮らしている時間帯で見る（第11回監査 R11-005） */
-const today = argOf('--today') || dateIn(candidate.confirmationTimeZone || 'Asia/Tokyo');
+const timeZone = argOf('--timezone') || candidate.confirmationTimeZone || 'Asia/Tokyo';
+let today;
+try {
+  today = argOf('--today') || dateIn(timeZone);
+} catch (e) {
+  fail(`時間帯として読めません: ${timeZone}`);
+}
+if (!/^\d{4}-\d{2}-\d{2}$/.test(today) ||
+    new Date(`${today}T00:00:00Z`).toISOString().slice(0, 10) !== today) {
+  fail(`--today は YYYY-MM-DD の実在する日で渡してください: ${today}`);
+}
 
 /* 外側の成果物ZIP。GitHub が書くので data descriptor 付きで来る（実測） */
 const artifactPath = argOf('--artifact');
@@ -58,7 +88,14 @@ if (artifactPath) {
 /* 外部監査の申告と、その報告書の実体 */
 const attestationPath = argOf('--audit-attestation');
 const reportPath = argOf('--audit-report');
-const audit = attestationPath ? JSON.parse(readFileSync(attestationPath, 'utf8')) : null;
+let audit = null;
+if (attestationPath) {
+  try {
+    audit = JSON.parse(readFileSync(attestationPath, 'utf8'));
+  } catch (e) {
+    fail(`外部監査の申告が読めません（${attestationPath}）: ${e.message}`);
+  }
+}
 const auditReportSha256 = reportPath ? sha256(readFileSync(reportPath)) : null;
 
 /* いまの文書側の位置（監査後に書き換えていないかを見るため） */
@@ -75,6 +112,48 @@ const metadata = head
       dirty: git(['status', '--porcelain']) !== '' }
   : null;
 
+/*
+ * strict では、リモートの main と、そのコミットのCIまで見る
+ * （第12回監査 R12-003）。取れなかったら通さない。
+ */
+const EXPECTED_ORIGIN = 'Driedsandwich/reposhout';
+let remote = null;
+let metadataCi = null;
+if (strict) {
+  const originUrl = git(['remote', 'get-url', 'origin']);
+  const lsRemote = git(['ls-remote', 'origin', 'refs/heads/main']);
+  remote = {
+    originUrl,
+    originMainSha: lsRemote ? lsRemote.split(/\s+/)[0] : null,
+    expectedOrigin: EXPECTED_ORIGIN
+  };
+  metadataCi = fetchCiFor(head);
+}
+
+/* GitHub の API を read-only で引く。失敗は error として返す（黙って通さない） */
+function fetchCiFor(sha) {
+  if (!sha) return { error: 'HEAD が取れない' };
+  try {
+    const runsRaw = execFileSync('gh',
+      ['api', `repos/${EXPECTED_ORIGIN}/actions/runs?head_sha=${sha}&per_page=20`],
+      { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
+    const runs = JSON.parse(runsRaw).workflow_runs || [];
+    const run = runs.find((r) => r.event === 'push' && r.head_branch === 'main');
+    if (!run) return { error: `このコミットの main への push の run が見つからない: ${sha}` };
+    const jobsRaw = execFileSync('gh',
+      ['api', `repos/${EXPECTED_ORIGIN}/actions/runs/${run.id}/jobs`],
+      { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
+    const jobs = {};
+    for (const j of JSON.parse(jobsRaw).jobs || []) jobs[j.name] = j.conclusion;
+    return {
+      conclusion: run.conclusion, event: run.event, branch: run.head_branch,
+      headSha: run.head_sha, runId: String(run.id), jobs
+    };
+  } catch (e) {
+    return { error: `GitHub API を引けなかった: ${e.message.split('\n')[0]}` };
+  }
+}
+
 const result = validateStoreReadiness({
   mode: strict ? 'strict' : 'preflight',
   disclosure: JSON.parse(read('store/DATA_DISCLOSURE.json')),
@@ -89,6 +168,8 @@ const result = validateStoreReadiness({
   audit,
   auditReportSha256,
   metadata,
+  remote,
+  metadataCi,
   sha256,
   readZipStrict: (buf) => readZip(buf)
 });

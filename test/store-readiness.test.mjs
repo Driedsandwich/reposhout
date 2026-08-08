@@ -151,11 +151,23 @@ function fakeArtifact(cand, over = {}) {
 }
 
 /* strict が通る状態を1つ作る。ここから1箇所ずつ壊す */
+const GOOD_REMOTE = {
+  originUrl: 'https://github.com/Driedsandwich/reposhout.git',
+  originMainSha: 'a'.repeat(40),
+  expectedOrigin: 'Driedsandwich/reposhout'
+};
+const GOOD_CI = {
+  conclusion: 'success', event: 'push', branch: 'main',
+  headSha: 'a'.repeat(40), runId: '999', jobs: { test: 'success', windows: 'success' }
+};
+
 function strictInputs(over = {}) {
   const cand = over.candidate || readyCandidate();
   const docs = docsFor(cand);
   return {
     mode: 'strict',
+    remote: { ...GOOD_REMOTE },
+    metadataCi: { ...GOOD_CI },
     disclosure: confirmedDisclosure(),
     candidate: cand,
     manifestVersion: JSON.parse(read('manifest.json')).version,
@@ -520,4 +532,66 @@ test('JST の当日に確認した記録が、未来として弾かれない', (
   const bad = validateStoreReadiness(strictInputs({ disclosure: d, today: utc }));
   assert.ok(bad.problems.some((p) => p.includes('確認日が未来でない')),
     '対照が成立していない＝UTCでも弾かれない');
+});
+
+/* ---- リモートの main と CI への結び付け（第12回監査 R12-003） ---------- */
+
+test('手元だけのコミット（origin/main と違う）なら落ちる', () => {
+  failsWith(strictInputs({
+    remote: { ...GOOD_REMOTE, originMainSha: '9'.repeat(40) }
+  }), 'origin/main と同じ');
+});
+
+test('別のリポジトリを origin にしていたら落ちる', () => {
+  failsWith(strictInputs({
+    remote: { ...GOOD_REMOTE, originUrl: 'https://github.com/someone/else.git' }
+  }), 'リモートが対象のリポジトリ');
+});
+
+test('いまの文書のCIが取れなければ落ちる（警告で続けない）', () => {
+  failsWith(strictInputs({ metadataCi: { error: 'Service Unavailable' } }), 'いまの文書のCI');
+  failsWith(strictInputs({ metadataCi: null }), 'いまの文書のCI');
+});
+
+test('いまの文書のCIが失敗していれば落ちる', () => {
+  failsWith(strictInputs({ metadataCi: { ...GOOD_CI, conclusion: 'failure' } }),
+    'いまの文書のCIが success');
+});
+
+test('片方のジョブだけ成功では落ちる', () => {
+  failsWith(strictInputs({
+    metadataCi: { ...GOOD_CI, jobs: { test: 'cancelled', windows: 'success' } }
+  }), 'いまの文書のCI（test）');
+  failsWith(strictInputs({
+    metadataCi: { ...GOOD_CI, jobs: { test: 'success', windows: 'failure' } }
+  }), 'いまの文書のCI（windows）');
+});
+
+test('別のコミットのCIでは落ちる', () => {
+  failsWith(strictInputs({ metadataCi: { ...GOOD_CI, headSha: '8'.repeat(40) } }),
+    'いまの文書のCIが同じコミットのもの');
+});
+
+test('PR の run では落ちる', () => {
+  failsWith(strictInputs({ metadataCi: { ...GOOD_CI, event: 'pull_request', branch: 'feat/x' } }),
+    'いまの文書のCIが main への push');
+});
+
+test('preflight では、リモートやCIを見ないまま通る（最終関門ではない）', () => {
+  const r = validateStoreReadiness(preflightInputs({ remote: null, metadataCi: null }));
+  assert.deepEqual(r.problems, [], r.problems.join('\n'));
+});
+
+/* ---- 日付（第12回監査 R12-004） ---------------------------------------- */
+
+test('基準日そのものが日付でなければ落ちる', () => {
+  failsWith(strictInputs({ today: 'not-a-date' }), '基準日');
+  failsWith(strictInputs({ today: '2026-02-30' }), '基準日');
+});
+
+test('外部監査の日付が未来なら落ちる', () => {
+  const cand = readyCandidate();
+  const audit = goodAudit(cand);
+  audit.auditDate = '2026-08-08';
+  failsWith(strictInputs({ candidate: cand, audit, today: '2026-08-07' }), '外部監査の日付が未来でない');
 });

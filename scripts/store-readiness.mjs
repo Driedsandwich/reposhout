@@ -60,8 +60,18 @@ export function validateStoreReadiness(input) {
     privacy = '', listing = '', dashboardChanges = '',
     today, artifact = null, audit = null, auditReportSha256 = null,
     metadata = null,          // いまの文書側の位置 {sourceCommit, treeSha, dirty}
+    remote = null,            // {originUrl, originMainSha, expectedOrigin}
+    metadataCi = null,        // {error} または {conclusion, event, branch, headSha, jobs:{...}}
     sha256, readZipStrict = null
   } = input;
+
+  /*
+   * 「今日」そのものが実在する日でなければ、未来日の判定ができない
+   * （第12回監査 R12-004。--today not-a-date で検査を飛ばせた）。
+   */
+  if (!isRealDate(today)) {
+    problems.push(`基準日 — YYYY-MM-DD の実在する日でない: ${today}`);
+  }
 
   const strict = mode === 'strict';
   const pending = candidate.status === 'pending_main_ci';
@@ -307,6 +317,46 @@ export function validateStoreReadiness(input) {
     }
   }
 
+  /* ---- 9.5 いまの文書が、本当にリモートの main か（第12回監査 R12-003） ---- */
+  if (strict) {
+    /*
+     * 手元がきれいなだけでは足りない。**push されていない手元だけのコミット**でも、
+     * それに合わせた申告を渡せば strict を通せてしまった。
+     * リモートの main と一致していること、そのコミットの CI が両OSとも
+     * success であることを、外から確かめる。
+     */
+    check('リモートが対象のリポジトリ',
+      Boolean(remote) && remote.originUrl && remote.expectedOrigin &&
+      remote.originUrl.replace(/\.git$/, '').endsWith(remote.expectedOrigin),
+      remote ? `origin=${remote.originUrl}` : 'リモートを渡していない');
+    check('いまの文書が origin/main と同じ',
+      Boolean(remote) && Boolean(metadata) && remote.originMainSha === metadata.sourceCommit,
+      remote && metadata ? `origin/main=${remote.originMainSha} / HEAD=${metadata.sourceCommit}`
+                         : 'リモートまたは手元の位置を渡していない');
+    check('文書側に未コミットの変更が無い（strict）',
+      Boolean(metadata) && metadata.dirty === false,
+      metadata ? '未コミットの変更がある' : '手元の位置を渡していない');
+
+    if (!metadataCi || metadataCi.error) {
+      /* 取れなかったら通さない（警告で続けない） */
+      problems.push(`いまの文書のCI — 確かめられなかった: ${(metadataCi && metadataCi.error) || '渡していない'}`);
+    } else {
+      check('いまの文書のCIが main への push',
+        metadataCi.event === 'push' && metadataCi.branch === 'main',
+        `event=${metadataCi.event} branch=${metadataCi.branch}`);
+      check('いまの文書のCIが同じコミットのもの',
+        Boolean(metadata) && metadataCi.headSha === metadata.sourceCommit,
+        `${metadataCi.headSha} ≠ ${metadata && metadata.sourceCommit}`);
+      check('いまの文書のCIが success', metadataCi.conclusion === 'success',
+        `conclusion=${metadataCi.conclusion}`);
+      for (const job of ['test', 'windows']) {
+        check(`いまの文書のCI（${job}）`,
+          metadataCi.jobs && metadataCi.jobs[job] === 'success',
+          `${job}=${metadataCi.jobs && metadataCi.jobs[job]}`);
+      }
+    }
+  }
+
   /* ---- 10. 外部監査の申告 --------------------------------------------- */
   let auditChecked = false;
   if (strict && !audit) {
@@ -325,6 +375,10 @@ export function validateStoreReadiness(input) {
       `${audit.runtimeVersion} ≠ ${candidate.version}`);
     check('外部監査の日付', isRealDate(audit.auditDate || ''),
       `YYYY-MM-DD の実在する日でない: ${audit.auditDate}`);
+    if (isRealDate(audit.auditDate || '') && isRealDate(today)) {
+      check('外部監査の日付が未来でない', audit.auditDate <= today,
+        `${audit.auditDate} が今日 ${today} より後`);
+    }
     check('外部監査の実施者', !blank(audit.auditor), '空欄');
     /*
      * 報告書は書式ではなく**実体のハッシュ**で結び付ける。呼び出し側が

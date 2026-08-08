@@ -98,33 +98,104 @@
   ];
 
   /*
-   * ページ種別ごとに「意味を持つので残すクエリ」。
-   * ここに無い名前はすべて落とす（unknown は落とす、が方針）。
-   * null は「クエリもハッシュも落とす」を意味する。
+   * ページ種別ごとに「共有URLへ残すクエリ」を、**名前と値の型**で決める。
+   *
+   * 第12回監査 R12-001。1.1.8 までは名前の allowlist だけで、値は
+   * 「資格情報の形をしていないか」を正規表現で見ていた。しかし
+   * q・body・title のような**自由文**を残す限り、有限の正規表現では
+   * 「秘密が入っていない」ことを示せない（実際、5回以上エンコードした値・
+   * camelCase の名前・一覧に無いベンダのトークン形は素通りした）。
+   *
+   * そこで**自由文は共有URLから落とす**。残すのは、値の形を機械的に
+   * 確かめられるものだけにする。
+   *
+   *   int   1〜6桁の正の整数
+   *   bool  1 / 0 / true / false
+   *   enum  決めた語のどれか
+   *   slug  英数と . _ - / , : だけの短い識別子（= を含めない・% を含めない）
+   *
+   * 落とす自由文: q / query / discussions_q / title / body
+   * → 検索語や下書き本文は共有されない。README とストア文書もそう書く。
    */
-  var QUERY_ALLOW = {
-    'sensitive': null,
-    'root': [],
-    'user': ['tab'],
-    'search': ['q', 'type', 's', 'o', 'l', 'p'],
-    'repo': [],
-    'issue-list': ['q', 'page', 'sort', 'direction', 'state', 'labels', 'milestone', 'assignee', 'author', 'type'],
-    'pr-list': ['q', 'page', 'sort', 'direction', 'state', 'labels', 'milestone', 'assignee', 'author'],
-    'discussion-list': ['discussions_q', 'category', 'q', 'page'],
-    'issue': [],
-    'pr': ['diff', 'w'],
-    'discussion': [],
-    'blob': ['plain'],
-    'tree': [],
-    'compare': ['quick_pull', 'title', 'body', 'labels', 'milestone', 'assignees', 'projects', 'template', 'expand', 'diff', 'w'],
-    'commits': ['author', 'since', 'until', 'path', 'branch'],
-    'commit': ['diff', 'w'],
-    'actions': ['query', 'page'],
-    'releases': ['page'],
-    'wiki': [],
-    'repo-sub': [],
-    'other': []
+  function enumRule(values) { return { type: 'enum', values: values }; }
+  function intRule() { return { type: 'int' }; }
+  function boolRule() { return { type: 'bool' }; }
+  function slugRule(maxLen) { return { type: 'slug', maxLen: maxLen || 64 }; }
+
+  var SORT_VALUES = ['created', 'updated', 'comments', 'reactions', 'interactions',
+                     'author-date', 'committer-date', 'best-match', 'stars', 'forks',
+                     'help-wanted-issues', 'name', 'indexed'];
+  var DIRECTION_VALUES = ['asc', 'desc'];
+  var STATE_VALUES = ['open', 'closed', 'all', 'merged'];
+  var DIFF_VALUES = ['split', 'unified'];
+  var SEARCH_TYPE_VALUES = ['code', 'repositories', 'issues', 'pullrequests', 'discussions',
+                            'users', 'commits', 'registrypackages', 'wikis', 'topics',
+                            'marketplace'];
+  var USER_TAB_VALUES = ['repositories', 'projects', 'packages', 'stars', 'followers',
+                         'following', 'overview', 'achievements'];
+
+  var QUERY_RULES = {
+    'sensitive': null,                         // null は「クエリもハッシュも落とす」
+    'root': {},
+    'user': { tab: enumRule(USER_TAB_VALUES) },
+    'search': {
+      type: enumRule(SEARCH_TYPE_VALUES), s: enumRule(SORT_VALUES),
+      o: enumRule(DIRECTION_VALUES), l: slugRule(40), p: intRule()
+    },
+    'repo': {},
+    'issue-list': {
+      page: intRule(), sort: enumRule(SORT_VALUES), direction: enumRule(DIRECTION_VALUES),
+      state: enumRule(STATE_VALUES), labels: slugRule(80), milestone: slugRule(40),
+      assignee: slugRule(40), author: slugRule(40), type: slugRule(20)
+    },
+    'pr-list': {
+      page: intRule(), sort: enumRule(SORT_VALUES), direction: enumRule(DIRECTION_VALUES),
+      state: enumRule(STATE_VALUES), labels: slugRule(80), milestone: slugRule(40),
+      assignee: slugRule(40), author: slugRule(40)
+    },
+    'discussion-list': { category: slugRule(40), page: intRule() },
+    'issue': {},
+    'pr': { diff: enumRule(DIFF_VALUES), w: boolRule() },
+    'discussion': {},
+    'blob': { plain: boolRule() },
+    'tree': {},
+    'compare': {
+      quick_pull: boolRule(), labels: slugRule(80), milestone: slugRule(40),
+      assignees: slugRule(80), projects: slugRule(80), template: slugRule(60),
+      expand: boolRule(), diff: enumRule(DIFF_VALUES), w: boolRule()
+    },
+    'commits': {
+      author: slugRule(40), since: slugRule(30), until: slugRule(30),
+      path: slugRule(120), branch: slugRule(60)
+    },
+    'commit': { diff: enumRule(DIFF_VALUES), w: boolRule() },
+    'actions': { page: intRule() },
+    'releases': { page: intRule() },
+    'wiki': {},
+    'repo-sub': {},
+    'other': {}
   };
+
+  /*
+   * 共有URLへ**載せない**自由文の名前。QUERY_RULES にこれらを足さないことが
+   * 規約で、テストがそれを見張る（keepParam へ二重の判定を置いても、型の表に
+   * 無い時点で落ちるので効かない＝変異させても落ちない行になる）。
+   */
+  var FREE_TEXT_PARAMS = ['q', 'query', 'discussions_q', 'title', 'body'];
+
+  var SLUG_RE = /^[A-Za-z0-9._\-\/,:+@ ]+$/;
+
+  function valueFitsRule(rule, value) {
+    if (!rule) return false;
+    if (typeof value !== 'string' || value === '') return false;
+    if (rule.type === 'int') return /^[0-9]{1,6}$/.test(value) && Number(value) > 0;
+    if (rule.type === 'bool') return ['0', '1', 'true', 'false'].indexOf(value) !== -1;
+    if (rule.type === 'enum') return rule.values.indexOf(value) !== -1;
+    if (rule.type === 'slug') {
+      return value.length <= rule.maxLen && SLUG_RE.test(value) && value.indexOf('=') === -1;
+    }
+    return false;
+  }
 
   /*
    * ハッシュ（fragment）の安全化。
@@ -583,12 +654,13 @@
     return routeOf(u) === 'sensitive';
   }
 
-  function keepParam(route, name) {
-    var allow = QUERY_ALLOW[route];
-    if (!allow) return false;                                   // null（機微）と未定義は全落とし
+  function keepParam(route, name, value) {
+    var rules = QUERY_RULES[route];
+    if (!rules) return false;                                   // null（機微）と未定義は全落とし
     if (SENSITIVE_PARAM_RE.test(name)) return false;            // 多重防御
     if (TRACKING_PARAMS.indexOf(name.toLowerCase()) !== -1 && route !== 'user') return false;
-    return allow.indexOf(name) !== -1;
+    if (!Object.prototype.hasOwnProperty.call(rules, name)) return false;
+    return valueFitsRule(rules[name], value);                   // 値の形も見る
   }
 
   /* ------------------------------------------------------------
@@ -608,97 +680,121 @@
    * 共有されるURLが別物になり、消したことにも気づけないため。
    */
 
-  /* 「名前 = 値」「名前 : 値」の形になっているときだけ資格情報とみなす名前 */
+  /* 資格情報とみなす名前。区切りと大文字小文字を落として突き合わせる */
   var CREDENTIAL_KEYS = [
-    'access_token', 'refresh_token', 'id_token', 'oauth_token', 'auth_token',
-    'client_secret', 'api_key', 'apikey', 'secret', 'password', 'passwd', 'pwd',
-    'session_token', 'sessionid', 'authorization', 'credential', 'credentials',
-    'private_key', 'privatekey', 'token'
+    'accesstoken', 'refreshtoken', 'idtoken', 'oauthtoken', 'authtoken',
+    'clientsecret', 'apikey', 'apisecret', 'secret', 'password', 'passwd', 'pwd',
+    'sessiontoken', 'sessionid', 'authorization', 'credential', 'credentials',
+    'privatekey', 'token', 'passphrase', 'sig', 'signature'
   ];
 
   /*
-   * 代入の形を見る。前後を区切るので `passwordless` のような語の一部では
-   * 当たらない。値が1文字以上あるものだけを拾う。
-   * JSON（"access_token":"..."）・コロン・イコール・空白ありをまとめて見る。
+   * 「名前 = 値」「名前 : 値」の形をまとめて拾い、名前は正規化してから照合する。
+   * 第12回監査 R12-001: 以前は 'access_token' のような書き方を並べていたので、
+   * accessToken / api-key / ClientSecret が素通りしていた。
    */
-  var CREDENTIAL_ASSIGN_RE = new RegExp(
-    '(?:^|[^A-Za-z0-9_])["\']?(' + CREDENTIAL_KEYS.join('|') +
-    ')["\']?\\s*[:=]\\s*["\']?[^\\s"\',&]',
-    'i'
-  );
+  var ASSIGNMENT_RE = /(?:^|[^A-Za-z0-9])["']?([A-Za-z][A-Za-z0-9_-]{1,30})["']?[ \t]*[:=][ \t]*["']?([^\s"',&]+)/g;
 
-  /* 値そのものが資格情報の形をしているもの（名前が無くても分かる） */
-  var CREDENTIAL_TOKEN_RE =
-    /(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,}|Bearer\s+[A-Za-z0-9\-._~+\/]{16,})/i;
-
-  /* 制御文字。普通のクエリには入らない */
-  var CONTROL_RE = /[\u0000-\u001F\u007F]/;
+  function normalizeKey(name) {
+    return String(name).toLowerCase().replace(/[-_]/g, '');
+  }
 
   /*
-   * 多重エンコードをほどきながら各段階で見る。何回でもほどくのではなく
-   * 上限を決める（決めないと入力次第で止まらない）。
+   * 値そのものが資格情報の形をしているもの（名前が無くても分かる）。
+   * ここに並ぶのは**こちらが定義した形**だけで、「あらゆる秘密を見つけられる」
+   * という意味ではない（文書にもそう書く・第12回監査 R12-001）。
    */
-  var MAX_DECODE_ROUNDS = 3;
+  var CREDENTIAL_TOKEN_RES = [
+    /gh[pousr]_[A-Za-z0-9]{16,}/,                          // GitHub
+    /github_pat_[A-Za-z0-9_]{16,}/,                        // GitHub fine-grained
+    /Bearer[ \t]+[A-Za-z0-9\-._~+\/]{16,}/i,                // Authorization ヘッダの形
+    /AKIA[0-9A-Z]{12,}/,                                   // AWS アクセスキーの形
+    /xox[baprs]-[A-Za-z0-9-]{10,}/i,                       // Slack
+    /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{5,}/,   // JWT
+    /AIza[0-9A-Za-z_\-]{20,}/,                             // Google API キー
+    /-----BEGIN[ A-Z]*PRIVATE KEY/                         // PEM
+  ];
 
-  function credentialLikeValue(value) {
-    if (typeof value !== 'string' || !value) return false;
+  /* 制御文字。普通のURLには入らない */
+  var CONTROL_RE = /[\u0000-\u001F\u007F]/;
 
-    var layer = value;
-    for (var i = 0; i <= MAX_DECODE_ROUNDS; i++) {
-      /*
-       * '+' は form-urlencoded の空白だが、URLSearchParams が解いた時点で
-       * 空白になっているので、ここで読み替える枝は要らない（外して変異させても
-       * どのテストも落ちなかったので置かない）。
-       */
-      if (CONTROL_RE.test(layer)) return true;
-      if (CREDENTIAL_ASSIGN_RE.test(layer)) return true;
-      if (CREDENTIAL_TOKEN_RE.test(layer)) return true;
-      if (layer.indexOf('%') === -1) break;
-      var next;
-      try {
-        next = decodeURIComponent(layer);
-      } catch (e) {
-        /*
-         * ほどけない % が残っている＝これ以上は判定できない。
-         * 判定できないものを共有できる側に置かない（fragment と同じ方針）。
-         */
-        return true;
-      }
-      if (next === layer) break;
-      layer = next;
+  /* まだほどける（有効な %HH が残っている）か */
+  var HAS_ESCAPE_RE = /%[0-9A-Fa-f]{2}/;
+
+  /*
+   * ほどく回数の上限。パスと値で別々に持つ（第12回監査 R12-004 の指摘に沿って、
+   * 同じ定数を共有しない）。**上限に達しても、まだ有効な %HH が残っていれば
+   * 判定できないので落とす。** 以前は上限に達すると素通りしていたので、
+   * 5回以上エンコードした値が通っていた（1.1.8の配布ZIPで実測）。
+   */
+  var VALUE_MAX_DECODE_ROUNDS = 6;
+  var PATH_MAX_DECODE_ROUNDS = 4;
+
+  function looksLikeCredential(text) {
+    if (CONTROL_RE.test(text)) return true;
+    for (var i = 0; i < CREDENTIAL_TOKEN_RES.length; i++) {
+      if (CREDENTIAL_TOKEN_RES[i].test(text)) return true;
+    }
+    ASSIGNMENT_RE.lastIndex = 0;
+    var m;
+    while ((m = ASSIGNMENT_RE.exec(text)) !== null) {
+      if (CREDENTIAL_KEYS.indexOf(normalizeKey(m[1])) !== -1) return true;
     }
     return false;
   }
 
   /*
-   * 「共有するURLに残るクエリ」の中に、資格情報の形をした値が無いか。
+   * 多重エンコードをほどきながら各段階で見る。
    *
-   * 見るのは **残す側** のパラメータだけにする。名前で落とすもの
-   * （SENSITIVE_PARAM_RE・allowlist外・追跡系）は共有URLに入らないので、
-   * それを理由にURLごと拒否すると、これまで安全に共有できていたページまで
-   * 共有できなくなる。**残す値に資格情報が入っていたときだけ**、
-   * そのパラメータを黙って消すのではなくURLごと共有しない
-   * （消すと、利用者が見ている画面と共有されるURLが別物になる）。
+   * ・**ほどくのは有効な %HH があるときだけ。** 解いた結果に残る素の `%` は
+   *   ただのデータで、`100% coverage` のような普通の検索を落とさない
+   *   （第12回監査 R12-002。1.1.8 では落としていた）
+   * ・decodeURIComponent が投げる＝壊れたエスケープなので落とす
+   * ・上限まで解いてもまだ %HH が残る＝判定できないので落とす
+   *
+   * 戻り値は理由（null なら問題なし）。
    */
-  function credentialLikeQuery(rawUrl) {
+  function scanEncodedLayers(text, maxRounds) {
+    if (typeof text !== 'string' || !text) return null;
+    var layer = text;
+    for (var i = 0; i <= maxRounds; i++) {
+      if (looksLikeCredential(layer)) return 'credential_like';
+      if (!HAS_ESCAPE_RE.test(layer)) return null;      // これ以上ほどけない
+      if (i === maxRounds) return 'credential_like';    // まだ解ける＝判定できない
+      var next;
+      try {
+        next = decodeURIComponent(layer);
+      } catch (e) {
+        return 'credential_like';                       // 壊れたエスケープ
+      }
+      if (next === layer) return null;
+      layer = next;
+    }
+    return null;
+  }
+
+  function credentialLikeValue(value) {
+    return scanEncodedLayers(value, VALUE_MAX_DECODE_ROUNDS) !== null;
+  }
+
+  /*
+   * **共有するURL全体**（パス・残すクエリ・フラグメント）に、資格情報の形が
+   * 無いか。第12回監査 R12-001 まではクエリの値しか見ておらず、
+   * /blob/main/access_token=<値> のようなパスがそのままXへ渡っていた。
+   */
+  function credentialLikeShareUrl(shareUrl) {
     var u;
     try {
-      u = new URL(rawUrl);
+      u = new URL(shareUrl);
     } catch (e) {
-      /* 解析できないものはクエリごと落ちる経路なので、ここでは判定しない */
-      return false;
+      return 'credential_like';                         // 読めないものは出さない
     }
-    if (!u.search) return false;
-    if (u.protocol !== 'https:' || u.hostname !== 'github.com') return false;
-
-    var route = routeOf(u);
-    if (!QUERY_ALLOW[route]) return false;      // クエリを丸ごと落とすルート
-
-    var found = false;
+    if (scanEncodedLayers(u.pathname, PATH_MAX_DECODE_ROUNDS)) return 'credential_like';
+    if (u.hash && scanEncodedLayers(u.hash, VALUE_MAX_DECODE_ROUNDS)) return 'credential_like';
+    var found = null;
     u.searchParams.forEach(function (value, name) {
       if (found) return;
-      if (!keepParam(route, name)) return;      // 残らない値は判定しない
-      if (credentialLikeValue(value) || credentialLikeValue(name)) found = true;
+      if (credentialLikeValue(value) || credentialLikeValue(name)) found = 'credential_like';
     });
     return found;
   }
@@ -717,34 +813,42 @@
    * （フォールバック経路が別実装にならないよう、入口を1つに保つため）。
    */
   function canonicalUrl(rawUrl, info) {
-    /*
-     * 許可したクエリの値に資格情報が入っていたら、URLごと共有しない
-     * （第11回監査 R11-001）。null を返す経路は buildShare / fallbackUrl の
-     * 両方が見る。
-     */
-    if (credentialLikeQuery(rawUrl)) return null;
+    var r = canonicalResult(rawUrl);
+    return r.ok ? r.url : null;
+  }
 
+  /*
+   * 内部はこちらが本体。理由つきで返す（第12回監査 R12-002）。
+   * reason は固定の語だけで、URLも値も入れない——表示に混ぜないため。
+   *
+   *   'credential_like'  資格情報の形が見つかった
+   *   'sensitive_route'  認証・設定・組織管理の画面
+   *   'unsupported'      github.com 以外
+   *   'malformed_url'    URLとして読めない
+   */
+  function canonicalResult(rawUrl) {
     var u;
     try {
       u = new URL(rawUrl);
     } catch (e) {
-      // 解析できないものは、クエリ・ハッシュを機械的に落とすだけに留める
-      return String(rawUrl).split('#')[0].split('?')[0];
+      return { ok: false, reason: 'malformed_url' };
     }
 
-    // github.com 以外（http、他ホスト）は素の形だけ返す
     if (u.protocol !== 'https:' || u.hostname !== 'github.com') {
-      return u.origin + u.pathname;
+      return { ok: false, reason: 'unsupported' };
     }
 
     var route = routeOf(u);
+    if (route === 'sensitive') return { ok: false, reason: 'sensitive_route' };
+
     var path = u.pathname;
     if (route === 'repo' || route === 'root') path = path.replace(/\/$/, '');
 
+    /* 型に合う値だけ残す。自由文（q / body / title 等）はここで落ちる */
     var kept = [];
-    if (QUERY_ALLOW[route]) {
+    if (QUERY_RULES[route]) {
       u.searchParams.forEach(function (value, name) {
-        if (keepParam(route, name)) kept.push([name, value]);
+        if (keepParam(route, name, value)) kept.push([name, value]);
       });
     }
 
@@ -755,9 +859,14 @@
       qs = '?' + sp.toString();
     }
 
-    var hash = (route === 'root' || route === 'sensitive') ? '' : sanitizeFragment(u.hash);
+    var hash = route === 'root' ? '' : sanitizeFragment(u.hash);
+    var url = u.origin + path + qs + hash;
 
-    return u.origin + path + qs + hash;
+    /* 最後に、**出て行くURLそのもの**を見る（第12回監査 R12-001） */
+    var bad = credentialLikeShareUrl(url);
+    if (bad) return { ok: false, reason: bad };
+
+    return { ok: true, url: url };
   }
 
   /*
@@ -766,19 +875,15 @@
    * ここで split('?')[0] のような独自処理を書くと方針が二重化するので書かない。
    */
   function fallbackUrl(rawUrl) {
-    if (isSensitiveUrl(rawUrl)) return null;   // 例外時の逃げ道から機微ページが漏れないようにする
     /*
-     * 資格情報の判定は canonicalUrl だけが持つ（第11回監査 R11-001）。
-     * ここへ同じ判定をもう1つ置くと、変異させても落ちない＝効いているか
-     * 分からない行になる。null はそのまま返す。
+     * 判定は canonicalResult だけが持つ。ここへ同じ判定をもう1つ置くと、
+     * 変異させても落ちない＝効いているか分からない行になる。
+     * 例外時に split('?')[0] のような独自処理を書くと、判定を通らない
+     * 別経路ができるので書かない。落とすほうへ倒す。
      */
     try {
       return canonicalUrl(rawUrl, null);
     } catch (e) {
-      /*
-       * ここで split('?')[0] のような独自処理を書くと、資格情報の判定を
-       * 通らない別経路ができる。落とすほうへ倒す。
-       */
       return null;
     }
   }
@@ -844,13 +949,27 @@
    * ログイン状態とログアウト状態で取得値が食い違う（同一PRが Merged / Open）
    * 事象を実測しており、誤った状態を投稿するリスクを避けるため。
    */
+  /*
+   * 理由つきの入口。呼び出し側（content script / service worker）は
+   * reason を見て、値を含まない定型の案内を出す（第12回監査 R12-002）。
+   */
+  function buildShareResult(rawUrl, rawTitle) {
+    var info = parseLocation(rawUrl);
+    if (!info) return { ok: false, reason: 'unsupported' };
+    var res = canonicalResult(rawUrl);
+    if (!res.ok) return { ok: false, reason: res.reason };
+    var share = buildShare(rawUrl, rawTitle);
+    if (!share) return { ok: false, reason: 'unsupported' };
+    return { ok: true, share: share };
+  }
+
   function buildShare(rawUrl, rawTitle) {
     var info = parseLocation(rawUrl);
     if (!info) return null;
-    if (isSensitiveUrl(rawUrl)) return null;   // 認証・設定・管理画面は共有しない
 
-    var url = canonicalUrl(rawUrl, info);
-    if (!url) return null;                     // 第11回監査 R11-001
+    var res = canonicalResult(rawUrl);
+    if (!res.ok) return null;                  // 理由つきが要るときは buildShareResult を使う
+    var url = res.url;
     var title = cleanTitle(info.kind, rawTitle);
     var suffix = '';
 
@@ -884,7 +1003,11 @@
     canonicalUrl: canonicalUrl,
     fallbackUrl: fallbackUrl,
     isSensitiveUrl: isSensitiveUrl,
-    credentialLikeQuery: credentialLikeQuery,
+    buildShareResult: buildShareResult,
+    canonicalResult: canonicalResult,
+    credentialLikeShareUrl: credentialLikeShareUrl,
+    QUERY_RULES: QUERY_RULES,
+    FREE_TEXT_PARAMS: FREE_TEXT_PARAMS,
     credentialLikeValue: credentialLikeValue,
     sanitizeFragment: sanitizeFragment,
     truncateWithSuffix: truncateWithSuffix,

@@ -27,6 +27,7 @@
 | Privacy の段落 | 「no network requests of its own and sends nothing anywhere」→ 開発者には送らないことと、Xへは機能上渡ることを分けて書く |
 | 機能の箇条書き | 「認証・設定・組織管理のページは共有しない」を追加 |
 | 機能の箇条書き | 「タイトルを切り詰めても Issue / PR 番号は残る」を追加 |
+| 機能の箇条書き | 「検索語や作成中の本文など、自由に書ける欄は共有URLに含めない」を追加（第12回監査 R12-001） |
 
 貼る文面（英語・そのままコピー）:
 
@@ -131,18 +132,17 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 今回出すもの:
 
 ```
-成果物 : reposhout-package-cf04a5450af80d291ad13835ca2180d6059751b4
-中のZIP : reposhout-1.1.8.zip
-大きさ : 29,970 B / 11ファイル
-SHA-256 : b4bb967e76c9d6d570e1edffaf206b9effefd6971ac5d6814fdd1e070dcd440b
+状態     : pending_main_ci（出せる成果物はまだ存在しません）
+版       : 1.1.8
+中のZIP  : reposhout-1.1.8.zip
+成果物名 : 未定（main への push で CI が作ってから決まります）
+SHA-256  : 未定（同上）
 ```
 
-正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) です。1.1.8 は
-`src/share.js` を直した版で、配布物の中身が 1.1.7 から変わっています（第11回監査 R11-001）。
-**「最新の main」では選ばず、上の成果物名とSHA-256 で選んでください**（第10回監査 R10-006）。
-実物が正本どおりかは
-`npm run verify:submission-ready -- --artifact <成果物.zip> --audit-report … --audit-attestation …`
-で確かめられます。
+第12回監査 R12-001 / R12-002 のため配布物を作り直しています。先に作った成果物
+（`reposhout-package-cf04a54…`）は提出しません。正本のファイルは
+[SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) で、却下した成果物も
+理由つきでそこに残しています。
 
 ---
 

@@ -138,6 +138,16 @@ async function openShareWindow(intentUrl) {
   }
 }
 
+/* 理由の語だけを content script へ送る。失敗しても黙って落とす */
+async function notifyTab(tabId, reason) {
+  if (typeof tabId !== 'number') return;
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: 'gxs-notice', reason: reason || 'unsupported' });
+  } catch (e) {
+    /* content script がいないページでは届かない。追加の権限は求めない */
+  }
+}
+
 async function shareActiveTab() {
   var tabs;
   try {
@@ -154,12 +164,23 @@ async function shareActiveTab() {
   // 文面の組み立てで例外が出ても無反応にせず、URLだけの共有にフォールバックする
   var share = null;
   var threw = false;
+  var reason = null;
   try {
-    share = self.GXS.buildShare(tab.url, tab.title);
+    var res = self.GXS.buildShareResult(tab.url, tab.title);
+    if (res && res.ok) share = res.share;
+    else if (res) reason = res.reason;
   } catch (e) {
     threw = true;
   }
-  if (!share && !threw) return; // github.com 以外・認証や設定の画面では何もしない
+  if (!share && !threw) {
+    /*
+     * 開かなかった理由を、そのタブの content script へ**語だけ**送る
+     * （第12回監査 R12-002）。値もURLも送らない。届かない場合（GitHub以外の
+     * ページなど content script がいない）は、そのまま何もしない。
+     */
+    await notifyTab(tab.id, reason);
+    return;
+  }
   if (!share) {
     // フォールバックも本体と同じURL方針を使う（別実装を残さない）。
     // null が返るのは機微なページなので、その場合も何も開かない。
@@ -245,6 +266,7 @@ chrome.runtime.onInstalled.addListener(function () {
 
 // テスト（実拡張E2E）から実装そのものを呼べるようにする。公開APIではない。
 self.GXS_BG = {
+  notifyTab: notifyTab,
   openShareWindow: openShareWindow,
   shareActiveTab: shareActiveTab,
   rememberShareWindow: rememberShareWindow,
