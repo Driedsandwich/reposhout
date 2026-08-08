@@ -93,33 +93,23 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 **今回出す正本**（正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json)）:
 
 ```
-状態     : pending_main_ci（出せる成果物はまだ存在しません）
-版       : 1.1.8
-中のZIP  : reposhout-1.1.8.zip
-成果物名 : 未定（main への push で CI が作ってから決まります）
-SHA-256  : 未定（同上）
+成果物 : reposhout-package-83e020ec503519106296ac5876feb64c60ab073d
+中のZIP : reposhout-1.1.8.zip
+大きさ : 34,445 B / 11ファイル
+SHA-256 : 5ecec372b19948839bfa521bd00e13f4b6e8a5ac624c6574f005f4a96cb45b86
 ```
 
-**また作り直しています。** 第13回監査 R13-001（投稿本文を検査していなかった・識別子として
-残していた値にトークンを入れられた）と R13-003（ツールバーとショートカットが Chrome の渡す
-タブを使っていなかった）のため、直前の成果物（`reposhout-package-4cb4523…` /
-SHA-256 `91c5e798…`）は**提出しません**。却下した成果物は正本の `history` に理由つきで
-残しています。
+main への push で走った CI（run 31237799124）が作ったものを、ダウンロードして実測した値です。
+**タグはまだ打っていません**（外部監査に合格してから打ちます）。第12回・第13回で却下した
+成果物は提出しません（理由は正本の `history` にあります）。
 
-成果物が出たら、次の順で確定します。
-
-1. main の該当 run から `reposhout-package-<コミットSHA>` をダウンロードする
-2. `store/SUBMISSION_CANDIDATE.json` に、実測した成果物名・コミット・tree・run・
-   中のZIPの大きさ・収録数・SHA-256 を書く
-3. 次で、書いた値と実物が合っているかを機械的に確かめる
+**「最新の main」で成果物を選ばないでください。** 選ぶ基準は上の成果物名とSHA-256です
+（第10回監査 R10-006）。実物が正本どおりかは、次で機械的に確かめられます。
 
 ```
-npm run verify:submission-ready -- --artifact <成果物.zip> \
+npm run verify:submission-ready -- --artifact <ダウンロードした成果物.zip> \
     --audit-report <監査報告書> --audit-attestation <監査申告.json>
 ```
-
-**「最新の main」で成果物を選ばないでください。** 選ぶ基準は正本に書いた成果物名と
-SHA-256 です（第10回監査 R10-006）。
 
 **手元に控えを残す**: ダウンロードした成果物のZIPそのもの・`release-manifest.json`・
 `reposhout-1.1.8.zip`・`reposhout-1.1.8.zip.sha256` の4点を、Actions の保存期限（14日）が
