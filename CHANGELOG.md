@@ -45,8 +45,14 @@
 
 ### 出す成果物
 
-**まだ存在しない。** `store/SUBMISSION_CANDIDATE.json` は `pending_main_ci` に戻し、
-却下した成果物は理由つきで `history` に残した。
+main への push で走った CI（run 31232139027）が作ったものを、ダウンロードして実測した。
+
+    成果物  : reposhout-package-4cb45239e8ed9358593f09efb1ed6f6c74e994f7
+    中のZIP : reposhout-1.1.8.zip / 33,576 B / 11ファイル
+    SHA-256 : 91c5e7983d383f33dfe8c38ab40262af1c828c1f97bce8bddffad767e6256dba
+
+**タグはまだ打っていない**（外部監査に合格してから）。第12回監査で却下した成果物
+（`b4bb967e…`）は、理由つきで正本の `history` に残してある。
 
 ## [1.1.8-第11回対応] — 未リリース（記録）
 

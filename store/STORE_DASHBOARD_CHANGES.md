@@ -132,17 +132,18 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 今回出すもの:
 
 ```
-状態     : pending_main_ci（出せる成果物はまだ存在しません）
-版       : 1.1.8
-中のZIP  : reposhout-1.1.8.zip
-成果物名 : 未定（main への push で CI が作ってから決まります）
-SHA-256  : 未定（同上）
+成果物 : reposhout-package-4cb45239e8ed9358593f09efb1ed6f6c74e994f7
+中のZIP : reposhout-1.1.8.zip
+大きさ : 33,576 B / 11ファイル
+SHA-256 : 91c5e7983d383f33dfe8c38ab40262af1c828c1f97bce8bddffad767e6256dba
 ```
 
-第12回監査 R12-001 / R12-002 のため配布物を作り直しています。先に作った成果物
-（`reposhout-package-cf04a54…`）は提出しません。正本のファイルは
-[SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) で、却下した成果物も
-理由つきでそこに残しています。
+正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) です。1.1.8 は
+第12回監査 R12-001 / R12-002 で作り直した版で、配布物の中身が変わっています。
+**「最新の main」では選ばず、上の成果物名とSHA-256 で選んでください**（第10回監査 R10-006）。
+実物が正本どおりかは
+`npm run verify:submission-ready -- --artifact <成果物.zip> --audit-report … --audit-attestation …`
+で確かめられます。
 
 ---
 
