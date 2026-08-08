@@ -79,9 +79,12 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(today) ||
 const artifactPath = argOf('--artifact');
 let artifact = null;
 if (artifactPath) {
+  const outerBytes = readFileSync(artifactPath);
   artifact = {
     outerName: basename(artifactPath).replace(/\.zip$/i, ''),
-    files: readZip(readFileSync(artifactPath), { allowDataDescriptor: true })
+    /* GitHub 側の digest と突き合わせる実バイトのハッシュ（第14回監査 R14-005） */
+    outerSha256: sha256(outerBytes),
+    files: readZip(outerBytes, { allowDataDescriptor: true })
   };
 }
 
@@ -119,6 +122,7 @@ const metadata = head
 const EXPECTED_ORIGIN = 'Driedsandwich/reposhout';
 let remote = null;
 let metadataCi = null;
+let runtime = null;
 if (strict) {
   const originUrl = git(['remote', 'get-url', 'origin']);
   const lsRemote = git(['ls-remote', 'origin', 'refs/heads/main']);
@@ -128,6 +132,42 @@ if (strict) {
     expectedOrigin: EXPECTED_ORIGIN
   };
   metadataCi = fetchCiFor(head);
+  runtime = fetchRuntime(candidate);
+}
+
+/*
+ * 正本が名指しする run と成果物を、GitHub から read-only で引く
+ * （第14回監査 R14-005）。引けなかったら error を返して落とす。
+ */
+function fetchRuntime(cand) {
+  if (!cand || cand.status === 'pending_main_ci') return null;   // 候補がまだ無いときは見ない
+  if (!cand.runId) return { error: '正本に runId が無い' };
+  try {
+    const run = JSON.parse(execFileSync('gh',
+      ['api', `repos/${EXPECTED_ORIGIN}/actions/runs/${cand.runId}`],
+      { cwd: ROOT, encoding: 'utf8', timeout: 60000 }));
+    const jobsRaw = execFileSync('gh',
+      ['api', `repos/${EXPECTED_ORIGIN}/actions/runs/${cand.runId}/jobs`],
+      { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
+    const jobs = {};
+    for (const j of JSON.parse(jobsRaw).jobs || []) jobs[j.name] = j.conclusion;
+    const artsRaw = execFileSync('gh',
+      ['api', `repos/${EXPECTED_ORIGIN}/actions/runs/${cand.runId}/artifacts`],
+      { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
+    const arts = JSON.parse(artsRaw).artifacts || [];
+    const art = arts.find((a) => a.name === cand.artifactName);
+    return {
+      run: {
+        id: String(run.id), path: run.path, event: run.event, branch: run.head_branch,
+        headSha: run.head_sha, conclusion: run.conclusion, jobs
+      },
+      artifact: art
+        ? { name: art.name, expired: art.expired, digest: art.digest }
+        : { name: null, expired: null, digest: null }
+    };
+  } catch (e) {
+    return { error: `GitHub API を引けなかった: ${e.message.split('\n')[0]}` };
+  }
 }
 
 /* GitHub の API を read-only で引く。失敗は error として返す（黙って通さない） */
@@ -170,6 +210,7 @@ const result = validateStoreReadiness({
   metadata,
   remote,
   metadataCi,
+  runtime,
   sha256,
   readZipStrict: (buf) => readZip(buf)
 });
