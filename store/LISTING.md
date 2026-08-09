@@ -90,30 +90,18 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 6. **そのフォルダ**を「パッケージ化されていない拡張機能」として読み込み、動作を見る
 7. **手順3で確かめたのと同じZIPファイルをアップロードする**（手元で作り直したものと差し替えない）
 
-**今回出す正本**（正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json)）:
+**いま出せる成果物はありません。**（正本のファイルは
+[SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json)。`status` は `pending_main_ci`）
 
-```
-成果物 : reposhout-package-53d8c7a0a84e03a8623488e6fe7428c15a396188
-中のZIP : reposhout-1.1.8.zip
-大きさ : 36,703 B / 11ファイル
-SHA-256 : 376338a38c58f4e6bfd97419e8f4362f0e428a2a9b4acb27a5143c82997ed8a2
-```
+第15回監査 R15-001 のため、**出て行くデータの決め方そのものを見直しています**。直前の候補
+（`reposhout-package-53d8c7a0…` / 中身のZIP `376338a3…`）は**提出しません**。
+却下した成果物は、理由つきで正本の `history` に残してあります（第12回〜第14回のぶんも同様）。
 
-main への push で走った CI（run 31244895146）が作ったものを、ダウンロードして実測した値です。
-**タグはまだ打っていません**（外部監査に合格してから打ちます）。第12回・第13回・第14回で
-却下した成果物は提出しません（理由は正本の `history` にあります）。
+**「最新の main」で成果物を選ばないでください。** 作り直した CI が走ったあと、
+成果物をダウンロードして実測し、正本へ成果物名と SHA-256 を書きます。選ぶ基準はその2つです
+（第10回監査 R10-006）。
 
-**「最新の main」で成果物を選ばないでください。** 選ぶ基準は上の成果物名とSHA-256です
-（第10回監査 R10-006）。実物が正本どおりかは、次で機械的に確かめられます。
-
-```
-npm run verify:submission-ready -- --artifact <ダウンロードした成果物.zip> \
-    --audit-report <監査報告書> --audit-attestation <監査申告.json>
-```
-
-**手元に控えを残す**: ダウンロードした成果物のZIPそのもの・`release-manifest.json`・
-`reposhout-1.1.8.zip`・`reposhout-1.1.8.zip.sha256` の4点を、Actions の保存期限（14日）が
-切れる前に手元へ保存しておいてください。GitHub Release は作りません。
+版は 1.1.8 のままです（未提出・タグ未作成なので、版を上げずに成果物を差し替えます）。
 
 やってはいけないこと: ダウンロードした成果物のフォルダをそのまま読み込む／リポジトリの
 フォルダで代わりに動作確認する／手元で作り直したZIPを出す／ハッシュを確かめていないZIPを出す。
@@ -154,16 +142,18 @@ Changed your mind? Press Escape in the share window to dismiss it.
     Issue        →  Title (Issue #123 · owner/repo)
     Pull request →  Title (PR #123 · owner/repo)
 • Authentication, account, settings and organisation admin pages are never shared
-• Query strings are handled per page type, and only values whose set can be
-  enumerated or checked mechanically are kept (page numbers, open/closed state,
-  sort order, ?plain=1, ?diff=split&w=1). Search terms and a prepared pull
-  request's title and body are never shared. Line, comment and README section
-  anchors are kept
+• The page title is never sent. The post text is generated from the route:
+  owner/repo, Issue #123 · owner/repo, PR #123 · owner/repo, Issues · owner/repo,
+  Releases · owner/repo, Commit 0123456 · owner/repo
+• A page can be shared only when every path segment is typed -- an owner name, a
+  repository name, a positive integer, or a 40-character hex commit SHA. File views,
+  trees, comparisons, wikis, search results, Actions and profiles are refused, and
+  the shared URL is rebuilt from the validated parts
+• Fragments are dropped. Query strings keep only values whose set can be enumerated
+  or checked mechanically: page numbers, open/closed state, sort order, ?diff=split&w=1
 • Character counting follows X's published rules, including Japanese, Chinese and
-  Korean text, emoji and links. No under-count was found against twitter-text 3.1.0
-  in the pinned counting sections of the official corpus, the regression fixtures or
-  the generated differential corpus, so a long title is trimmed with room to spare
-• Issue and pull request numbers stay in the post even when the title is trimmed
+  Korean text, emoji and links. The generated line is short by construction, so
+  nothing is ever trimmed
 • Light and dark mode follow GitHub's own theme automatically
 • Press Escape in the share window to dismiss it if you change your mind
 
@@ -175,7 +165,7 @@ build the post text. storage holds one thing: the identifiers of the windows the
 extension itself opened, kept in memory and cleared when you quit the browser.
 
 Nothing is sent to the developer, and there is no analytics or tracking. The page
-title and URL are sent to X, because that is what the extension does: they are
+generated line and URL are sent to X, because that is what the extension does: they are
 placed in X's own composer link and reach X when the composer opens, before you
 decide whether to post. Authentication, account, settings and organisation
 admin pages are refused outright and are never shared.
@@ -379,12 +369,12 @@ the popup (for example to /i/flow/login when the user is signed out).
 
 > **1.0.0 と 1.0.1 は9項目すべてを No で申告して審査を通っています。**
 > しかしその根拠として書いていた「何も送信しないから」は**事実ではありませんでした**。
-> Shareを押すと、タイトルとURLは投稿画面が開いた時点でXへ渡ります。
+> Shareを押すと、生成した1行とURLは投稿画面が開いた時点でXへ渡ります（タイトルは送りません）。
 > **通ったという実績は、回答が正確だったことの証明にはなりません。**
 >
 > 送り先の区別: **開発者は何も受け取りません**（サーバーが存在しません）。渡る先はXだけで、
 > タイミングは投稿画面が開いた時点、Postを押すかどうかは利用者が決めます。
-> タイトルとURLは保存しません（`chrome.storage.session` に入るのはウィンドウIDと時刻だけです）。
+> 送ったものは保存しません（`chrome.storage.session` に入るのはウィンドウIDと時刻だけです）。
 
 ### Privacy policy URL
 

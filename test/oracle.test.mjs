@@ -86,11 +86,14 @@ function adversarialCorpus() {
 }
 
 test('手書きfixtureのすべてで、公式より少なく数えない', () => {
+  /*
+   * 第15回監査 R15-001 でタイトルを送らなくなったので、TITLES と
+   * 「URL+タイトル」の組は無くなった。数え方そのものの検査はここに残す。
+   */
   const inputs = [
     ...FIX.WEIGHT.map((r) => r[1]),
     ...FIX.WEIGHT_MIN.map((r) => r[1]),
-    ...FIX.TITLES.map((r) => r[1]),
-    ...FIX.BUILD.map((r) => r[2]).filter((t) => typeof t === 'string')
+    ...FIX.BUILD.map((r) => r[2] && r[2].text).filter((t) => typeof t === 'string')
   ];
   let checked = 0;
   for (const s of inputs) {
@@ -99,7 +102,7 @@ test('手書きfixtureのすべてで、公式より少なく数えない', () =
     assert.ok(mine >= off, `少なく数えた: ${JSON.stringify(s).slice(0, 80)} 自前=${mine} 公式=${off}`);
     checked++;
   }
-  assert.ok(checked > 60, `検査した件数が少なすぎる: ${checked}`);
+  assert.ok(checked > 40, `検査した件数が少なすぎる: ${checked}`);
 });
 
 test('生成した敵対的コーパスでも、公式より少なく数えない', () => {
@@ -157,40 +160,42 @@ test('279 / 280 / 281 の境目で、公式の判定が期待どおりに変わ�
   assert.equal(GXS.weightedLength(at(280)), 280);
 });
 
-test('長いタイトルを切り詰めた下書きが、境界を1つも越えない', () => {
+test('構造だけの本文は、いちばん長くても公式判定で280を超えない（R15-001）', () => {
   /*
-   * タイトルの長さを1文字ずつ変えながら、公式の判定で280を超えないことを見る。
-   * 「たまたま短い例では通る」ことにならないよう、境界の直前直後を連続で通す。
+   * 第14回まではタイトルを切り詰めて上限に収めていた。その切り詰めが検査を
+   * 外していた（R14-001）ので、いまは切り詰めず、**そもそも超えない**ことを示す。
+   *
+   * 所有者名は最長39文字、リポジトリ名は最長100文字。前置きがいちばん長い
+   * 'Pull requests · ' と組み合わせ、番号も最大にして公式実装で数える。
    */
-  const url = 'https://github.com/octocat/Hello-World/issues/1234';
+  const owner = 'a'.repeat(39);
+  const name = 'b'.repeat(100);
   let checked = 0;
   let sawMax = 0;
-  for (const filler of ['a', 'あ', '👍', '✊🏽', 'ｱ']) {
-    for (let n = 1; n <= 320; n++) {
-      const title = filler.repeat(n) + ' · Issue #1234 · octocat/Hello-World';
-      const s = GXS.buildShare(url, title);
-      assert.ok(s, `共有できなかった: ${filler} × ${n}`);
-      const draft = `${s.text} ${s.url}`;
-      const off = official(draft);
-      assert.ok(off <= 280, `公式判定で ${off} > 280: ${filler} × ${n}`);
-      assert.equal(twitterText.parseTweet(draft).valid, true, `公式判定で invalid: ${off}`);
-      sawMax = Math.max(sawMax, off);
-      checked++;
-    }
+  const urls = [
+    `https://github.com/${owner}/${name}`,
+    `https://github.com/${owner}/${name}/issues`,
+    `https://github.com/${owner}/${name}/pulls`,
+    `https://github.com/${owner}/${name}/discussions`,
+    `https://github.com/${owner}/${name}/releases`,
+    `https://github.com/${owner}/${name}/issues/1234567890`,
+    `https://github.com/${owner}/${name}/pull/1234567890`,
+    `https://github.com/${owner}/${name}/discussions/1234567890`,
+    `https://github.com/${owner}/${name}/commit/${'a'.repeat(40)}`
+  ];
+  for (const url of urls) {
+    const s = GXS.buildShare(url);
+    assert.ok(s, `最大の長さで共有できていない: ${url.slice(0, 60)}`);
+    const draft = `${s.text} ${s.url}`;
+    const off = official(draft);
+    assert.ok(off <= 280, `公式判定で ${off} > 280: ${s.text}`);
+    assert.equal(twitterText.parseTweet(draft).valid, true, `公式判定で invalid: ${off}`);
+    sawMax = Math.max(sawMax, off);
+    checked++;
   }
-  assert.ok(checked > 1500, `検査した件数が少なすぎる: ${checked}`);
-
-  /*
-   * 「常に短く切りすぎている」なら、この検査は境界を試せていない。
-   * 本文の上限は MAX_WEIGHT=250 で、そこに空白1とURL23が付く。
-   * つまり下書きは最大 274 になるはずで、そこまで実際に使えていることを確かめる。
-   * （250 が 256 でないのは、絵文字の区切り方のずれを吸収する余白を取っているため。
-   *   src/share.js の MAX_WEIGHT のコメントを参照）
-   */
-  const ceiling = GXS.MAX_WEIGHT + 1 + GXS.URL_WEIGHT;
-  assert.equal(ceiling, 274, `上限の前提が変わっている: ${ceiling}`);
-  assert.equal(sawMax, ceiling,
-    `本文の上限まで使えていない（最大 ${sawMax} / 想定 ${ceiling}）＝境界を試せていない`);
+  assert.equal(checked, urls.length);
+  /* 最大でどこまで行くかを記録に残す（余裕がゼロでも上限超えでもないこと） */
+  assert.ok(sawMax > 100 && sawMax <= 280, `最大 ${sawMax}`);
 });
 
 test('組み立てた投稿全体を、公式の判定器で280以下と確認する', () => {

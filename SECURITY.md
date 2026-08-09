@@ -26,7 +26,7 @@ This is a side project maintained by one person. There is no bounty and no guara
 In scope — anything in this repository, in particular:
 
 - The Escape-to-close path on `x.com`. The rule is that only a window the extension opened itself may be closed. A page-controlled way to close a window the user opened is a vulnerability.
-- The outbound policy in `src/share.js`. Both the shared URL and the post text are checked, before and after the extension transforms them. A page title or URL that carries credentials, tokens or OAuth parameters into a draft post is a vulnerability, and so is any transformation of ours -- truncation, normalisation, decoding -- that moves such a value past a check that would otherwise have caught it. Detection is by defined patterns, not a guarantee that every secret is recognised, so a report that names a shape we do not yet cover is welcome and in scope.
+- The outbound model in `src/share.js`. The post text is generated from the route and the page title is never sent; a page is shareable only when every path segment is an owner name, a repository name, a positive integer or a 40-character hex SHA, and the URL is rebuilt from those validated parts. **Any way to get user-controlled text or an arbitrary path into the draft post is a vulnerability** -- a route that should not be shareable, a segment that passes the type check but carries free text, or a transformation of ours that reintroduces raw input. The credential detector is a second layer over what is about to leave; it covers the patterns it defines and is not a guarantee, so a report naming a shape it misses is welcome too.
 - Anything that causes the extension to post without the user pressing Post on X.
 
 Out of scope:
@@ -63,7 +63,7 @@ Out of scope:
 対象に含まれるもの——このリポジトリの内容すべて。特に次の3つ。
 
 - `x.com` 上のEscで閉じる処理。ルールは「拡張自身が開いたウィンドウだけを閉じてよい」です。ページ側の操作で利用者のウィンドウを閉じられるなら、それは脆弱性です
-- `src/share.js` の出口の方針。共有するURLと投稿本文の両方を、こちらが変換する前と後で検査しています。資格情報・トークン・OAuthのパラメータが投稿の下書きまで残るタイトルやURLがあれば、それは脆弱性です。**こちらの変換（切り詰め・正規化・デコード）のせいで、本来当たるはずの検査をすり抜ける**場合も同じく脆弱性です。検出は「定義したパターンに当たるか」で行っており、あらゆる秘密を見つけられるという意味ではありません。まだ拾えていない形の指摘も対象に含みます
+- `src/share.js` の出口の設計。投稿本文はルートから生成し、ページのタイトルは送りません。共有できるのは、パスの全セグメントが所有者名・リポジトリ名・正の整数・40桁の16進のどれかで決まるページだけで、URLはその検査済みパーツから組み直します。**利用者が決められる文字列や任意のパスを下書きへ入れられる経路があれば、それは脆弱性です**——共有できてはいけないルート、型検査を通るのに自由文を運べるセグメント、こちらの変換で生の入力が戻る箇所。資格情報の検出器は出て行く直前の2層目で、定義した形だけを見ています（保証ではありません）。拾えていない形の指摘も対象に含みます
 - 利用者がX側で投稿ボタンを押していないのに投稿が行われる経路
 
 対象外——GitHub や X 自体の挙動、改造した拡張を利用者が自分で入れることを前提とする攻撃、機能が無いこと（例: 代理投稿をしないのは意図的な設計です）。

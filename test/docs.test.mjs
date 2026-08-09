@@ -601,14 +601,23 @@ test('渡り先・タイミング・開発者が受け取らないことが、�
     'handle に transmit が含まれることを書いていない');
 });
 
-test('アカウント名は「入る場合がある」と書いてある（「必ず入る」ではない）', () => {
+test('アカウント名は「必ず入る」と書いてある（第15回監査 R15-001 で逆になった）', () => {
+  /*
+   * 第14回まで、投稿本文はページのタイトルだったので、アカウント名は
+   * 「入る場合がある」だった（検索ページなどは入らない）。
+   * 第15回で本文をルートから生成するようにしたので、**共有できるページでは
+   * 所有者名とリポジトリ名が必ず入る**。弱い書き方のままだと過少申告になる。
+   */
   const en = read('PRIVACY.md');
-  assert.match(en, /may contain a GitHub username or organisation identifier/,
-    'PRIVACY.md（英語）に「含む場合がある」の記述が無い');
-  assert.match(en, /入る場合があります/, 'PRIVACY.md（日本語）に「含む場合がある」の記述が無い');
+  assert.match(en, /still contains the GitHub owner and repository name/,
+    'PRIVACY.md（英語）が「必ず入る」と書いていない');
+  assert.match(en, /所有者名とリポジトリ名が入る/,
+    'PRIVACY.md（日本語）が「必ず入る」と書いていない');
+  assert.ok(!/may contain a GitHub username or organisation identifier/.test(en),
+    'PRIVACY.md に古い「入る場合がある」が残っている');
 
   const pii = DISCLOSURE.categories.find((c) => c.id === 'personally_identifiable_information');
-  assert.match(pii.codeFact, /場合がある/, '正本が「必ず入る」と読める書き方になっている');
+  assert.match(pii.codeFact, /必ず/, '正本が「必ず入る」と書いていない');
 });
 
 /*
@@ -722,13 +731,15 @@ test('文書が、いまの共有方針を正しく説明している（R13-002�
     'PRIVACY.md': [
       ['Registers one `keydown` listener', 'x.com の listener の実態（英語）'],
       ['`keydown` を1つ登録し', '同（日本語）'],
-      ['The same check is applied to the post text built from the page title, and to the raw title before it is shortened',
-       '投稿本文と、変換前の生のタイトルも検査すること'],
-      ['投稿本文と、切り詰める前の生のタイトルにも掛けます', '同（日本語）・変換前も見ること']
+      ['the page title is never sent', 'タイトルを送らないこと（第15回監査 R15-001）'],
+      ['ページのタイトルは送りません', '同（日本語）'],
+      ['every path segment is an owner name, a repository name, a positive integer or a 40-character hex commit SHA',
+       '型で決まるルートだけ共有すること'],
+      ['所有者名・リポジトリ名・正の整数・40桁の16進のどれかで決まるページだけ', '同（日本語）']
     ],
     'store/LISTING.md': [
-      ['Search terms and a prepared pull\n  request\'s title and body are never shared',
-       '検索語と下書きを共有しないこと'],
+      ['The page title is never sent', 'タイトルを送らないこと（第15回監査 R15-001）'],
+      ['every path segment is typed', '型で決まるルートだけ共有すること'],
       ['registers a single keydown listener', 'x.com の listener の実態']
     ]
   };
@@ -747,7 +758,10 @@ test('文書が、もう残さない値を「残す」と書いていない（R1
     'README.ja.md': ['下書き中のプルリクエストの `quick_pull`/`title`/`body`', '`QUERY_ALLOW`'],
     'store/LISTING.md': ["prepared pull request's title and body are kept",
                          'listen for the Escape key so'],
-    'PRIVACY.md': ['Listens for the Escape key, and nothing else', 'Escキーの検知だけを行います']
+    'PRIVACY.md': ['Listens for the Escape key, and nothing else', 'Escキーの検知だけを行います',
+                   /* 第15回監査 R15-001。タイトルを送る前提の説明が残っていないこと */
+                   'the title and the canonicalised URL of the GitHub page you are on are placed',
+                   'the raw title before it is shortened']
   };
   for (const [f, list] of Object.entries(forbidden)) {
     const body = read(f);

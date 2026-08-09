@@ -11,9 +11,9 @@ Last updated / 最終更新: 2026-08-07（1.1.8）
 
 RepoShout sends **nothing to the developer, and nothing to any server the developer operates**. There is no analytics, no telemetry, no advertising SDK, and no account.
 
-It does, however, hand two values to X, because that is the whole point of the extension: **when you press Share, the title and the canonicalised URL of the GitHub page you are on are placed in an X Web Intent link and sent to X to pre-fill its composer.** This happens the moment the composer opens — before you decide whether to press Post. If you never press Post, X has still received the title and the URL.
+It does, however, hand two values to X, because that is the whole point of the extension: **when you press Share, a line generated from the page's route (`owner/repo`, `Issue #123 · owner/repo` and the like) and the canonicalised URL are placed in an X Web Intent link and sent to X to pre-fill its composer.** The page title is not among them. This happens the moment the composer opens — before you decide whether to press Post. If you never press Post, X has still received that line and the URL.
 
-RepoShout never posts on your behalf, and never stores the title or URL.
+RepoShout never posts on your behalf, and never stores what it sends.
 
 ### Information we process
 
@@ -26,11 +26,11 @@ They are used solely to build the post text and the `x.com` share link. The comp
 
 ### Where data goes
 
-RepoShout makes no background network requests, and contacts no server of its own. What it does is open the X (formerly Twitter) post composer in a new window, as an ordinary link navigation, with the text and URL already in the address. **The title and URL travel to X as part of that address.** Once the composer is open, **whether to actually post is entirely your decision, made on X's own screen** — the extension never posts on your behalf.
+RepoShout makes no background network requests, and contacts no server of its own. What it does is open the X (formerly Twitter) post composer in a new window, as an ordinary link navigation, with the text and URL already in the address. **The generated line and the URL travel to X as part of that address.** Once the composer is open, **whether to actually post is entirely your decision, made on X's own screen** — the extension never posts on your behalf.
 
 X, and your browser, then handle those values under their own policies.
 
-**A caution.** The title, the URL, or the generated suffix may contain a GitHub username or organisation identifier — a repository URL has the form `github.com/<owner>/<repository>`, and a profile page carries the name in its title too. (Not every shareable page does: `github.com/search?q=…`, `/explore` and `/topics/…` carry no account name.) If a GitHub page is private or confidential, do not press Share on it unless you intend its title and URL, including any account name in them, to reach X. From version 1.1.1 the extension refuses to share GitHub's authentication, account, settings and organisation-administration pages at all, but it cannot tell whether an ordinary repository is public or private from the URL alone. **From 1.1.8 the shared URL keeps only values whose set can be enumerated or checked mechanically** (page numbers, states, sort orders, booleans; identifier-shaped values such as labels, author, branch and path are dropped as well). **Free text — search terms and prepared pull-request titles and bodies — is dropped and never reaches X.** In addition, if what remains still looks like it carries a credential (for example a file path such as `.../blob/main/access_token=…`, or a GitHub / `Bearer` / AWS / Slack / JWT / private-key token shape), the whole URL is refused and a short notice says so without showing the URL or the value. **The same check is applied to the post text built from the page title, and to the raw title before it is shortened** (1.1.8): if the title itself carries something shaped like a credential, the composer is not opened either. Text is matched both as-is and after invisible characters are removed and the string is normalised, so full-width and zero-width variants do not slip past. **This check covers the patterns just listed; it is not a claim that every possible secret is detected** — which is why free text is dropped rather than inspected.
+**A caution.** From 1.1.8 onwards **the page title is never sent**. What reaches X is a line generated from the route (`owner/repo`, `Issue #123 · owner/repo`, `Commit 0123456 · owner/repo` and the like) together with a URL rebuilt from validated parts. That line still contains the GitHub owner and repository name, so if a repository is private or confidential, do not press Share on it unless you intend its owner and repository name to reach X. A page is shareable only when every path segment is an owner name, a repository name, a positive integer or a 40-character hex commit SHA; files, trees, comparisons, wikis, search results and profiles are refused. Fragments are dropped and query strings keep only values whose set can be enumerated. A credential detector still runs over what is about to leave, but as a second layer — it covers the patterns it defines and is not a claim that every possible secret is detected, which is why nothing free-form is carried at all.
 
 ### Storage
 
@@ -70,19 +70,19 @@ RepoShout's use of information received from Google APIs, and any user data it h
 
 Concretely:
 
-- The page title and URL are used **only** to provide the extension's single purpose —
+- The generated line and the URL are used **only** to provide the extension's single purpose —
   opening X's post composer pre-filled with the page you are on.
 - The only transfer to a third party is to X, and only to the extent required to open the
   composer you asked for. There is no other transfer.
 - This data is **never** used for advertising, sold to anyone, or used to determine
   creditworthiness or for lending purposes.
-- **RepoShout does not make the title or URL available for human review by the developer or
+- **RepoShout does not make what it sends available for human review by the developer or
   anyone acting on the developer's behalf.** There is no developer-operated backend — the
   developer receives nothing because no server of the developer's exists to receive it.
-  As described above, X receives the title and URL solely to open the composer you asked
+  As described above, X receives that line and the URL solely to open the composer you asked
   for, and handles them under X's own policies. What X does on its side is X's to state,
   not something this extension can promise.
-- Nothing is used to build a profile. **The title and URL are not retained** by the
+- Nothing is used to build a profile. **What is sent is not retained** by the
   extension; the only things it stores are the window ID and timestamp described under
   Storage above.
 
@@ -102,9 +102,9 @@ See [SUPPORT.md](SUPPORT.md). For suspected security problems, see [SECURITY.md]
 
 RepoShout は、**開発者にも、開発者が運営するサーバーにも、何も送りません**。解析ツールも、利用状況の送信も、広告SDKも、アカウントもありません。
 
-一方で、**2つの値はXへ渡ります。それがこの拡張の目的そのものだからです**——Shareを押すと、見ているGitHubページのタイトルと正規化済みURLがXの投稿画面のURLに入り、下書きを埋めるためにXへ送られます。これは投稿画面が開いた時点で起きます。**あなたがPostを押すかどうかとは関係なく**、開いた時点でXはタイトルとURLを受け取っています。
+一方で、**2つの値はXへ渡ります。それがこの拡張の目的そのものだからです**——Shareを押すと、見ているページのルートから生成した1行（`owner/repo`・`Issue #123 · owner/repo` など）と正規化済みURLがXの投稿画面のURLに入り、下書きを埋めるためにXへ送られます。**ページのタイトルは含みません。** これは投稿画面が開いた時点で起きます。**あなたがPostを押すかどうかとは関係なく**、開いた時点でXはその1行とURLを受け取っています。
 
-RepoShout が代わりに投稿することはなく、タイトルとURLを保存することもありません。
+RepoShout が代わりに投稿することはなく、送ったものを保存することもありません。
 
 ### 処理する情報
 
@@ -117,11 +117,11 @@ RepoShout が代わりに投稿することはなく、タイトルとURLを保�
 
 ### 送信先
 
-RepoShout はバックグラウンドでの通信を行わず、独自のサーバーとも通信しません。行うのは、文面とURLが入ったアドレスで X（旧Twitter）の投稿画面を新しいウィンドウで開くことだけです。通常のリンクを開く動作ですが、**タイトルとURLはそのアドレスの一部としてXへ渡ります**。投稿画面が開いたあと、**実際に投稿するかどうかは X の画面上で利用者が決めます**——拡張が代わりに投稿することはありません。
+RepoShout はバックグラウンドでの通信を行わず、独自のサーバーとも通信しません。行うのは、文面とURLが入ったアドレスで X（旧Twitter）の投稿画面を新しいウィンドウで開くことだけです。通常のリンクを開く動作ですが、**生成した1行とURLは、そのアドレスの一部としてXへ渡ります**。投稿画面が開いたあと、**実際に投稿するかどうかは X の画面上で利用者が決めます**——拡張が代わりに投稿することはありません。
 
 渡ったあとの取り扱いには、X およびブラウザそれぞれのポリシーが適用されます。
 
-**注意。** タイトル・URL・付け足すサフィックスには、GitHubのユーザー名または組織名が**入る場合があります**（リポジトリのURLは `github.com/<所有者>/<リポジトリ名>` の形で、プロフィールページではタイトルにも入ります）。すべてがそうではありません——`github.com/search?q=…`・`/explore`・`/topics/…` は共有できてアカウント名を含みません。非公開・機密のGitHubページでは、そこに入るアカウント名ごとタイトルとURLをXへ送る意図がある場合だけShareを押してください。バージョン1.1.1 から、GitHubの認証・アカウント・設定・組織管理の画面では拡張が共有そのものを拒否しますが、**通常のリポジトリが公開か非公開かはURLだけでは判別できません**。**1.1.8 では、共有URLに残すのは値の集合を数えられるものだけ**にしています（ページ番号・状態・並び順・真偽値。`labels`・`author`・`branch`・`path` のような識別子っぽい値も落とします）。**検索語や、作成中のプルリクエストの表題・本文といった自由文は落とし、Xへは渡しません。** そのうえで、残ったURLがなお資格情報の形をしている場合（例: `.../blob/main/access_token=…` のようなパス、GitHub・`Bearer`・AWS・Slack・JWT・秘密鍵の形）は**URLごと拒否**し、**値もURLも出さない短い案内**を表示します。**同じ検査は、ページのタイトルから作る投稿本文と、切り詰める前の生のタイトルにも掛けます**（1.1.8）——表題そのものが資格情報の形をしていれば、やはり投稿画面を開きません。照合は素のままと、見えない文字を落として正規化した形の両方で行うので、全角やゼロ幅で崩した書き方も抜けません。**見ているのはいま挙げた形だけで、「あらゆる秘密を検出できる」という意味ではありません**——だからこそ、自由文は検査ではなく破棄しています。
+**注意。** 1.1.8 以降、**ページのタイトルは送りません**。Xへ渡るのは、ルートから生成した1行（`owner/repo`・`Issue #123 · owner/repo`・`Commit 0123456 · owner/repo` など）と、検査したパーツから組み直したURLだけです。この1行にはGitHubの所有者名とリポジトリ名が入るので、**非公開・機密のリポジトリでは、その名前をXへ送る意図がある場合だけShareを押してください**。共有できるのは、パスの全セグメントが所有者名・リポジトリ名・正の整数・40桁の16進のどれかで決まるページだけで、ファイル・ツリー・比較・Wiki・検索結果・プロフィールは拒否します。フラグメントは落とし、クエリは値の集合を数えられるものだけ残します。出て行く直前の検査は今も走りますが、**2層目**です——見ているのは定義した形だけで、あらゆる秘密を検出できるという意味ではありません。だからこそ、自由に書けるものは最初から運びません。
 
 ### 保存
 
@@ -161,7 +161,7 @@ RepoShout が Google API から受け取った情報の利用、および取り�
 
 具体的には次のとおりです。
 
-- ページのタイトルとURLは、この拡張の唯一の目的——見ているページでXの投稿画面を開くこと——
+- 生成した1行とURLは、この拡張の唯一の目的——見ているページでXの投稿画面を開くこと——
   **のためだけ**に使います。
 - 第三者へ渡るのはXだけで、利用者が求めた投稿画面を開くために必要な範囲に限ります。
   それ以外の転送はありません。
@@ -170,9 +170,9 @@ RepoShout が Google API から受け取った情報の利用、および取り�
 - **RepoShout は、タイトルやURLを開発者または開発者のために行動する者の人手閲覧に供しません。**
   開発者が運営するサーバー（backend）はありません——受け取れるサーバーが存在しないので、
   開発者は何も受け取りません。上記のとおり、Xは利用者が要求した投稿画面を開くために
-  タイトルとURLを受け取り、そのあとはXのポリシーに従って取り扱います。X側で何が起きるかは
+  その1行とURLを受け取り、そのあとはXのポリシーに従って取り扱います。X側で何が起きるかは
   Xが述べることで、この拡張が約束できることではありません。
-- プロフィールの作成には使いません。**タイトルとURLは、拡張側では保存しません。**
+- プロフィールの作成には使いません。**送ったものを、拡張側では保存しません。**
   保存するのは上の「保存」に書いたウィンドウIDと時刻だけです。
 
 ### 本ポリシーの変更
