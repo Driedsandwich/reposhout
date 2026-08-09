@@ -162,6 +162,13 @@ async function notifyTab(tabId, reason) {
 var BADGE_MS = 6000;
 var badgeTimers = {};
 
+/* 理由ごとの定型文。値もURLも入れない */
+function titleFor(reason) {
+  if (reason === 'credential_like') return chrome.i18n.getMessage('noticeCredential');
+  if (reason === 'open_failed') return chrome.i18n.getMessage('noticeOpenFailed');
+  return chrome.i18n.getMessage('noticeUnsupported');
+}
+
 async function flagTab(tabId, reason) {
   if (typeof tabId !== 'number') return false;
   var key = String(tabId);
@@ -170,20 +177,21 @@ async function flagTab(tabId, reason) {
     if (chrome.action.setBadgeBackgroundColor) {
       await chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: '#B42318' });
     }
-    await chrome.action.setTitle({
-      tabId: tabId,
-      title: chrome.i18n.getMessage(
-        reason === 'credential_like' ? 'noticeCredential' : 'noticeUnsupported')
-    });
+    await chrome.action.setTitle({ tabId: tabId, title: titleFor(reason) });
   } catch (e) {
     return false;                       // バッジも出せない相手なら、そこで終わり
   }
   if (badgeTimers[key]) clearTimeout(badgeTimers[key]);
   badgeTimers[key] = setTimeout(function () {
     delete badgeTimers[key];
-    /* 元へ戻す。title を空文字にすると manifest の既定値へ戻る */
+    /*
+     * 元へ戻す。**空文字ではなく既定の説明文を明示的に入れる**
+     * （第15回監査 R15-005。空にすると、既定へ戻るかは実装依存になる）。
+     */
     Promise.resolve(chrome.action.setBadgeText({ tabId: tabId, text: '' })).catch(function () {});
-    Promise.resolve(chrome.action.setTitle({ tabId: tabId, title: '' })).catch(function () {});
+    Promise.resolve(chrome.action.setTitle({
+      tabId: tabId, title: chrome.i18n.getMessage('actionTitle')
+    })).catch(function () {});
   }, BADGE_MS);
   return true;
 }
@@ -259,7 +267,12 @@ async function shareResolvedTab(tab) {
     share = { intentUrl: self.GXS.intentUrlFor('', bare) };
   }
 
-  await openShareWindow(share.intentUrl);
+  /*
+   * 第15回監査 R15-005。戻り値を捨てていたので、ポップアップもタブも開けなかった
+   * とき（どちらの API も例外）に、**何も起きないまま終わって**いた。
+   */
+  var opened = await openShareWindow(share.intentUrl);
+  if (!opened || opened.opened === 'none') await announceRefusal(tab.id, 'open_failed');
 }
 
 /* 渡されなかったときだけ、いまのタブを引き直す */
@@ -349,6 +362,8 @@ chrome.runtime.onInstalled.addListener(function () {
 self.GXS_BG = {
   notifyTab: notifyTab,
   flagTab: flagTab,
+  titleFor: titleFor,
+  BADGE_MS: BADGE_MS,
   announceRefusal: announceRefusal,
   shareTab: shareTab,
   shareResolvedTab: shareResolvedTab,

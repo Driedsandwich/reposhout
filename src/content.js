@@ -205,9 +205,18 @@
 
   function noticeTextFor(reason) {
     if (reason === 'credential_like') {
+      /*
+       * 予備の文言も翻訳ファイルと同じにしておく（第15回監査の確認中に、
+       * ここだけ「このURLには」の旧文のまま残っているのを見つけた）。
+       */
       return t('noticeCredential',
-        'This URL may contain sensitive credentials, so the X composer was not opened. ' +
-        'Nothing was sent to X.');
+        "This page's title or URL may contain sensitive authentication information, " +
+        'so the X composer was not opened. Nothing was sent to X.');
+    }
+    if (reason === 'open_failed') {
+      /* 開こうとしたが開けなかった（第15回監査 R15-005）。黙って終わらない */
+      return t('noticeOpenFailed',
+        'The X composer could not be opened. Nothing was sent to X.');
     }
     return t('noticeUnsupported', 'This page cannot be shared. Nothing was sent to X.');
   }

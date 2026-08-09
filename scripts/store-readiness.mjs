@@ -46,6 +46,23 @@ function isRealDate(s) {
  * @param {object} input   ファイルを読んだ結果（この関数はファイルを読まない）
  * @returns {{problems:string[], ok:string[], mode:string, artifactChecked:boolean, auditChecked:boolean}}
  */
+/*
+ * GitHub の run 一覧から「このコミットの、期待するワークフローの、main への push」を選ぶ。
+ *
+ * CLI の中に書いていたときは、どのテストも触れなかった（第15回監査 R15-004 の
+ * 変異で判明）。判断はここに置き、CLI は呼ぶだけにする。
+ */
+export function pickPushRun(runs, { branch = 'main', workflowPath } = {}) {
+  if (!Array.isArray(runs)) return null;
+  const run = runs.find((r) => r && r.event === 'push' && r.head_branch === branch &&
+                               r.path === workflowPath);
+  if (!run) return null;
+  return {
+    conclusion: run.conclusion, event: run.event, branch: run.head_branch,
+    path: run.path, headSha: run.head_sha, runId: String(run.id)
+  };
+}
+
 export function validateStoreReadiness(input) {
   const problems = [];
   const ok = [];
@@ -351,6 +368,13 @@ export function validateStoreReadiness(input) {
       check('いまの文書のCIが main への push',
         metadataCi.event === 'push' && metadataCi.branch === 'main',
         `event=${metadataCi.event} branch=${metadataCi.branch}`);
+      /*
+       * 第15回監査 R15-004。正本側は path を見ていたのに、こちらは見ていなかった。
+       * 同じジョブ名を持つ別のワークフローで通せる余地を残さない。
+       */
+      check('いまの文書のCIが期待するワークフロー',
+        metadataCi.path === expectedWorkflowPath,
+        `path=${metadataCi.path} ≠ ${expectedWorkflowPath}`);
       check('いまの文書のCIが同じコミットのもの',
         Boolean(metadata) && metadataCi.headSha === metadata.sourceCommit,
         `${metadataCi.headSha} ≠ ${metadata && metadata.sourceCommit}`);

@@ -22,7 +22,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { validateStoreReadiness, dateIn } from '../scripts/store-readiness.mjs';
+import { validateStoreReadiness, dateIn, pickPushRun } from '../scripts/store-readiness.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (f) => readFileSync(join(ROOT, f), 'utf8').replace(/\r\n/g, '\n');
@@ -181,6 +181,7 @@ const GOOD_REMOTE = {
 };
 const GOOD_CI = {
   conclusion: 'success', event: 'push', branch: 'main',
+  path: '.github/workflows/ci.yml',
   headSha: 'a'.repeat(40), runId: '999', jobs: { test: 'success', windows: 'success' }
 };
 
@@ -730,4 +731,67 @@ test('候補がまだ無い（pending）ときは、run の照合を求めない
   /* 「正本の runId が空のまま」とは別物なので、needle を取り違えないこと */
   assert.ok(!r.problems.some((p) => p.startsWith('正本の run —') || p.includes('正本の run が')),
     `pending なのに run を求めている:\n${r.problems.join('\n')}`);
+});
+
+/* ---- いまの文書側の run も、ワークフローで固定する（第15回監査 R15-004） ---- */
+
+test('いまの文書のCIが別のワークフローなら落ちる（R15-004）', () => {
+  /*
+   * ジョブ名（test / windows）だけを見ていると、同じ名前のジョブを持つ
+   * 別のワークフローがあれば、本来のCIが落ちていても通せる。
+   */
+  failsWith(strictInputs({
+    metadataCi: { ...GOOD_CI, path: '.github/workflows/release.yml' }
+  }), 'いまの文書のCIが期待するワークフロー');
+});
+
+test('いまの文書のCIにワークフローの情報が無ければ落ちる（R15-004）', () => {
+  const ci = { ...GOOD_CI };
+  delete ci.path;
+  failsWith(strictInputs({ metadataCi: ci }), 'いまの文書のCIが期待するワークフロー');
+});
+
+test('正本側と文書側で、同じワークフローを求めている（R15-004）', () => {
+  /* 片方だけ緩いと、そちらから抜けられる。両方が同じ検査を持つこと */
+  const r = validateStoreReadiness(strictInputs());
+  assert.ok(r.ok.some((l) => l.includes('いまの文書のCIが期待するワークフロー')),
+    '文書側の検査が走っていない');
+  assert.ok(r.ok.some((l) => l.includes('正本の run が期待するワークフロー')),
+    '正本側の検査が走っていない');
+});
+
+/* ---- run の選び方そのものを見る（第15回監査 R15-004） ------------------- */
+
+const RUNS = [
+  { id: 1, event: 'push', head_branch: 'main', path: '.github/workflows/release.yml',
+    head_sha: 'a'.repeat(40), conclusion: 'success' },
+  { id: 2, event: 'pull_request', head_branch: 'main', path: '.github/workflows/ci.yml',
+    head_sha: 'a'.repeat(40), conclusion: 'success' },
+  { id: 3, event: 'push', head_branch: 'feat/x', path: '.github/workflows/ci.yml',
+    head_sha: 'a'.repeat(40), conclusion: 'success' },
+  { id: 4, event: 'push', head_branch: 'main', path: '.github/workflows/ci.yml',
+    head_sha: 'a'.repeat(40), conclusion: 'failure' }
+];
+const WANT = { branch: 'main', workflowPath: '.github/workflows/ci.yml' };
+
+test('同じSHAに複数の run があっても、期待するワークフローのものを選ぶ（R15-004）', () => {
+  const picked = pickPushRun(RUNS, WANT);
+  assert.ok(picked, '選べていない');
+  assert.equal(picked.runId, '4', `別の run を選んだ: ${picked.runId}（${picked.path}）`);
+  assert.equal(picked.path, '.github/workflows/ci.yml');
+  /* 落ちている run でも「選ぶ」のは正しい。success かどうかは別の検査が見る */
+  assert.equal(picked.conclusion, 'failure');
+});
+
+test('選んだ run には、あとで照合する項目がそろっている（R15-004）', () => {
+  const picked = pickPushRun(RUNS, WANT);
+  for (const k of ['conclusion', 'event', 'branch', 'path', 'headSha', 'runId']) {
+    assert.ok(k in picked, `${k} が落ちている＝関門が fail-closed で止まる`);
+  }
+});
+
+test('期待するワークフローの run が無ければ、何も選ばない（R15-004）', () => {
+  assert.equal(pickPushRun(RUNS.filter((r) => r.path !== WANT.workflowPath), WANT), null);
+  assert.equal(pickPushRun([], WANT), null);
+  assert.equal(pickPushRun(null, WANT), null);
 });

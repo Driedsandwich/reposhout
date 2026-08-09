@@ -26,5 +26,9 @@
   "noticeUnsupported": {
     "message": "This page cannot be shared. Nothing was sent to X.",
     "description": "Shown when the page is out of scope (settings, authentication, non-GitHub). Must not include the URL."
+  },
+  "noticeOpenFailed": {
+    "message": "The X composer could not be opened. Nothing was sent to X.",
+    "description": "Shown when both the popup window and the tab could not be opened. Must not include the URL or any value."
   }
 }

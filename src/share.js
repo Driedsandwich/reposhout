@@ -33,17 +33,6 @@
     [0x2032, 0x2037]
   ];
 
-  /*
-   * 本文に使える上限。
-   * Xの投稿画面は「本文 + 半角空白 + URL」で構成されるので、
-   * 使える重みは 280 - 1(空白) - 23(URL) = 256。
-   *
-   * 256ではなく250にしているのは、絵文字の区切り方（grapheme cluster）が
-   * twitter-text の絵文字正規表現と完全一致する保証がないため。
-   * 1つずれても最大2しか動かないので、6の余白で3連結ぶんを吸収する。
-   * 余白が正しいことは test/share.test.mjs の「合計280以下」で機械的に検査している。
-   */
-  var MAX_WEIGHT = 250;
 
   /*
    * github.com/<第1セグメント> のうち、ユーザー/組織名ではなくGitHubの機能ページであるもの。
@@ -134,13 +123,6 @@
                          'following', 'overview', 'achievements'];
 
   var QUERY_RULES = {
-    'sensitive': null,                         // null は「クエリもハッシュも落とす」
-    'root': {},
-    'user': { tab: enumRule(USER_TAB_VALUES) },
-    'search': {
-      type: enumRule(SEARCH_TYPE_VALUES), s: enumRule(SORT_VALUES),
-      o: enumRule(DIRECTION_VALUES), p: intRule()
-    },
     'repo': {},
     'issue-list': {
       page: intRule(), sort: enumRule(SORT_VALUES), direction: enumRule(DIRECTION_VALUES),
@@ -151,21 +133,11 @@
       state: enumRule(STATE_VALUES)
     },
     'discussion-list': { page: intRule() },
+    'releases': { page: intRule() },
     'issue': {},
     'pr': { diff: enumRule(DIFF_VALUES), w: boolRule() },
     'discussion': {},
-    'blob': { plain: boolRule() },
-    'tree': {},
-    'compare': {
-      quick_pull: boolRule(), expand: boolRule(), diff: enumRule(DIFF_VALUES), w: boolRule()
-    },
-    'commits': {},
-    'commit': { diff: enumRule(DIFF_VALUES), w: boolRule() },
-    'actions': { page: intRule() },
-    'releases': { page: intRule() },
-    'wiki': {},
-    'repo-sub': {},
-    'other': {}
+    'commit': { diff: enumRule(DIFF_VALUES), w: boolRule() }
   };
 
   /*
@@ -188,61 +160,6 @@
     if (rule.type === 'bool') return ['0', '1', 'true', 'false'].indexOf(value) !== -1;
     if (rule.type === 'enum') return rule.values.indexOf(value) !== -1;
     return false;
-  }
-
-  /*
-   * ハッシュ（fragment）の安全化。
-   *
-   * 以前は `access_token=` など決め打ちの名前だけを見ていたため、
-   * `#client_secret=` `#password=` `#api_key=` `#session_token=`
-   * `#oauth_token=` `#refresh_token=` が素通りしていた
-   * （2026-08-05の第3回監査で再現）。fragment は通常のHTTP要求では
-   * サーバーへ送られないが、この拡張はURL全体をXの投稿画面へ渡すので、
-   * 残せばそのまま第三者へ送られる。
-   *
-   * 名前を数え上げる代わりに、**`=` を含むfragmentを名前によらず捨てる**。
-   * GitHubが作る見出し・行番号・コメントのアンカー（#readme、#L10-L20、
-   * #issuecomment-123、日本語見出しのパーセントエンコード）に `=` は出てこない。
-   * クエリ側の資格情報判定より広く、取りこぼしが原理的に出ない。
-   *
-   * 長さの上限は、実用的なURL長（ブラウザ実装で概ね2000文字前後が下限）に対して
-   * 十分に余裕を見た値。日本語の見出しはパーセントエンコードで1文字9バイト相当に
-   * なるため、旧実装の64文字では「インストールと初期設定」（100文字）すら
-   * 落ちていた。
-   */
-  var FRAGMENT_MAX = 512;
-
-  function sanitizeFragment(hash) {
-    if (!hash) return '';
-    var raw = hash.charAt(0) === '#' ? hash.slice(1) : hash;
-    if (!raw) return '';
-    if (raw.length > FRAGMENT_MAX) return '';
-    if (/[\u0000-\u001F\u007F\s]/.test(raw)) return '';
-    var decoded;
-    try {
-      decoded = decodeURIComponent(raw);
-    } catch (e) {
-      return '';                                  // 壊れたエンコードは判定できない＝載せない
-    }
-    /*
-     * 第7回監査 R7-001。1回解いた形だけで判定していたため、
-     * `#client_secret%253Ddummy`（二重エンコード）は解いても `%3D` のままで、
-     * 「= を含まない」と判定されてそのままXへ渡っていた。
-     *
-     * 解いた結果が**まだ解ける形**なら、中身が何なのかこちらでは判定できない。
-     * 判定できないものは載せない。何重にエンコードされていても、この1つの規則で落ちる。
-     * （パス側は同じ問題を第4回で塞いだのに、フラグメント側が残っていた）
-     */
-    if (decoded.indexOf('%') !== -1) {
-      try {
-        if (decodeURIComponent(decoded) !== decoded) return '';
-      } catch (e) {
-        return '';
-      }
-    }
-    if (/[\u0000-\u001F\u007F\s]/.test(decoded)) return '';
-    if (raw.indexOf('=') !== -1 || decoded.indexOf('=') !== -1) return '';
-    return '#' + raw;
   }
 
   /*
@@ -513,81 +430,9 @@
    * 部分を足し上げるのではなく「先頭からn文字の重み」を二分探索する。
    * 最後に必ず実測して、超えていたら1文字ずつ削る。
    */
-  function takeToWeight(text, budget) {
-    if (weightedLength(text) <= budget) return text;
-    var gs = graphemes(text);
-    var lo = 0;
-    var hi = gs.length;
-    while (lo < hi) {
-      var mid = Math.ceil((lo + hi) / 2);
-      if (weightedLength(gs.slice(0, mid).join('')) <= budget) lo = mid; else hi = mid - 1;
-    }
-    var out = gs.slice(0, lo).join('');
-    // 単調でない並びに備えた保険。二分探索の結果を必ず実測で確かめる。
-    while (lo > 0 && weightedLength(out) > budget) {
-      lo -= 1;
-      out = gs.slice(0, lo).join('');
-    }
-    return out;
-  }
-
-  function truncate(text) {
-    var s = normalizeNFC(text);
-    if (weightedLength(s) <= MAX_WEIGHT) return s;
-    return takeToWeight(s, MAX_WEIGHT - weightedLength(ELLIPSIS)).replace(/\s+$/, '') + ELLIPSIS;
-  }
-
-  /*
-   * 可変のタイトルと、固定のサフィックス「 (Issue #123 · owner/repo)」を分けて扱う。
-   *
-   * 旧実装は連結してから末尾を切っていたので、長いタイトルでは
-   * 識別に最も効くサフィックス（種別・番号・リポジトリ名）が真っ先に消えていた
-   * （2026-08-05の再監査で再現）。サフィックスぶんを先に確保してから、
-   * 可変のタイトル側だけを削る。
-   */
-  function truncateWithSuffix(title, suffix) {
-    var t = normalizeNFC(title);
-    var sfx = normalizeNFC(suffix || '');
-    var sw = weightedLength(sfx);
-    if (weightedLength(t) + sw <= MAX_WEIGHT) return t + sfx;
-    // サフィックス単独で上限に達する異常時は、サフィックス側を優先して切り詰める
-    if (sw + weightedLength(ELLIPSIS) >= MAX_WEIGHT) return truncate(sfx.replace(/^\s+/, ''));
-    var budget = MAX_WEIGHT - sw - weightedLength(ELLIPSIS);
-    return takeToWeight(t, budget).replace(/\s+$/, '') + ELLIPSIS + sfx;
-  }
-
   /* ============================================================
    * 2. URLの正規化（ページ種別ごとの方針）
    * ============================================================ */
-
-  /* URLからページ種別を判定する。github.com 以外は null を返す。 */
-  function parseLocation(rawUrl) {
-    var u;
-    try {
-      u = new URL(rawUrl);
-    } catch (e) {
-      return null;
-    }
-    if (u.protocol !== 'https:' || u.hostname !== 'github.com') return null;
-
-    var seg = pathSegments(u);
-    if (!seg) return null;                       // 判定できないURLは共有対象にしない
-    if (seg.length < 2) return { kind: 'other', repo: null, number: null };
-    if (RESERVED_OWNERS.indexOf(seg[0].toLowerCase()) !== -1) {
-      return { kind: 'other', repo: null, number: null };
-    }
-
-    var repo = seg[0] + '/' + seg[1];
-    if (seg.length === 2) return { kind: 'repo', repo: repo, number: null };
-
-    var third = seg[2];
-    var num = seg[3] || '';
-    if (third === 'issues' && /^\d+$/.test(num)) return { kind: 'issue', repo: repo, number: num };
-    if (third === 'pull' && /^\d+$/.test(num)) return { kind: 'pr', repo: repo, number: num };
-    if (third === 'discussions' && /^\d+$/.test(num)) return { kind: 'discussion', repo: repo, number: num };
-    if (third === 'releases') return { kind: 'release', repo: repo, number: null };
-    return { kind: 'repo-sub', repo: repo, number: null };
-  }
 
   /*
    * クエリの扱いを決めるためのルート判定。
@@ -835,45 +680,6 @@
     return scanEncodedLayers(value, VALUE_MAX_DECODE_ROUNDS) !== null;
   }
 
-  /*
-   * **出て行くものを1か所で見る**（第13回監査 R13-001）。
-   * これまで見ていたのはURLだけで、document.title から作る**投稿本文**は
-   * 検査していなかった。Issue の表題が `access_token=<値>` だと、そのまま
-   * Xの投稿画面の text に載った（1.1.8 の配布ZIPで実測）。
-   */
-  function credentialLikeOutbound(shareUrl, text, rawTitle) {
-    var byUrl = credentialLikeShareUrl(shareUrl);
-    if (byUrl) return byUrl;
-    if (scanEncodedLayers(String(text || ''), VALUE_MAX_DECODE_ROUNDS)) return 'credential_like';
-    /* 変換する前の形も見る（第14回監査 R14-001。下の credentialLikeInbound 参照） */
-    if (arguments.length > 2 && credentialLikeInbound(rawTitle)) return 'credential_like';
-    return null;
-  }
-
-  /*
-   * **変換する前の生のタイトルも見る**（第14回監査 R14-001）。
-   *
-   * 出口だけで見ていると、こちらの変換そのものが検出を外せてしまう。実際、
-   * 長いタイトルの末尾に GitHub トークンを置くと、切り詰めでトークンが
-   * 短くなり、**最小長を下回って検出パターンから外れた**まま断片がXへ渡った
-   * （1.1.8 の配布ZIPで prefix 211〜226 文字の16通り・issue/repo/discussion の
-   * どの種別でも再現）。
-   *
-   * 生のURLは**ここでは見ない**。落とすはずのクエリまで拒否の理由にすると、
-   * `?q=access_token` を検索して結果ページを共有する——値は落ちるので安全な
-   * 操作——まで拒否してしまうため。URL側は、実際に出て行く正規形を
-   * credentialLikeShareUrl が全体（パス・残すクエリ・フラグメント）で見る。
-   */
-  function credentialLikeInbound(rawTitle) {
-    if (scanEncodedLayers(String(rawTitle || ''), VALUE_MAX_DECODE_ROUNDS)) return 'credential_like';
-    return null;
-  }
-
-  /*
-   * **共有するURL全体**（パス・残すクエリ・フラグメント）に、資格情報の形が
-   * 無いか。第12回監査 R12-001 まではクエリの値しか見ておらず、
-   * /blob/main/access_token=<値> のようなパスがそのままXへ渡っていた。
-   */
   function credentialLikeShareUrl(shareUrl) {
     var u;
     try {
@@ -889,6 +695,125 @@
       if (credentialLikeValue(value) || credentialLikeValue(name)) found = 'credential_like';
     });
     return found;
+  }
+
+
+  /* ============================================================
+   * 2.5 出て行くものを、型で決める（第15回監査 R15-001）
+   * ============================================================
+   *
+   * 第14回まではこうだった——利用者のページのタイトルとパスをそのままXへ渡し、
+   * 「資格情報の形をしていないか」を有限のパターンで見て止める。
+   *
+   * 第15回の実測で、この方式が両側から破れることが分かった（配布ZIP 376338a3… で再現）。
+   *
+   *   ・定義の外にある**現実的な**形が37件そのまま投稿画面まで届いた
+   *     （X-Api-Key: / Private-Token: / AWS_SECRET_ACCESS_KEY= / SAMLResponse= /
+   *      client_assertion= / ya29. / hf_ / whsec_ / 異体字セレクタで割った形 …）
+   *   ・同時に、普通の開発者向け表題4件を**誤って拒否**していた
+   *     （"How to parse key=value pairs" / "Support auth=none mode" など）
+   *
+   * つまり検出器を厳しくすると製品が壊れ、緩めると漏れる。パターンを足す方向では
+   * 閉じられないので、**出て行くものの決め方そのもの**を変える。
+   *
+   *   ・ページのタイトル（document.title）は**一切送らない**
+   *   ・共有できるのは、**全セグメントが型で決まるルート**だけ
+   *     （所有者名 / リポジトリ名 / 正の整数 / 40桁の16進）
+   *   ・URLは**検査したパーツから組み直す**。元の pathname は使わない
+   *   ・フラグメントは落とす。クエリは型に合う値だけ残す
+   *
+   * 資格情報の検出器は残すが、**主たる境界ではなく多層防御**として扱う。
+   */
+
+  /* GitHub の所有者名・リポジトリ名として在りうる形。'=' や ':' は入らない */
+  var OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+  var REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
+  var POSITIVE_INT_RE = /^[1-9][0-9]{0,9}$/;
+  var SHA40_RE = /^[0-9a-f]{40}$/;
+
+  /* 3つ目のセグメントだけで決まるもの（一覧・リリース） */
+  var LIST_ROUTES = {
+    issues: 'issue-list',
+    pulls: 'pr-list',
+    discussions: 'discussion-list',
+    releases: 'releases'
+  };
+
+  /* 3つ目＋4つ目で決まるもの。4つ目の型を必ず指定する */
+  var NUMBERED_ROUTES = {
+    issues: { route: 'issue', type: 'int' },
+    pull: { route: 'pr', type: 'int' },
+    discussions: { route: 'discussion', type: 'int' },
+    commit: { route: 'commit', type: 'sha40' }
+  };
+
+  /*
+   * 型で決まるルートだけを認める。1つでも当てはまらなければ null（＝共有しない）。
+   * 返すのは**検査済みのパーツ**だけで、元の pathname は持ち出さない。
+   */
+  function structuralRoute(u) {
+    var seg = pathSegments(u);
+    if (!seg || seg.length < 2 || seg.length > 4) return null;
+
+    var owner = seg[0];
+    var repo = seg[1];
+    if (!OWNER_RE.test(owner) || !REPO_RE.test(repo)) return null;
+    if (RESERVED_OWNERS.indexOf(owner.toLowerCase()) !== -1) return null;
+    if (repo === '.' || repo === '..') return null;
+    var full = owner + '/' + repo;
+
+    if (seg.length === 2) {
+      return { route: 'repo', owner: owner, name: repo, repo: full, number: null, sha: null,
+               section: null };
+    }
+
+    var third = seg[2];
+    if (seg.length === 3) {
+      var listed = LIST_ROUTES[third];
+      if (!listed) return null;
+      return { route: listed, owner: owner, name: repo, repo: full, number: null, sha: null,
+               section: third };
+    }
+
+    var rule = NUMBERED_ROUTES[third];
+    if (!rule) return null;
+    var fourth = seg[3];
+    if (rule.type === 'int') {
+      if (!POSITIVE_INT_RE.test(fourth)) return null;
+      return { route: rule.route, owner: owner, name: repo, repo: full, number: fourth,
+               sha: null, section: third };
+    }
+    if (!SHA40_RE.test(fourth)) return null;
+    return { route: rule.route, owner: owner, name: repo, repo: full, number: null,
+             sha: fourth, section: third };
+  }
+
+  /* 検査したパーツだけでパスを組み直す */
+  function structuralPath(info) {
+    var base = '/' + info.owner + '/' + info.name;
+    if (!info.section) return base;
+    if (info.number) return base + '/' + info.section + '/' + info.number;
+    if (info.sha) return base + '/' + info.section + '/' + info.sha;
+    return base + '/' + info.section;
+  }
+
+  /*
+   * 投稿の本文。**ページのタイトルは使わない。**
+   * 出てくるのはリポジトリ名と、正の整数または40桁の16進だけ。
+   */
+  function structuralText(info) {
+    switch (info.route) {
+      case 'repo': return info.repo;
+      case 'issue': return 'Issue #' + info.number + ' \u00b7 ' + info.repo;
+      case 'pr': return 'PR #' + info.number + ' \u00b7 ' + info.repo;
+      case 'discussion': return 'Discussion #' + info.number + ' \u00b7 ' + info.repo;
+      case 'issue-list': return 'Issues \u00b7 ' + info.repo;
+      case 'pr-list': return 'Pull requests \u00b7 ' + info.repo;
+      case 'discussion-list': return 'Discussions \u00b7 ' + info.repo;
+      case 'releases': return 'Releases \u00b7 ' + info.repo;
+      case 'commit': return 'Commit ' + info.sha.slice(0, 7) + ' \u00b7 ' + info.repo;
+      default: return info.repo;
+    }
   }
 
   /*
@@ -930,17 +855,20 @@
       return { ok: false, reason: 'unsupported' };
     }
 
-    var route = routeOf(u);
-    if (route === 'sensitive') return { ok: false, reason: 'sensitive_route' };
+    /*
+     * 第15回監査 R15-001。**型で決まるルートだけ**を通す。
+     * 認証・設定・組織管理の画面は、所有者名の予約語と型で自動的に外れる。
+     */
+    var info = structuralRoute(u);
+    if (!info) {
+      return { ok: false, reason: isSensitiveUrl(rawUrl) ? 'sensitive_route' : 'unsupported' };
+    }
 
-    var path = u.pathname;
-    if (route === 'repo' || route === 'root') path = path.replace(/\/$/, '');
-
-    /* 型に合う値だけ残す。自由文（q / body / title 等）はここで落ちる */
+    /* 型に合う値だけ残す。自由文も識別子っぽい値も、表に無いので落ちる */
     var kept = [];
-    if (QUERY_RULES[route]) {
+    if (QUERY_RULES[info.route]) {
       u.searchParams.forEach(function (value, name) {
-        if (keepParam(route, name, value)) kept.push([name, value]);
+        if (keepParam(info.route, name, value)) kept.push([name, value]);
       });
     }
 
@@ -951,14 +879,18 @@
       qs = '?' + sp.toString();
     }
 
-    var hash = route === 'root' ? '' : sanitizeFragment(u.hash);
-    var url = u.origin + path + qs + hash;
+    /*
+     * **パスは検査したパーツから組み直す**（元の pathname は使わない）。
+     * フラグメントは落とす——#L10 のような行番号は共有したい情報だが、
+     * 任意の文字列を運べる場所を1つでも残すと、この方式の意味が無くなる。
+     */
+    var url = 'https://github.com' + structuralPath(info) + qs;
 
-    /* 最後に、**出て行くURLそのもの**を見る（第12回監査 R12-001） */
+    /* 多層防御。ここまでで型は絞ってあるが、出て行くURLそのものも見る */
     var bad = credentialLikeShareUrl(url);
     if (bad) return { ok: false, reason: bad };
 
-    return { ok: true, url: url };
+    return { ok: true, url: url, info: info };
   }
 
   /*
@@ -991,49 +923,6 @@
    * ============================================================ */
 
   /*
-   * 区切り文字より前を取り出す。
-   * split[0] ではなく lastIndexOf を使う理由: タイトル自体が
-   * " · Issue #" のような文字列を含んでいても途中で切れないようにするため。
-   */
-  function cutBefore(text, marker) {
-    var i = text.lastIndexOf(marker);
-    return i === -1 ? text : text.slice(0, i);
-  }
-
-  function stripGitHubSuffix(text) {
-    return text.replace(/\s*·\s*GitHub\s*$/, '').trim();
-  }
-
-  /* document.title からページ種別ごとに本文を取り出す。 */
-  function cleanTitle(kind, rawTitle) {
-    var t = (rawTitle || '').trim();
-    if (!t) return '';
-
-    switch (kind) {
-      case 'repo':
-      case 'repo-sub':
-      case 'release':
-        // "GitHub - owner/repo: 説明 · GitHub"
-        return stripGitHubSuffix(t.replace(/^GitHub\s+-\s+/, ''));
-
-      case 'issue':
-        // "タイトル · Issue #123 · owner/repo"
-        return stripGitHubSuffix(cutBefore(t, ' · Issue #'));
-
-      case 'pr':
-        // "タイトル by author · Pull Request #123 · owner/repo"
-        return stripGitHubSuffix(cutBefore(t, ' · Pull Request #').replace(/\s+by\s+[^\s]+\s*$/, ''));
-
-      case 'discussion':
-        // "タイトル · Discussion #123 · owner/repo"
-        return stripGitHubSuffix(cutBefore(t, ' · Discussion #'));
-
-      default:
-        return stripGitHubSuffix(t);
-    }
-  }
-
-  /*
    * 本体。url と title から投稿用の文面とXのURLを作る。
    * github.com 以外なら null。
    *
@@ -1045,55 +934,46 @@
    * 理由つきの入口。呼び出し側（content script / service worker）は
    * reason を見て、値を含まない定型の案内を出す（第12回監査 R12-002）。
    */
-  function buildShareResult(rawUrl, rawTitle) {
-    var info = parseLocation(rawUrl);
-    if (!info) return { ok: false, reason: 'unsupported' };
+  /*
+   * 第2引数（ページのタイトル）は受け取るが**使わない**。呼び出し側の形を
+   * 変えずに済ませるためだけに残してある。タイトルはXへ渡らない（R15-001）。
+   */
+  function buildShareResult(rawUrl) {
     var res = canonicalResult(rawUrl);
     if (!res.ok) return { ok: false, reason: res.reason };
-    var share = buildShare(rawUrl, rawTitle);
-    if (!share) {
-      /*
-       * canonicalResult が通ったのに buildShare が null＝本文側で止まった、
-       * ということ（第13回監査 R13-001）。理由は同じ語で返す。
-       */
-      return { ok: false, reason: 'credential_like' };
-    }
+    var share = buildShare(rawUrl);
+    if (!share) return { ok: false, reason: 'credential_like' };
     return { ok: true, share: share };
   }
 
-  function buildShare(rawUrl, rawTitle) {
-    var info = parseLocation(rawUrl);
-    if (!info) return null;
-
+  function buildShare(rawUrl) {
     var res = canonicalResult(rawUrl);
     if (!res.ok) return null;                  // 理由つきが要るときは buildShareResult を使う
 
+    var info = res.info;
     var url = res.url;
-    var title = cleanTitle(info.kind, rawTitle);
-    var suffix = '';
-
-    if (info.kind === 'issue') {
-      suffix = ' (Issue #' + info.number + ' · ' + info.repo + ')';
-    } else if (info.kind === 'pr') {
-      suffix = ' (PR #' + info.number + ' · ' + info.repo + ')';
-    } else if (info.kind === 'discussion') {
-      suffix = ' (Discussion #' + info.number + ' · ' + info.repo + ')';
-    }
-
-    // タイトルが取れなかった場合は repo 名、それも無ければURLで代替する
-    var base = title.trim();
-    if (!base && !suffix) base = info.repo || url;
-    var text = base ? truncateWithSuffix(base, suffix) : truncate(suffix.trim());
+    /*
+     * **ページのタイトルは使わない**（第15回監査 R15-001）。
+     * 本文に出るのは、リポジトリ名と、正の整数または40桁の16進だけ。
+     */
+    var text = structuralText(info);
 
     /*
-     * ここが**唯一の出口**。出て行くURLと本文に加えて、**変換する前の生の
-     * タイトル**も、同じ規則で最後に見る（R13-001・第14回監査 R14-001）。
-     * 1つでも資格情報の形があれば、投稿画面は開かない。
+     * 上限は**切り詰めずに守る**。所有者39文字＋リポジトリ100文字の最大でも
+     * 上限に届かない（テストで公式実装に照らして実測）。万一届いたら共有しない——
+     * 切り詰めると、その変換がまた検査を外しうる（第14回監査 R14-001 で実際に起きた型）。
      */
-    if (credentialLikeOutbound(url, text, rawTitle)) return null;
+    if (weightedLength(text) + 1 + URL_WEIGHT > MAX_WEIGHTED_TWEET) return null;
+
+    /*
+     * 本文は info（所有者名・リポジトリ名・整数・16進）だけから作るので、
+     * URLに無い文字は入らない。**ここへ本文用の検査をもう1つ置いても、
+     * 外しても何も落ちない行になる**（実際に変異で確かめた）ため置かない。
+     * 資格情報の検査は canonicalResult が出て行くURLに対して1回だけ行う。
+     */
 
     return {
-      kind: info.kind,
+      kind: info.route,
       repo: info.repo,
       number: info.number,
       text: text,
@@ -1104,27 +984,19 @@
 
   root.GXS = {
     buildShare: buildShare,
-    parseLocation: parseLocation,
-    cleanTitle: cleanTitle,
     canonicalUrl: canonicalUrl,
     fallbackUrl: fallbackUrl,
     isSensitiveUrl: isSensitiveUrl,
     buildShareResult: buildShareResult,
     canonicalResult: canonicalResult,
     credentialLikeShareUrl: credentialLikeShareUrl,
-    credentialLikeOutbound: credentialLikeOutbound,
-    credentialLikeInbound: credentialLikeInbound,
     normalizeForScan: normalizeForScan,
     QUERY_RULES: QUERY_RULES,
     FREE_TEXT_PARAMS: FREE_TEXT_PARAMS,
     credentialLikeValue: credentialLikeValue,
-    sanitizeFragment: sanitizeFragment,
-    truncateWithSuffix: truncateWithSuffix,
     intentUrlFor: intentUrlFor,
     routeOf: routeOf,
     weightedLength: weightedLength,
-    truncate: truncate,
-    MAX_WEIGHT: MAX_WEIGHT,
     MAX_WEIGHTED_TWEET: MAX_WEIGHTED_TWEET,
     URL_WEIGHT: URL_WEIGHT
   };

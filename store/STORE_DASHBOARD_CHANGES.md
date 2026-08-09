@@ -129,18 +129,12 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 使うのは main への push で走ったCIが残した成果物だけです。取り出し方は
 [LISTING.md](LISTING.md) §1「どのZIPを出すか」を見てください。
 
-今回出すもの:
+今回出すもの: **まだありません。**
 
-```
-成果物 : reposhout-package-53d8c7a0a84e03a8623488e6fe7428c15a396188
-中のZIP : reposhout-1.1.8.zip
-大きさ : 36,703 B / 11ファイル
-SHA-256 : 376338a38c58f4e6bfd97419e8f4362f0e428a2a9b4acb27a5143c82997ed8a2
-```
-
-正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) です。
-第12回・第13回・第14回で却下した成果物は提出しません（理由も同ファイルにあります）。
-**「最新の main」では選ばず、上の成果物名とSHA-256 で選んでください**（第10回監査 R10-006）。
+第15回監査 R15-001 のため出て行くデータの決め方を見直し中で、正本
+[SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) の `status` は `pending_main_ci` です。
+直前の候補（`reposhout-package-53d8c7a0…` / `376338a3…`）は提出しません。
+第12回〜第14回で却下したものと合わせて、理由は同ファイルの `history` にあります。
 
 ---
 

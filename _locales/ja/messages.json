@@ -26,5 +26,9 @@
   "noticeUnsupported": {
     "message": "このページは共有できません。Xへは何も送っていません。",
     "description": "Same as noticeUnsupported (Japanese)."
+  },
+  "noticeOpenFailed": {
+    "message": "Xの投稿画面を開けませんでした。Xへは何も送っていません。",
+    "description": "Same as noticeOpenFailed (Japanese)."
   }
 }

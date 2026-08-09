@@ -20,7 +20,7 @@ import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { validateStoreReadiness, dateIn } from './store-readiness.mjs';
+import { validateStoreReadiness, dateIn, pickPushRun } from './store-readiness.mjs';
 import { readZip } from './zip-read.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -120,6 +120,8 @@ const metadata = head
  * （第12回監査 R12-003）。取れなかったら通さない。
  */
 const EXPECTED_ORIGIN = 'Driedsandwich/reposhout';
+/* 正本側と同じワークフローを、いまの文書側でも固定する（第15回監査 R15-004） */
+const EXPECTED_WORKFLOW = '.github/workflows/ci.yml';
 let remote = null;
 let metadataCi = null;
 let runtime = null;
@@ -178,17 +180,21 @@ function fetchCiFor(sha) {
       ['api', `repos/${EXPECTED_ORIGIN}/actions/runs?head_sha=${sha}&per_page=20`],
       { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
     const runs = JSON.parse(runsRaw).workflow_runs || [];
-    const run = runs.find((r) => r.event === 'push' && r.head_branch === 'main');
-    if (!run) return { error: `このコミットの main への push の run が見つからない: ${sha}` };
+    /*
+     * 第15回監査 R15-004。ワークフローを見ずに「main への push」だけで選んでいたので、
+     * 同じジョブ名を持つ別のワークフローがあれば、本来のCIが落ちていても通せた。
+     * 選ぶ判断は pickPushRun（純粋関数・テストあり）に持たせる。
+     */
+    const run = pickPushRun(runs, { branch: 'main', workflowPath: EXPECTED_WORKFLOW });
+    if (!run) {
+      return { error: `このコミットの ${EXPECTED_WORKFLOW} の main への push の run が見つからない: ${sha}` };
+    }
     const jobsRaw = execFileSync('gh',
-      ['api', `repos/${EXPECTED_ORIGIN}/actions/runs/${run.id}/jobs`],
+      ['api', `repos/${EXPECTED_ORIGIN}/actions/runs/${run.runId}/jobs`],
       { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
     const jobs = {};
     for (const j of JSON.parse(jobsRaw).jobs || []) jobs[j.name] = j.conclusion;
-    return {
-      conclusion: run.conclusion, event: run.event, branch: run.head_branch,
-      headSha: run.head_sha, runId: String(run.id), jobs
-    };
+    return { ...run, jobs };
   } catch (e) {
     return { error: `GitHub API を引けなかった: ${e.message.split('\n')[0]}` };
   }

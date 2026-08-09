@@ -54,18 +54,13 @@
     check('URL', r[0], r[2], GXS.canonicalUrl(r[1], null));
   });
 
-  F.TITLES.forEach(function (r) {
-    check('タイトル', r[0] + ' / ' + r[1], r[2], GXS.cleanTitle(r[0], r[1]));
-  });
-
-  F.LOCATIONS.forEach(function (r) {
-    var got = GXS.parseLocation(r[0]);
-    check('種別', r[0], r[1] + '|' + r[2] + '|' + r[3], got.kind + '|' + got.repo + '|' + got.number);
-  });
-
+  /*
+   * タイトルの整形と種別判定の表は、第15回監査 R15-001 で無くなった
+   * （タイトルを送らず、型で決まるルートだけを共有する）。
+   */
   F.BUILD.forEach(function (r) {
-    var got = GXS.buildShare(r[1], r[2]);
-    var want = r[3];
+    var got = GXS.buildShare(r[1]);
+    var want = r[2];
     if (want.isNull) { check('組み立て', r[0], 'null', got === null ? 'null' : JSON.stringify(got)); return; }
     if (!got) { check('組み立て', r[0], '結果あり', 'null'); return; }
     if (want.kind) check('組み立て', r[0] + ' [kind]', want.kind, got.kind);
