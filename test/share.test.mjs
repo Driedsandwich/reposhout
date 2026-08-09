@@ -377,3 +377,22 @@ test('セグメントの数と型を1つずつ崩すと、共有できなくな�
   ];
   for (const u of broken) assert.equal(GXS.buildShare(u), null, `共有できてしまう: ${u}`);
 });
+
+test('素の % を含む普通のページを、拒否しない（R12-002の回帰）', () => {
+  /*
+   * 第12回で、`?q=100%25 coverage` のような素の % を含む検索を拒否していた
+   * （decodeURIComponent が投げるため）。クエリを型で絞ったいまも、
+   * 「解けない % があるとページごと拒否する」に戻っていないことを見る。
+   * 第15回の書き換えでこの回帰テストを落としていたので、新しい形で戻した。
+   */
+  for (const u of ['https://github.com/o/r/issues?q=100%25+coverage',
+                   'https://github.com/o/r/issues?q=100%+coverage',
+                   'https://github.com/o/r/issues?state=open&q=50%25']) {
+    const s = GXS.buildShare(u);
+    assert.ok(s, `拒否している: ${u}`);
+    assert.ok(!s.url.includes('%25') && !s.url.includes('q='), `検索語が残っている: ${s.url}`);
+  }
+  /* 対照: パスの側で解けない % は、いまも拒否する */
+  assert.equal(GXS.buildShare('https://github.com/o/r/issues/%ZZ'), null,
+    'パスの壊れたエスケープを通している');
+});
