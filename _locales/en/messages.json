@@ -1,27 +1,27 @@
 {
   "actionTitle": {
-    "message": "RepoShout — send this GitHub page's title and URL to X's composer",
-    "description": "Tooltip on the toolbar icon."
+    "message": "RepoShout — send this GitHub page's link to X's composer",
+    "description": "Tooltip on the toolbar icon. The page title is never sent (R15-001), so this must not promise it."
   },
   "commandShareToX": {
-    "message": "Send the current GitHub page's title and URL to X's composer",
-    "description": "Shown on chrome://extensions/shortcuts."
+    "message": "Send the current GitHub page's link to X's composer",
+    "description": "Shown on chrome://extensions/shortcuts. The page title is never sent (R15-001)."
   },
   "shareButtonLabel": {
     "message": "Share",
     "description": "Text on the button added to GitHub pages. Keep it short; it sits next to Fork and Star."
   },
   "shareButtonTooltip": {
-    "message": "Send this page's title and URL to X's composer",
-    "description": "Tooltip on the in-page Share button."
+    "message": "Send this page's link to X's composer",
+    "description": "Tooltip on the in-page Share button. The page title is never sent (R15-001)."
   },
   "shareButtonAria": {
     "message": "Share on X",
     "description": "Accessible name of the in-page Share button."
   },
   "noticeCredential": {
-    "message": "This page's title or URL may contain sensitive authentication information, so the X composer was not opened. Nothing was sent to X.",
-    "description": "Shown when sharing is refused because the page title or the URL matches one of the credential patterns. Must not include the title, the URL or any value."
+    "message": "This page's address may contain sensitive authentication information, so the X composer was not opened. Nothing was sent to X.",
+    "description": "Shown when sharing is refused because the outgoing URL matches one of the credential patterns. Must not include the URL or any value."
   },
   "noticeUnsupported": {
     "message": "This page cannot be shared. Nothing was sent to X.",

@@ -29,16 +29,19 @@ The post text adapts to the page:
 
 | Page | Generated text |
 |---|---|
-| Repository | `owner/repo: description` |
-| Issue | `Title (Issue #123 · owner/repo)` |
-| Pull request | `Title (PR #123 · owner/repo)` — the author suffix is stripped |
-| Discussion | `Title (Discussion #123 · owner/repo)` |
-| Anything else | Page title |
+| Repository | `owner/repo` |
+| Issue | `Issue #123 · owner/repo` |
+| Pull request | `PR #123 · owner/repo` |
+| Discussion | `Discussion #123 · owner/repo` |
+| Issue / PR / Discussion list | `Issues · owner/repo` (and the same shape for the others) |
+| Releases | `Releases · owner/repo` |
+| Commit | `Commit 0123456 · owner/repo` |
+| Anything else | not shared at all |
 
 Example:
 
 ```
-octocat/Hello-World: My first repository on GitHub!
+octocat/Hello-World
 https://github.com/octocat/Hello-World
 ```
 
@@ -50,7 +53,11 @@ Until 1.1.8 the extension sent `document.title` and the raw path and relied on a
 
 Authentication, account, settings and organisation-administration pages are refused at every entry point, and the button and shortcut say so rather than staying silent. Paths are decoded before that decision, so `/%73ettings/tokens` is refused too; a URL that cannot be decoded unambiguously is refused rather than guessed at.
 
-Query strings on the pages that *are* shared are handled per route, and **only values whose set can be enumerated or checked mechanically are kept** — page numbers, open/closed state, sort order and direction, `?plain=1` on a Markdown file, `?diff=split&w=1` on a diff, `quick_pull` on a prepared pull request, the `type` of a GitHub search. **Everything free-text is dropped**: search terms (`q`, `query`, `discussions_q`), a prepared pull request's `title` and `body`, and identifier-shaped values such as `labels`, `author`, `branch`, `path`, `milestone`, `category` and `template` — because no finite list of patterns can prove that arbitrary text carries no secret. Anything not on that route's table is dropped too, which covers `?tab=readme-ov-file`, `notification_referrer_id` and `utm_*`. On authentication, account and settings routes the page is not shared at all, so an OAuth `client_id`/`state` or a token in a URL can never reach a draft post. Line anchors (`#L10-L20`), comment anchors and README section anchors are kept — including long Japanese headings, which percent-encode to well over a hundred characters — because those are the point of sharing. A fragment containing `=` is dropped whatever its name, which covers `#access_token=`, `#client_secret=`, `#api_key=` and anything else of that shape without having to enumerate them; so are fragments with broken percent-encoding, control characters, or more than 512 characters.
+Query strings on the pages that *are* shared are handled per route, and **only values whose set can be enumerated or checked mechanically are kept** — page numbers, open/closed state, sort order and direction, `?diff=split&w=1` on a diff. **Everything free-text is dropped**: search terms (`q`, `query`, `discussions_q`) and identifier-shaped values such as `labels`, `author`, `branch` and `path` are not in any route's table at all, because no finite list of patterns can prove that arbitrary text carries no secret. Anything else not on that route's table goes too, which covers `?tab=readme-ov-file`, `notification_referrer_id` and `utm_*`. **Fragments are dropped entirely** — line anchors included. They were kept until 1.1.8, but an anchor is a place a user can put any string, and one such place is enough to defeat the whole approach.
+
+Two further limits were added in 1.1.8 after the sixteenth audit. **A parameter may appear at most once**: `?state=open&state=closed` refuses the whole URL rather than picking one, because a repeated parameter is an arbitrary-length channel — a thousand repetitions of an enumerable value still carried twelve thousand characters of user-chosen ordering to X. And **the outgoing query is emitted in the table's own order with values normalised** (`page=007` becomes `page=7`, `w=true` becomes `w=1`), so the same page always produces the same link.
+
+**GitHub's own function pages are not repositories.** `/enterprises/<slug>`, `/oauth/authorize`, `/user/keys`, `/settings/…` and the rest are refused by a single list, consulted by every code path that decides a route. Until the sixteenth audit that boundary was kept in two separate arrays and only one of them was consulted when building a share, so `github.com/enterprises/acme` was shared as though `enterprises/acme` were a repository.
 
 The full policy is the `QUERY_RULES` table in [`src/share.js`](src/share.js) — each parameter carries the *type* of value allowed (`int`, `bool` or `enum`) — and every row of it is covered by [`test/fixtures.js`](test/fixtures.js).
 
@@ -100,7 +107,7 @@ Browser extensions that inject UI into GitHub have a habit of dying when GitHub 
 - **If the anchor element isn't found, it does nothing.** No error, no fallback DOM surgery, no broken GitHub page.
 - **GitHub's existing DOM is read, never modified.** The extension adds one `<style>` element in the document head and one wrapper holding one button — an `<li>` inside the repository page's `<ul>`, a `<div>` inside the flex row on issues and pull requests. It deletes and replaces nothing of GitHub's own.
 - **It never inspects which buttons are present.** Signed-in and signed-out GitHub show different button sets; prepending to the container works identically for both, and for whatever GitHub adds next.
-- **The toolbar icon and keyboard shortcut don't touch the DOM at all.** They work from the tab's URL and title, so they keep working even if the in-page button stops appearing.
+- **The toolbar icon and keyboard shortcut don't touch the DOM at all.** They work from the tab's URL alone, so they keep working even if the in-page button stops appearing.
 - Colours are read from GitHub's own theme variables (`--button-default-*`), so light and dark mode follow automatically.
 
 ## Permissions
@@ -109,7 +116,7 @@ RepoShout requests two API permissions.
 
 | Permission | Why |
 |---|---|
-| `activeTab` | Read the URL and title of the tab you are on. Per Chrome's design it is granted only at the moment you explicitly invoke the extension (toolbar click or keyboard shortcut) and only for that tab. It does not allow background monitoring of browsing. |
+| `activeTab` | Read the URL of the tab you are on (the title is not read at all since 1.1.8). Per Chrome's design it is granted only at the moment you explicitly invoke the extension (toolbar click or keyboard shortcut) and only for that tab. It does not allow background monitoring of browsing. |
 | `storage` | Remember which window the extension itself opened, so Esc closes that window and nothing else. Written to `chrome.storage.session`, which lives in memory, is cleared when you quit the browser, is never written to disk, and is not readable by content scripts. |
 
 The `storage` permission was added in 1.1.0. What it holds is a list of window IDs and the time each was opened — no URLs, no page content, no history. **That record** is never sent anywhere.
@@ -132,8 +139,8 @@ The extension makes no background network requests and contacts no server of its
 ```
 manifest.json            Manifest V3 definition
 src/share.js             Text and URL construction (pure logic, no DOM access)
-src/content.js           In-page button injection
-src/background.js        Window creation and Esc ownership (service worker)
+src/content.js           In-page button injection (holds no policy: it only reports the press)
+src/background.js        The only place that decides what leaves, plus window creation and Esc ownership (service worker)
 src/esc-close.js         Escape handling on x.com
 icons/                   Icons
 test/fixtures.js         Expected values — shared by the Node and browser runners

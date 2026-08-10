@@ -1,26 +1,26 @@
 {
   "actionTitle": {
-    "message": "RepoShout — このGitHubページのタイトルとURLをXの投稿画面へ送ります",
-    "description": "ツールバーアイコンのツールチップ。"
+    "message": "RepoShout — このGitHubページのリンクをXの投稿画面へ送ります",
+    "description": "ツールバーアイコンのツールチップ。ページのタイトルは送らない（R15-001）ので、送ると書かない。"
   },
   "commandShareToX": {
-    "message": "いま見ているGitHubページのタイトルとURLをXの投稿画面へ送ります",
-    "description": "chrome://extensions/shortcuts に出る説明。"
+    "message": "いま見ているGitHubページのリンクをXの投稿画面へ送ります",
+    "description": "chrome://extensions/shortcuts に出る説明。ページのタイトルは送らない（R15-001）。"
   },
   "shareButtonLabel": {
     "message": "Share",
     "description": "GitHubの画面に足すボタンの文字。Fork や Star の隣に並ぶので短くする。"
   },
   "shareButtonTooltip": {
-    "message": "このページのタイトルとURLをXの投稿画面へ送ります",
-    "description": "画面内Shareボタンのツールチップ。"
+    "message": "このページのリンクをXの投稿画面へ送ります",
+    "description": "画面内Shareボタンのツールチップ。ページのタイトルは送らない（R15-001）。"
   },
   "shareButtonAria": {
     "message": "Share on X",
     "description": "画面内Shareボタンの読み上げ名。"
   },
   "noticeCredential": {
-    "message": "このページのタイトルまたはURLに機微な認証情報が含まれる可能性があるため、Xの投稿画面を開きませんでした。Xへは何も送っていません。",
+    "message": "このページのアドレスに機微な認証情報が含まれる可能性があるため、Xの投稿画面を開きませんでした。Xへは何も送っていません。",
     "description": "Same as noticeCredential (Japanese)."
   },
   "noticeUnsupported": {

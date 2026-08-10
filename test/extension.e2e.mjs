@@ -256,7 +256,8 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
      * CI でだけ落ちた。
      */
     if (locale === 'en') {
-      assert.equal(shown.title, "Send this page's title and URL to X's composer");
+      /* 第16回 R16-006 で「タイトルとURL」から「リンク」へ直した（タイトルは送らない） */
+      assert.equal(shown.title, "Send this page's link to X's composer");
     }
 
     const isNewShareWindow = (t) =>

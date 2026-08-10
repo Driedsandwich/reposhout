@@ -314,21 +314,31 @@ test('プライバシーポリシーが、保証できない範囲まで断定�
  * 第10回監査 R10-001。content script の表が「ボタン行を探すためだけに読む」と
  * だけ書いていたが、押された時点で location.href と document.title を読む。
  */
-test('content script の表が、押されたときに読む2つを書いている', () => {
+test('content script の表が、押されたときに何を送るかを書いている（R16-003）', () => {
   /*
    * 文書のどこかにあるか、ではなく**その行にあるか**を見る。英語の行から消しても
    * 日本語の行に同じ語が残っていて通ってしまった（この検査を作ったときの変異で実測）。
+   *
+   * 第16回監査 R16-003 まで、この検査は「押されたら location.href と document.title を
+   * 読む」と書いてあることを求めていた。**画面側が読まなくなったあとも要求が残ると、
+   * 文書に嘘を書かせる検査になる。** いま求めるのは、送るのがデータの無い合図1つで、
+   * 何を出すかは service worker が決める、と書いてあること。
    */
   const rows = read('PRIVACY.md').split('\n')
     .filter((l) => l.startsWith('| `https://github.com/*`'));
   assert.equal(rows.length, 2, `GitHub側の行が2つ（英日）でない: ${rows.length}`);
   for (const row of rows) {
-    for (const needle of ['location.href', 'document.title']) {
-      assert.ok(row.includes(needle), `PRIVACY.md の表の行に「${needle}」が無い: ${row.slice(0, 60)}…`);
-    }
+    assert.ok(!row.includes('document.title'),
+      `画面側がタイトルを読むと書いたままになっている: ${row.slice(0, 80)}…`);
+    assert.ok(/service worker/.test(row),
+      `判断が service worker 側にあると書いていない: ${row.slice(0, 80)}…`);
   }
   assert.ok(rows.some((r) => r.includes('trusted click')), '英語の行に trusted click が無い');
+  assert.ok(rows.some((r) => r.includes('the button was pressed')),
+    '英語の行に、送るのが合図1つだと書いていない');
   assert.ok(rows.some((r) => r.includes('利用者の操作によるクリック')), '日本語の行に同じ説明が無い');
+  assert.ok(rows.some((r) => r.includes('押されました')),
+    '日本語の行に、送るのが合図1つだと書いていない');
 });
 
 /*
@@ -743,6 +753,21 @@ test('文書が、いまの共有方針を正しく説明している（R13-002�
       ['registers a single keydown listener', 'x.com の listener の実態']
     ]
   };
+  /* 第16回監査で足した境界も、文書から消えたら落ちるようにする */
+  must['README.md'].push(
+    ['at most once', '同じクエリを1回までにしたこと（R16-002）'],
+    ['/enterprises/', 'GitHubの機能ページを拒否すること（R16-001）'],
+    ['single list', '拒否する語を1つの一覧にしたこと（R16-001）']);
+  must['README.ja.md'].push(
+    ['同じ名前のクエリは1回まで', '同じクエリを1回までにしたこと（R16-002）'],
+    ['単一の一覧', '拒否する語を1つの一覧にしたこと（R16-001）']);
+  must['PRIVACY.md'].push(
+    ['the button was pressed', '画面側が合図しか送らないこと（R16-003）'],
+    ['押されました', '同（日本語）']);
+  must['SECURITY.md'] = [
+    ['the service worker', '出口の判断が service worker にあること（R16-003）'],
+    ['いまの方針を service worker が当てないまま', '同（日本語）']
+  ];
   for (const [f, pairs] of Object.entries(must)) {
     const body = read(f);
     for (const [needle, why] of pairs) {
@@ -781,27 +806,54 @@ test('文書が、もう残さない値を「残す」と書いていない（R1
  *   ・README の表が実拡張E2Eを「10テスト」と固定で書いていた（実際は増えている）
  */
 
-test('拒否の案内が、タイトルとURLの両方を理由として言う（R14-003）', () => {
+test('拒否の案内が、何も送っていないことを言う（R14-003）', () => {
+  /*
+   * この検査は第14回に「タイトルとURLの両方を理由として言う」ことを求めていた。
+   * 当時は本文がページのタイトルだったので正しかったが、第15回 R15-001 で
+   * **タイトルを送らなくなったあとも要求が残っていた**ので、
+   * 「タイトルを送る」と言い続けることを検査が強制していた（第16回に自分で気づいた）。
+   * いまは逆向きに——**送っていないものを送ると言っていないこと**を見る。
+   */
   const en = JSON.parse(read('_locales/en/messages.json'));
   const ja = JSON.parse(read('_locales/ja/messages.json'));
 
-  assert.ok(/title or URL/i.test(en.noticeCredential.message),
-    `英語の案内がURLだけを理由にしている: ${en.noticeCredential.message}`);
   assert.ok(en.noticeCredential.message.includes('Nothing was sent to X'),
     '何も送っていないことを言っていない');
-  assert.ok(ja.noticeCredential.message.includes('タイトルまたはURL'),
-    `日本語の案内がURLだけを理由にしている: ${ja.noticeCredential.message}`);
   assert.ok(ja.noticeCredential.message.includes('Xへは何も送っていません'),
     '何も送っていないことを言っていない');
 
   /* 値やURLそのものを混ぜる余地を残していないこと（差し込みは使わない） */
   for (const [lang, m] of [['en', en], ['ja', ja]]) {
-    for (const key of ['noticeCredential', 'noticeUnsupported']) {
+    for (const key of ['noticeCredential', 'noticeUnsupported', 'noticeReloadRequired']) {
       assert.ok(!/\$\d|\$[A-Za-z]+\$/.test(m[key].message),
         `${lang}/${key} に差し込みがある: ${m[key].message}`);
       assert.ok(!m[key].placeholders, `${lang}/${key} に placeholders がある`);
     }
   }
+});
+
+test('拡張自身のUIが、送らないもの（タイトル）を送ると言っていない（R16-006）', () => {
+  /*
+   * 第16回の確認中に自分で見つけた。監査の一覧には無い。
+   *
+   * 第15回 R15-001 でページのタイトルを送らなくなったのに、ツールバーの説明・
+   * ショートカットの説明・画面内ボタンのツールチップ・資格情報の案内が
+   * 「このページの**タイトルと**URLを送ります」のままだった（出荷ZIP 97bcf769… で確認）。
+   * 実装より広く申告している状態で、chrome://extensions/shortcuts にも出る。
+   */
+  for (const lang of ['en', 'ja']) {
+    const m = JSON.parse(read(`_locales/${lang}/messages.json`));
+    for (const [key, val] of Object.entries(m)) {
+      const text = val.message;
+      assert.ok(!/title and URL/i.test(text), `${lang}/${key} がタイトル送信を約束している: ${text}`);
+      assert.ok(!/タイトルとURL/.test(text), `${lang}/${key} がタイトル送信を約束している: ${text}`);
+      assert.ok(!/タイトルまたはURL/.test(text), `${lang}/${key} がタイトルを理由にしている: ${text}`);
+      assert.ok(!/title or URL/i.test(text), `${lang}/${key} がタイトルを理由にしている: ${text}`);
+    }
+  }
+  /* 対照: 検査が空振りしていないこと（同じ当て方で、旧文なら必ず落ちる） */
+  const old = "Send this page's title and URL to X's composer";
+  assert.ok(/title and URL/i.test(old), '検査そのものが効いていない');
 });
 
 test('README が、機微なページで「何も起きない」と書いていない（R14-003）', () => {

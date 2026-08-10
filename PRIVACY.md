@@ -51,14 +51,14 @@ This exists so that pressing Escape closes the share window the extension opened
 
 | Permission | Why |
 |---|---|
-| `activeTab` | Read the URL and title of the tab you are on. Granted only at the moment you explicitly invoke the extension, and only for that tab. It does not allow continuous monitoring of your browsing. |
+| `activeTab` | Read the URL of the tab you are on — the page title is not read at all since 1.1.8. Granted only at the moment you explicitly invoke the extension, and only for that tab. It does not allow continuous monitoring of your browsing. |
 | `storage` | Keep the window list described above. Added in 1.1.0. |
 
 RepoShout also runs content scripts on two sites:
 
 | Site | What the script does |
 |---|---|
-| `https://github.com/*` | Adds the Share button. Until you press it, it reads the page only to locate the button row. **When you press it (a trusted click), it reads `location.href` and `document.title`** — the two values described above — and nothing from the page body. It adds one `<style>` element and one wrapper holding one button (an `<li>` or a `<div>`, matching the container) and modifies nothing else. It deletes and replaces nothing of GitHub's own. |
+| `https://github.com/*` | Adds the Share button. It reads the page only to locate the button row. **When you press it (a trusted click), it sends the service worker one message that carries no data — literally "the button was pressed"** — and reads neither the address bar nor the page title nor the page body. The service worker decides what may leave, working from the URL of the tab the message came from. It adds one `<style>` element and one wrapper holding one button (an `<li>` or a `<div>`, matching the container) and modifies nothing else. It deletes and replaces nothing of GitHub's own. |
 | `https://x.com/*` | **Registers one `keydown` listener and looks at `event.key` on each key press; anything other than an unmodified Escape is ignored immediately.** It closes the share window this extension opened. It does not read field values or page content, and does not store, aggregate or transmit anything from X. |
 
 The X script is deliberately blind to page content. Before closing anything it asks the service worker whether this window is one the extension itself opened, and the only evidence accepted is the window ID recorded at creation time. **If it does not match — which is the case for every X tab you opened yourself — it does nothing.** It cannot close your normal X tabs.
@@ -142,14 +142,14 @@ RepoShout はバックグラウンドでの通信を行わず、独自のサー�
 
 | 権限 | 用途 |
 |---|---|
-| `activeTab` | 見ているタブのURLとタイトルを読むため。利用者が拡張を明示的に操作した瞬間に、そのタブに対してのみ付与されます。閲覧の常時監視はできません |
+| `activeTab` | 見ているタブのURLを読むため（1.1.8 以降、ページのタイトルは読みません）。利用者が拡張を明示的に操作した瞬間に、そのタブに対してのみ付与されます。閲覧の常時監視はできません |
 | `storage` | 上記のウィンドウ一覧を保持するため。1.1.0で追加 |
 
 あわせて、次の2つのサイトでコンテンツスクリプトが動きます。
 
 | サイト | スクリプトがすること |
 |---|---|
-| `https://github.com/*` | Share ボタンを追加します。押されるまでは、ページを読むのはボタン行の位置を探すためだけです。**押された時点（利用者の操作によるクリック）で `location.href` と `document.title` を読みます**——上に書いた2つの値で、ページ本文は読みません。`<style>` を1つとボタン1個を包む要素を1つ足す以外は何も変更しません（包む要素はコンテナに合わせて `<li>` または `<div>`）。GitHub側の要素は消しも置き換えもしません。 |
+| `https://github.com/*` | Share ボタンを追加します。ページを読むのはボタン行の位置を探すためだけです。**押された時点（利用者の操作によるクリック）で service worker へ送るのは、データを何も持たないメッセージ1つ——「押されました」だけ**で、アドレスもページのタイトルもページ本文も読みません。何を外へ出すかは、そのメッセージが来たタブのURLを見て service worker が決めます。`<style>` を1つとボタン1個を包む要素を1つ足す以外は何も変更しません（包む要素はコンテナに合わせて `<li>` または `<div>`）。GitHub側の要素は消しも置き換えもしません。 |
 | `https://x.com/*` | **`keydown` を1つ登録し、押されたキーの `event.key` を毎回見ます。修飾なしの Escape 以外は直ちに無視します。** 拡張が開いた共有用ウィンドウを閉じるためです。入力欄の値やページの中身は読まず、保存も集計も送信もしません。 |
 
 X側のスクリプトは、意図的にページの中身を見ません。閉じる前に、service worker へ「このウィンドウは拡張が開いたものか」とだけ尋ねます。根拠として使うのは、開いた時点で記録したウィンドウIDだけです。**一致しない場合（＝あなたが自分で開いたXのタブはすべてこれに当たります）、何もしません。** 通常のXのタブを閉じることはできません。
