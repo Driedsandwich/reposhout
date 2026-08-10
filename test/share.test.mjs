@@ -378,6 +378,77 @@ test('セグメントの数と型を1つずつ崩すと、共有できなくな�
   for (const u of broken) assert.equal(GXS.buildShare(u), null, `共有できてしまう: ${u}`);
 });
 
+/* ============================================================
+ * 出口の境界（第16回監査 R16-001 / R16-002）
+ * ============================================================ */
+
+test('GitHubの機能ページを、リポジトリとして共有しない（R16-001）', () => {
+  /*
+   * 第16回監査 R16-001。同じ境界を2つの配列で持っていた。
+   * routeOf は SENSITIVE_FIRST_SEGMENTS を見るのに、出荷の判定をする
+   * structuralRoute は RESERVED_OWNERS しか見ていなかったので、
+   * 両方に載っていない語（enterprises・oauth・user など）が
+   * 「所有者名」として通り、`enterprises/acme` を投稿していた（配布ZIPで再現）。
+   */
+  const shouldRefuse = [
+    'https://github.com/enterprises/acme',        // 公式のenterprise account URL
+    'https://github.com/invitations/whatever',
+    'https://github.com/oauth/authorize',
+    'https://github.com/user/keys',
+    'https://github.com/billing/plans',
+    'https://github.com/devices/x',
+    'https://github.com/password/x',
+    'https://github.com/session/x',
+    'https://github.com/sudo/x',
+    'https://github.com/verify/x'
+  ];
+  for (const u of shouldRefuse) {
+    assert.equal(GXS.buildShare(u), null, `リポジトリとして共有してしまう: ${u}`);
+  }
+});
+
+test('2つの配列の差が、境界の穴にならない（R16-001の一般形）', () => {
+  /*
+   * 個別に列挙するだけでは、次に語が増えたときまた片方だけに入る。
+   * **どちらの表に載っている語も**、所有者名として通らないことを見る。
+   */
+  const src = readShareSource();
+  const listOf = (name) => {
+    const m = src.match(new RegExp(`var ${name} = \\[([\\s\\S]*?)\\];`));
+    assert.ok(m, `${name} が読めない`);
+    return m[1].match(/'([^']+)'/g).map((s) => s.slice(1, -1));
+  };
+  const names = [...new Set([...listOf('RESERVED_OWNERS'), ...listOf('SENSITIVE_FIRST_SEGMENTS')])];
+  assert.ok(names.length > 30, `語が少なすぎる: ${names.length}`);
+  /* 単一の正本が、両方の表を漏れなく含んでいること */
+  for (const n of names) {
+    assert.ok(GXS.NON_REPOSITORY_TOP_LEVEL.includes(n.toLowerCase()),
+      `単一の一覧に ${n} が入っていない`);
+  }
+  for (const n of names) {
+    assert.equal(GXS.buildShare(`https://github.com/${n}/anything`), null,
+      `所有者名として通してしまう: ${n}`);
+    /* 大文字・パーセントエンコードで回り込めない */
+    assert.equal(GXS.buildShare(`https://github.com/${n.toUpperCase()}/anything`), null,
+      `大文字で通してしまう: ${n}`);
+  }
+  /* 対照: 普通のリポジトリは共有できる */
+  assert.ok(GXS.buildShare('https://github.com/Driedsandwich/reposhout'), '普通のリポジトリを拒否した');
+});
+
+test('所有者名の型が、GitHubの規則どおり（R16-001）', () => {
+  /* GitHubは末尾ハイフン・連続ハイフンを許さない。型のほうを寄せる */
+  const bad = ['o-', 'a--b', '-o', 'a'.repeat(40)];
+  for (const owner of bad) {
+    assert.equal(GXS.buildShare(`https://github.com/${owner}/r`), null,
+      `所有者名として通してしまう: ${owner}`);
+  }
+  const good = ['o', 'a-b', 'Driedsandwich', 'a'.repeat(39), '0abc'];
+  for (const owner of good) {
+    assert.ok(GXS.buildShare(`https://github.com/${owner}/r`), `普通の所有者名を拒否した: ${owner}`);
+  }
+});
+
 test('素の % を含む普通のページを、拒否しない（R12-002の回帰）', () => {
   /*
    * 第12回で、`?q=100%25 coverage` のような素の % を含む検索を拒否していた

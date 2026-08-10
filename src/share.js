@@ -61,6 +61,40 @@
     'invitations', 'account_verifications', 'password', 'security'
   ];
 
+  /*
+   * 第16回監査 R16-001。上の2つは**同じ1つの境界**を別々の配列で持っていた。
+   * routeOf は SENSITIVE_FIRST_SEGMENTS を見るのに、出荷の判定をする
+   * structuralRoute は RESERVED_OWNERS しか見ていなかったので、片方にしか
+   * 載っていない語（enterprises・oauth・user・billing など）が「所有者名」として
+   * 通り、`https://github.com/enterprises/acme` を「enterprises/acme という
+   * リポジトリ」として投稿していた（配布ZIP 97bcf769… で再現）。
+   *
+   * **判定する場所は1つにする。** 語を足すときもここだけを見ればよい形にする。
+   *
+   * 限界も書いておく: これは**拒否する語の一覧**であって、「所有者名として実在する」
+   * ことの証明ではない。GitHubが新しい機能ページを増やせば、その語は次の監査まで
+   * 素通りする。ネットワークを見ずに所有者名を積極的に証明する手段が無いので、
+   * 現状はこの形が上限——だからこそ2つに分けて持たない。
+   */
+  var NON_REPOSITORY_TOP_LEVEL = (function () {
+    var extra = [
+      'advisories', 'security-advisories', 'copilot', 'github-copilot',
+      'contact', 'signin', 'sign_in', 'sign_up'
+    ];
+    var all = RESERVED_OWNERS.concat(SENSITIVE_FIRST_SEGMENTS).concat(extra);
+    var out = [];
+    for (var i = 0; i < all.length; i++) {
+      var v = all[i].toLowerCase();
+      if (out.indexOf(v) === -1) out.push(v);
+    }
+    return out;
+  })();
+
+  function isNonRepositoryTopLevel(name) {
+    return typeof name === 'string' &&
+      NON_REPOSITORY_TOP_LEVEL.indexOf(name.toLowerCase()) !== -1;
+  }
+
   /* /orgs/<org>/... のうち管理系。組織トップやDiscussionは対象外 */
   var SENSITIVE_ORG_SECTIONS = [
     'settings', 'billing', 'security', 'people', 'teams', 'sso', 'saml',
@@ -450,8 +484,8 @@
     if (s0 === 'orgs' && seg.length >= 3 &&
         SENSITIVE_ORG_SECTIONS.indexOf(seg[2].toLowerCase()) !== -1) return 'sensitive';
     if (s0 === 'search') return 'search';
-    if (seg.length === 1) return RESERVED_OWNERS.indexOf(s0) !== -1 ? 'other' : 'user';
-    if (RESERVED_OWNERS.indexOf(s0) !== -1) return 'other';
+    if (seg.length === 1) return isNonRepositoryTopLevel(s0) ? 'other' : 'user';
+    if (isNonRepositoryTopLevel(s0)) return 'other';
     if (seg.length === 2) return 'repo';
 
     var s2 = seg[2].toLowerCase();
@@ -725,8 +759,15 @@
    * 資格情報の検出器は残すが、**主たる境界ではなく多層防御**として扱う。
    */
 
-  /* GitHub の所有者名・リポジトリ名として在りうる形。'=' や ':' は入らない */
-  var OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+  /*
+   * GitHub の所有者名・リポジトリ名として在りうる形。'=' や ':' は入らない。
+   *
+   * 所有者名は GitHub の規則に合わせる（第16回監査 R16-001）——英数字とハイフン、
+   * 39文字まで、**ハイフンで終わらない・ハイフンを続けない**。以前は
+   * `[A-Za-z0-9-]{0,38}` だったので `a--b` や `o-` まで所有者名として通していた。
+   * ハイフンの後ろに英数字を要求することで、両方を1つの形で落とす。
+   */
+  var OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
   var REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
   var POSITIVE_INT_RE = /^[1-9][0-9]{0,9}$/;
   var SHA40_RE = /^[0-9a-f]{40}$/;
@@ -758,7 +799,7 @@
     var owner = seg[0];
     var repo = seg[1];
     if (!OWNER_RE.test(owner) || !REPO_RE.test(repo)) return null;
-    if (RESERVED_OWNERS.indexOf(owner.toLowerCase()) !== -1) return null;
+    if (isNonRepositoryTopLevel(owner)) return null;      // 第16回監査 R16-001（判定は1か所）
     if (repo === '.' || repo === '..') return null;
     var full = owner + '/' + repo;
 
@@ -998,6 +1039,7 @@
     routeOf: routeOf,
     weightedLength: weightedLength,
     MAX_WEIGHTED_TWEET: MAX_WEIGHTED_TWEET,
-    URL_WEIGHT: URL_WEIGHT
+    URL_WEIGHT: URL_WEIGHT,
+    NON_REPOSITORY_TOP_LEVEL: NON_REPOSITORY_TOP_LEVEL
   };
 })(typeof globalThis !== 'undefined' ? globalThis : self);
