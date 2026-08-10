@@ -30,5 +30,9 @@
   "noticeOpenFailed": {
     "message": "Xの投稿画面を開けませんでした。Xへは何も送っていません。",
     "description": "Same as noticeOpenFailed (Japanese)."
+  },
+  "noticeReloadRequired": {
+    "message": "拡張機能が更新されました。このGitHubタブを再読み込みしてから、もう一度お試しください。Xへは何も送っていません。",
+    "description": "Same as noticeReloadRequired (Japanese)."
   }
 }

@@ -12,8 +12,12 @@
  * 名前は公開リポジトリに書かれた定数で、どのページからでも同じ名前の
  * ウィンドウを作れるため、所有権の根拠にならない（2026-08-04の監査で指摘）。
  *
- * ここは tab.url と tab.title しか使わない。DOMを読まないので、
+ * ここは tab.url しか使わない。DOMもページのタイトルも読まないので、
  * GitHubがUIをどう作り替えても影響を受けない。
+ *
+ * 第16回監査 R16-003 以降、**外へ何を出すかを決めるのはこの file だけ**。
+ * 画面内Shareボタンも「押されました」だけを送ってきて、URLも投稿文も
+ * ここで組み立てる。content script は判断を持たない。
  */
 'use strict';
 
@@ -166,6 +170,7 @@ var badgeTimers = {};
 function titleFor(reason) {
   if (reason === 'credential_like') return chrome.i18n.getMessage('noticeCredential');
   if (reason === 'open_failed') return chrome.i18n.getMessage('noticeOpenFailed');
+  if (reason === 'reload_required') return chrome.i18n.getMessage('noticeReloadRequired');
   return chrome.i18n.getMessage('noticeUnsupported');
 }
 
@@ -236,14 +241,24 @@ async function shareTab(tab) {
   return shareResolvedTab(fallback);
 }
 
-/* ここから先は、渡された1つのタブだけを見る（URL・タイトル・案内先・判断） */
+/* 送信元が github.com のタブか（他サイトからの依頼で窓を開かない） */
+function isGitHubTab(tab) {
+  try {
+    return !!(tab && tab.url) && new URL(tab.url).origin === 'https://github.com';
+  } catch (e) {
+    return false;
+  }
+}
+
+/* ここから先は、渡された1つのタブだけを見る（URL・案内先・判断） */
 async function shareResolvedTab(tab) {
   // 文面の組み立てで例外が出ても無反応にせず、URLだけの共有にフォールバックする
   var share = null;
   var threw = false;
   var reason = null;
   try {
-    var res = self.GXS.buildShareResult(tab.url, tab.title);
+    /* タイトルは渡さない（第15回監査 R15-001 で使わなくなった・第16回監査 R16-004） */
+    var res = self.GXS.buildShareResult(tab.url);
     if (res && res.ok) share = res.share;
     else if (res) reason = res.reason;
   } catch (e) {
@@ -257,13 +272,13 @@ async function shareResolvedTab(tab) {
      * （第14回監査 R14-003。以前はここで黙って終わっていた）。
      */
     await announceRefusal(tab.id, reason);
-    return;
+    return { opened: false, reason: reason };
   }
   if (!share) {
     // フォールバックも本体と同じURL方針を使う（別実装を残さない）。
     // null が返るのは機微なページなので、その場合も何も開かない。
     var bare = self.GXS.fallbackUrl(tab.url);
-    if (!bare) return;
+    if (!bare) return { opened: false, reason: 'unsupported' };
     share = { intentUrl: self.GXS.intentUrlFor('', bare) };
   }
 
@@ -272,7 +287,11 @@ async function shareResolvedTab(tab) {
    * とき（どちらの API も例外）に、**何も起きないまま終わって**いた。
    */
   var opened = await openShareWindow(share.intentUrl);
-  if (!opened || opened.opened === 'none') await announceRefusal(tab.id, 'open_failed');
+  if (!opened || opened.opened === 'none') {
+    await announceRefusal(tab.id, 'open_failed');
+    return { opened: false, reason: 'open_failed' };
+  }
+  return { opened: true };
 }
 
 /* 渡されなかったときだけ、いまのタブを引き直す */
@@ -307,23 +326,51 @@ chrome.commands.onCommand.addListener(function (command, tab) {
 chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
   if (!msg || !sender) return false;
 
-  if (msg.type === 'gxs:open-share') {
-    // 送信元が github.com のタブであることを確かめる（他サイトからの依頼で窓を開かない）
-    var from = sender.tab && sender.tab.url;
-    var okOrigin = false;
-    try {
-      okOrigin = !!from && new URL(from).origin === 'https://github.com';
-    } catch (e) {
-      okOrigin = false;
-    }
-    if (!okOrigin || typeof msg.url !== 'string' || msg.url.indexOf('https://x.com/intent/') !== 0) {
+  /*
+   * 画面内Shareボタンからの依頼（第16回監査 R16-003）。
+   *
+   * **渡されるのは「押されました」だけ。** 何を出すかはここで決める。
+   * 送信元のタブのURLへ、いまの方針（GXS.buildShareResult）をその場で当てる。
+   * ツールバー・ショートカットと同じ shareResolvedTab を通るので、
+   * 3つの入口で方針が食い違うことがない。
+   */
+  if (msg.type === 'gxs:request-share') {
+    if (!isGitHubTab(sender.tab)) {
       sendResponse({ ok: false });
       return false;
     }
-    openShareWindow(msg.url).then(function (r) {
-      try { sendResponse({ ok: r.opened !== 'none', opened: r.opened }); } catch (e) {}
+    shareResolvedTab(sender.tab).then(function (r) {
+      try { sendResponse({ ok: !!(r && r.opened), reason: r && r.reason }); } catch (e) {}
+    }, function () {
+      try { sendResponse({ ok: false }); } catch (e) {}
     });
     return true; // 非同期応答
+  }
+
+  /*
+   * 1.1.8以前の content script が送ってくる形。**渡されたURLは使わない。**
+   *
+   * 以前はここで msg.url をそのまま開いていた。確かめていたのは
+   * 「送信元が github.com」と「x.com/intent で始まる」の2つだけで、中身は
+   * 見ていない。監査は実配布ZIPで、資格情報を載せた完成品がそのまま開くことを
+   * 再現している。
+   *
+   * 返す ok:true は「開いた」ではなく「**こちらで処理したので、そちらで
+   * window.open するな**」の意味。古い content script は !res.ok で素の
+   * window.open へ倒れる作りなので、ここで false を返すと、止めたはずの
+   * 古い方針のURLがかえって開いてしまう。
+   */
+  if (msg.type === 'gxs:open-share') {
+    var legacyTab = sender.tab;
+    var answer = function () {
+      try { sendResponse({ ok: true, opened: 'none', legacy: true }); } catch (e) {}
+    };
+    if (legacyTab && typeof legacyTab.id === 'number') {
+      announceRefusal(legacyTab.id, 'reload_required').then(answer, answer);
+      return true; // 非同期応答
+    }
+    answer();
+    return false;
   }
 
   if (msg.type === 'gxs:is-share-window') {

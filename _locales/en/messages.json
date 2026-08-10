@@ -30,5 +30,9 @@
   "noticeOpenFailed": {
     "message": "The X composer could not be opened. Nothing was sent to X.",
     "description": "Shown when both the popup window and the tab could not be opened. Must not include the URL or any value."
+  },
+  "noticeReloadRequired": {
+    "message": "The extension was updated. Reload this GitHub tab and try again. Nothing was sent to X.",
+    "description": "Shown when the page still runs an old content script after an update (R16-003). Must not include the URL or any value."
   }
 }

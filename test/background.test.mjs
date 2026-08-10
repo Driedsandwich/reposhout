@@ -29,6 +29,7 @@ function mount({ queryResult = null, contentScript = true,
    * 「6000ms 後に消える」ことは、実時間を待たずに**予約を実行して**確かめる。
    * 前のテストは予約が入ったことしか見ておらず、消えることを何も確かめていなかった。
    */
+  const listeners = [];
   const timers = new Map();
   let seq = 0, now = 0;
   const fakeSetTimeout = (fn, ms) => { timers.set(++seq, { fn, at: now + ms }); return seq; };
@@ -48,7 +49,9 @@ function mount({ queryResult = null, contentScript = true,
     },
     commands: { onCommand: { addListener() {} } },
     runtime: {
-      onMessage: { addListener() {} }, onInstalled: { addListener() {} },
+      /* 第16回監査 R16-003。メッセージの入口を実際に呼べるようにする */
+      onMessage: { addListener(fn) { listeners.push(fn); } },
+      onInstalled: { addListener() {} },
       onStartup: { addListener() {} }, lastError: null,
       getURL: (p) => `chrome-extension://test/${p}`
     },
@@ -89,7 +92,25 @@ function mount({ queryResult = null, contentScript = true,
   vm.createContext(ctx);
   vm.runInContext(SHARE, ctx, { filename: 'share.js' });
   vm.runInContext(BG, ctx, { filename: 'background.js' });
-  return { bg: ctx.GXS_BG, log, advance, pending: () => timers.size };
+
+  /*
+   * メッセージを実際に流す。返事は Promise で受ける
+   * （非同期の応答は listener が true を返して後から sendResponse を呼ぶ形）。
+   */
+  function send(msg, sender) {
+    return new Promise((resolve) => {
+      let answered = false;
+      const respond = (r) => { if (!answered) { answered = true; resolve(r); } };
+      let async = false;
+      for (const fn of listeners) {
+        if (fn(msg, sender, respond) === true) async = true;
+      }
+      /* 応答が来ないまま終わる形も、待ち続けずに拾えるようにする */
+      if (!async) setImmediate(() => respond(undefined));
+      else { const t = setTimeout(() => respond(undefined), 200); if (t.unref) t.unref(); }
+    });
+  }
+  return { bg: ctx.GXS_BG, log, advance, send, pending: () => timers.size };
 }
 
 const TAB_A_NO_URL = { id: 1, title: 'A' };
@@ -250,4 +271,132 @@ test('タブIDが数でなければ、案内もバッジも試さない（R14-00
   assert.equal(await bg.announceRefusal(undefined, 'unsupported'), 'none');
   assert.deepEqual(log.notified, []);
   assert.deepEqual(log.badges, []);
+});
+
+/* ---- 出て行くものを決めるのは service worker だけ（第16回監査 R16-003） ---- */
+
+const GH_SENDER = { tab: { id: 11, url: 'https://github.com/a/repo', title: 'GitHub - a/repo · GitHub' } };
+
+/*
+ * 「もう書いていない」を確かめる検査は、**コードだけ**に当てる。
+ * 注釈まで見ると「以前は window.open で開いていた」と経緯を書いた行で落ちる——
+ * 落ちる理由が実装と関係なくなり、経緯を書けなくなる。
+ * 消しすぎ・消せなさすぎに気づけるよう、この関数自身も下で検査する。
+ */
+function stripComments(src) {
+  return src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+}
+
+test('注釈を外す処理そのものが、正しく動いている（上の検査の土台）', () => {
+  const sample = [
+    '/* window.open( を注釈で書いた行 */',
+    'var a = 1;   // document.title と注釈で書いた行',
+    'var keep = "https://x.com/intent/post";'
+  ].join('\n');
+  const out = stripComments(sample);
+  assert.ok(!/window\.open\s*\(/.test(out), '注釈が残っている');
+  assert.ok(!/document\.title/.test(out), '行末の注釈が残っている');
+  assert.ok(/x\.com\/intent/.test(out), 'コードまで消している');
+  assert.ok(/var a = 1;/.test(out), 'コードまで消している');
+  /* 実物にも当てて、何かは必ず消えていること（空振りで通らない） */
+  const real = readFileSync(join(ROOT, 'src/content.js'), 'utf8');
+  assert.ok(stripComments(real).length < real.length, '実物から何も消えていない');
+  assert.ok(/function requestShare/.test(stripComments(real)), '実物のコードまで消している');
+});
+
+test('完成済みのXのURLを渡されても、それは開かない（R16-003）', async () => {
+  /*
+   * 第16回監査 R16-003。以前は「送信元が github.com」「x.com/intent で始まる」
+   * だけを見て、渡されたURLをそのまま開いていた。中身は見ていないので、
+   * 古い content script が古い方針で作ったURL（タイトル入り・任意のパス）も開けた。
+   * 監査は実配布ZIPで、資格情報を載せた完成品が popup として開くことを再現している。
+   */
+  const { log, send } = mount({ contentScript: true });
+  const evil = 'https://x.com/intent/post?text=access_token%3Ddummy-secret-value' +
+               '&url=https%3A%2F%2Fgithub.com%2Fo%2Fr%2Fblob%2Fmain%2Fprivate';
+  await send({ type: 'gxs:open-share', url: evil }, GH_SENDER);
+  const all = JSON.stringify(log.opened) + JSON.stringify(log.created);
+  assert.ok(!all.includes('dummy-secret-value'), `渡されたURLを開いた: ${all}`);
+  assert.ok(!all.includes('blob'), `渡されたパスを開いた: ${all}`);
+  assert.deepEqual(log.opened, [], `何かを開いている: ${log.opened.join(' | ')}`);
+});
+
+test('古い形の依頼には、再読み込みの案内を出す（R16-003）', async () => {
+  const { log, send } = mount({ contentScript: true });
+  const res = await send({ type: 'gxs:open-share', url: 'https://x.com/intent/post?url=x' }, GH_SENDER);
+  assert.equal(log.notified.length, 1, `案内していない: ${JSON.stringify(log.notified)}`);
+  assert.equal(log.notified[0].tabId, 11);
+  assert.equal(log.notified[0].reason, 'reload_required');
+  /*
+   * 返事は ok:true。これは「開いた」ではなく「こちらで処理したので
+   * そちらで window.open するな」の意味。古い content script は
+   * !res.ok で直接 window.open へ倒れるため、false を返すと
+   * **古い方針のURLがそのまま開いてしまう**。
+   */
+  assert.equal(res.ok, true, `古い呼び出し元が直接開く形の返事になっている: ${JSON.stringify(res)}`);
+  assert.equal(res.opened, 'none', '開いたことにしている');
+});
+
+test('新しい依頼は、送信元のタブのURLから組み直して開く（R16-003）', async () => {
+  const { log, send } = mount({ contentScript: true });
+  const res = await send({ type: 'gxs:request-share' }, GH_SENDER);
+  assert.equal(res.ok, true, `共有できていない: ${JSON.stringify(res)}`);
+  assert.equal(log.opened.length, 1, `開いた数が違う: ${JSON.stringify(log.opened)}`);
+  const opened = decodeURIComponent(log.opened[0]);
+  assert.ok(opened.startsWith('https://x.com/intent/'), opened);
+  assert.ok(opened.includes('https://github.com/a/repo'), `送信元のURLで組んでいない: ${opened}`);
+  assert.ok(opened.includes('a/repo'), opened);
+  /* タイトルは送らない（第15回監査 R15-001 が service worker 経路でも効いている） */
+  assert.ok(!opened.includes('GitHub - '), `タイトルが混ざっている: ${opened}`);
+});
+
+test('依頼でも、いまの方針で共有できないページは開かない（R16-003の核心）', async () => {
+  /*
+   * 「service worker が組み直している」ことの証拠。呼び出し元は何も指定していないので、
+   * ここで断れるのは **いまの方針をこの場で当てているから**。
+   */
+  const cases = [
+    ['https://github.com/o/r/blob/main/secret.env', 'unsupported'],
+    ['https://github.com/enterprises/acme', 'sensitive_route'],      // R16-001（認証・組織管理側）
+    ['https://github.com/topics/rust', 'unsupported'],               // R16-001（機能ページ側）
+    ['https://github.com/o/r/issues?state=open&state=closed', 'ambiguous_query'] // R16-002
+  ];
+  for (const [url, want] of cases) {
+    const { log, send } = mount({ contentScript: true });
+    const res = await send({ type: 'gxs:request-share' }, { tab: { id: 12, url: url } });
+    assert.equal(res.ok, false, `開いてしまった: ${url}`);
+    assert.deepEqual(log.opened, [], `開いてしまった: ${url}`);
+    assert.equal(log.notified.length, 1, `理由を伝えていない: ${url}`);
+    assert.equal(log.notified[0].reason, want, `理由が違う（${url}）`);
+  }
+});
+
+test('github.com のタブ以外からの依頼には応じない（R16-003）', async () => {
+  for (const sender of [{ tab: { id: 13, url: 'https://example.com/a/b' } },
+                        { tab: { id: 13 } },
+                        {}]) {
+    const { log, send } = mount({ contentScript: true });
+    const res = await send({ type: 'gxs:request-share' }, sender);
+    assert.equal(res && res.ok, false, `応じてしまった: ${JSON.stringify(sender)}`);
+    assert.deepEqual(log.opened, [], `開いてしまった: ${JSON.stringify(sender)}`);
+  }
+});
+
+test('content script 側に、Xを直接開く道が残っていない（R16-003）', () => {
+  /*
+   * 拡張を更新した直後、開きっぱなしのタブには古い content script が残る。
+   * そこに window.open が残っていると、service worker の方針を通らずに
+   * 古い方針のURLが開く。**次に更新するときのために、いま消しておく。**
+   */
+  const src = stripComments(readFileSync(join(ROOT, 'src/content.js'), 'utf8'));
+  assert.ok(!/window\.open\s*\(/.test(src), 'content.js に window.open が残っている');
+  assert.ok(!/x\.com\/intent/.test(src), 'content.js がXのURLを組み立てている');
+  assert.ok(!/document\.title/.test(src), 'content.js がページのタイトルを読んでいる');
+  assert.ok(/gxs:request-share/.test(src), '新しい依頼の形になっていない');
+  assert.ok(!/gxs:open-share/.test(src), 'content.js が古い形で送っている');
+  /* service worker 側も、渡されたURLを使っていない */
+  const bg = stripComments(readFileSync(join(ROOT, 'src/background.js'), 'utf8'));
+  assert.ok(!/openShareWindow\(\s*msg\.url\s*\)/.test(bg), '渡されたURLを開いている');
+  assert.ok(!/tab\.title/.test(bg), 'service worker がタイトルを読んでいる');
+  assert.ok(!/\bmsg\.url\b/.test(bg), 'service worker が渡されたURLを見ている');
 });
