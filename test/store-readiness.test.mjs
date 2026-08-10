@@ -185,11 +185,33 @@ const GOOD_CI = {
   headSha: 'a'.repeat(40), runId: '999', jobs: { test: 'success', windows: 'success' }
 };
 
+/*
+ * X の Web Intent の判断が「確認済み」になっている状態（第16回監査 R16-005）。
+ * **これはテスト用の作り物**で、リポジトリの正本
+ * store/WEB_INTENT_POLICY_DECISION.json は pending のまま。
+ * 回答は本人がストアへ聞いて入れる。
+ */
+function goodWebIntent(cand, over = {}) {
+  return {
+    status: 'confirmed_allowed',
+    askedOn: '2026-08-01',
+    question: '（テスト用の作り物）Web Intent のクエリで共有してよいか',
+    responseOn: '2026-08-05',
+    response: '（テスト用の作り物）差し支えない',
+    ticket: 'TEST-0000',
+    decision: 'proceed',
+    decidedBy: 'owner',
+    appliesToVersion: cand.version,
+    ...over
+  };
+}
+
 function strictInputs(over = {}) {
   const cand = over.candidate || readyCandidate();
   const docs = docsFor(cand);
   return {
     mode: 'strict',
+    webIntentDecision: goodWebIntent(cand),
     remote: { ...GOOD_REMOTE },
     metadataCi: { ...GOOD_CI },
     runtime: goodRuntime(cand),
@@ -794,4 +816,62 @@ test('期待するワークフローの run が無ければ、何も選ばない
   assert.equal(pickPushRun(RUNS.filter((r) => r.path !== WANT.workflowPath), WANT), null);
   assert.equal(pickPushRun([], WANT), null);
   assert.equal(pickPushRun(null, WANT), null);
+});
+
+/* ---- X の Web Intent の判断（第16回監査 R16-005） --------------------- */
+
+test('strict: Web Intent の判断が未確認なら通らない（R16-005）', () => {
+  /*
+   * 第16回監査 R16-005。この件が宙に浮いたままでも、本人確認と外部監査さえ
+   * 埋まれば strict は通ってしまう状態だった（＝提出できてしまう）。
+   */
+  const cand = readyCandidate();
+  for (const status of ['pending', 'refused', 'unknown-value']) {
+    const r = validateStoreReadiness(strictInputs({
+      webIntentDecision: goodWebIntent(cand, { status })
+    }));
+    assert.ok(r.problems.some((p) => p.includes('Web Intent')),
+      `status=${status} で通っている: ${r.problems.join(' / ')}`);
+  }
+});
+
+test('strict: Web Intent の判断の正本が無ければ通らない（R16-005）', () => {
+  const r = validateStoreReadiness(strictInputs({ webIntentDecision: null }));
+  assert.ok(r.problems.some((p) => p.includes('Web Intent の判断の正本がある')),
+    `正本が無いのに通っている: ${r.problems.join(' / ')}`);
+});
+
+test('strict: 確認済みと書くだけで、中身が空なら通らない（R16-005）', () => {
+  const cand = readyCandidate();
+  const holes = [
+    { askedOn: null }, { question: '' }, { responseOn: null }, { response: '' },
+    { decidedBy: '' }, { appliesToVersion: '9.9.9' },
+    { responseOn: '2099-01-01' }            // 未来の回答日
+  ];
+  for (const hole of holes) {
+    const r = validateStoreReadiness(strictInputs({
+      webIntentDecision: goodWebIntent(cand, hole)
+    }));
+    assert.ok(r.problems.some((p) => p.includes('Web Intent')),
+      `${JSON.stringify(hole)} で通っている: ${r.problems.join(' / ')}`);
+  }
+});
+
+test('preflight では Web Intent の判断を求めない（関門は提出直前だけ）', () => {
+  const r = validateStoreReadiness(preflightInputs({ webIntentDecision: null }));
+  assert.ok(!r.problems.some((p) => p.includes('Web Intent')),
+    `preflight で止めている: ${r.problems.join(' / ')}`);
+});
+
+test('リポジトリの Web Intent の正本は、まだ本人の回答が入っていない（捏造防止）', () => {
+  /*
+   * ストアへ聞くのも、答えを入れるのも本人の作業。
+   * **こちらが埋めてしまっていないこと**を、実ファイルで見張る。
+   */
+  const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
+  assert.equal(wi.status, 'pending', `回答が入っている: ${wi.status}`);
+  for (const k of ['askedOn', 'question', 'responseOn', 'response', 'ticket', 'decision', 'decidedBy']) {
+    assert.equal(wi[k], null, `${k} が埋まっている: ${JSON.stringify(wi[k])}`);
+  }
+  assert.equal(wi.appliesToVersion, JSON.parse(read('manifest.json')).version, '版がずれている');
 });

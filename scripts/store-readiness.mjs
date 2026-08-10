@@ -86,6 +86,12 @@ export function validateStoreReadiness(input) {
      */
     runtime = null,
     expectedWorkflowPath = '.github/workflows/ci.yml',
+    /*
+     * X の Web Intent へクエリで渡してよいかのストア側の判断
+     * （第15回監査 R15-002 / 第16回監査 R16-005）。
+     * {status, askedOn, question, responseOn, response, ticket, decision, decidedBy}
+     */
+    webIntentDecision = null,
     sha256, readZipStrict = null
   } = input;
 
@@ -483,6 +489,40 @@ export function validateStoreReadiness(input) {
     check('文書側に未コミットの変更が無い',
       Boolean(metadata) && metadata.dirty === false,
       metadata ? '未コミットの変更がある' : '同上');
+  }
+
+  /* ---- 11. X の Web Intent へクエリで渡してよいかの判断 ----------------
+   *
+   * 第15回監査 R15-002 / 第16回監査 R16-005。
+   * こちらでは「違反ではない」と断定できる材料が無いので、Chrome ウェブストアの
+   * Developer Support の回答で決める。**回答が無いあいだは提出可にしない。**
+   * 以前は、この件が未解決でも本人確認と外部監査さえ埋まれば strict が通った。
+   */
+  if (strict) {
+    const wi = webIntentDecision;
+    check('Web Intent の判断の正本がある', Boolean(wi),
+      'store/WEB_INTENT_POLICY_DECISION.json を渡していない');
+    if (wi) {
+      check('Web Intent をクエリで渡してよいと確認できている',
+        wi.status === 'confirmed_allowed',
+        `ストアの回答が未確認（status=${wi.status}）。本人が Developer Support へ確認する`);
+      /* 回答があると言うなら、いつ・何を聞いて・何と返ってきたかが要る */
+      if (wi.status === 'confirmed_allowed') {
+        check('Web Intent の判断に、聞いた日と設問がある',
+          isRealDate(wi.askedOn || '') && !blank(wi.question),
+          `askedOn=${wi.askedOn} / question=${blank(wi.question) ? '空欄' : 'あり'}`);
+        check('Web Intent の判断に、回答日と回答がある',
+          isRealDate(wi.responseOn || '') && !blank(wi.response),
+          `responseOn=${wi.responseOn} / response=${blank(wi.response) ? '空欄' : 'あり'}`);
+        check('Web Intent の回答が未来の日付でない',
+          !isRealDate(today) || !isRealDate(wi.responseOn || '') || wi.responseOn <= today,
+          `${wi.responseOn} が今日 ${today} より後`);
+        check('Web Intent の判断を誰がしたか', !blank(wi.decidedBy), '空欄');
+        check('Web Intent の判断が、この版のものである',
+          wi.appliesToVersion === candidate.version,
+          `${wi.appliesToVersion} ≠ ${candidate.version}`);
+      }
+    }
   }
 
   return { problems, ok, mode, artifactChecked, auditChecked };
