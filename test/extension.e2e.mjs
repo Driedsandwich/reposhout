@@ -395,6 +395,39 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
     await cdp.send('Target.closeTarget', { targetId: r.pageId });
   });
 
+  it('実拡張でも、GitHubの機能ページと重複クエリでは開かない（R16-001 / R16-002）', async () => {
+    /*
+     * 第16回監査。単体テストは vm の中の share.js を見ているので、
+     * **実際に読み込まれた拡張**でも同じ境界になっていることを見る。
+     * 依頼を出すのは content script だが、断る判断をするのは service worker——
+     * ここが動いているなら、判断が service worker 側にあることの証拠にもなる。
+     */
+    for (const url of ['https://github.com/enterprises/acme',        // R16-001
+                       'https://github.com/o/r/issues?state=open&state=closed']) { // R16-002
+      const r = await clickShareOn(url);
+      assert.equal(r.opened.length, 0,
+        `投稿画面が開いた（${url}）: ${r.opened.map((t) => t.url).join(' | ')}`);
+      const sid = await attach(r.pageId);
+      await cdp.send('Runtime.enable', {}, sid);
+      const noticeRes = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const el = document.getElementById('gxs-notice');
+          return JSON.stringify(el ? el.textContent : null); })()`,
+        returnByValue: true
+      }, sid);
+      const notice = JSON.parse(noticeRes.result.value);
+      assert.ok(notice && notice.length > 0, `黙って終わっている（${url}）`);
+      assert.ok(!notice.includes('github.com'), `案内にURLが出ている（${url}）`);
+      await cdp.send('Target.closeTarget', { targetId: r.pageId });
+    }
+    /* 対照: 同じ経路・同じ押し方で、重複していない同じクエリなら開く */
+    const ok = await clickShareOn('https://github.com/o/r/issues?state=open');
+    assert.equal(ok.opened.length, 1,
+      `対照が成立していない（この経路自体が動いていない）: ${ok.opened.length} 個`);
+    await waitLoaded(ok.opened[0].targetId);
+    assert.ok(await escapeUntilClosed(ok.opened[0].targetId), '対照の窓が閉じない');
+    await cdp.send('Target.closeTarget', { targetId: ok.pageId });
+  });
+
   /*
    * 第13回監査 R13-003。ツールバーとショートカットは、Chrome が
    * **そのとき対象になったタブ**を渡してくる。以前はそれを捨てて

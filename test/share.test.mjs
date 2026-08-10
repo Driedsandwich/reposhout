@@ -223,7 +223,8 @@ test('判定の理由が、値を含まない決まった語で返る（R12-002�
     ['https://github.com/settings/tokens', 'sensitive_route'],
     ['https://github.com/o/r/blob/main/a.js', 'unsupported']
   ];
-  const allowed = ['credential_like', 'sensitive_route', 'unsupported', 'malformed_url'];
+  const allowed = ['credential_like', 'sensitive_route', 'unsupported', 'malformed_url',
+                   'ambiguous_query', 'overlong_url'];
   for (const [u, want] of cases) {
     const r = GXS.buildShareResult(u);
     assert.equal(r.ok, false, u);
@@ -447,6 +448,90 @@ test('所有者名の型が、GitHubの規則どおり（R16-001）', () => {
   for (const owner of good) {
     assert.ok(GXS.buildShare(`https://github.com/${owner}/r`), `普通の所有者名を拒否した: ${owner}`);
   }
+});
+
+test('同じクエリを繰り返しても、任意長の列を運べない（R16-002）', () => {
+  /*
+   * 第16回監査 R16-002。値は int / bool / enum に絞っていたが、
+   * **同じキーが何回出てもすべて残していた**ので、open/closed の並びで
+   * 任意長のビット列をXへ渡せた（1,000回で12,029文字・配布ZIPで再現）。
+   */
+  for (const n of [2, 10, 100, 1000]) {
+    const q = Array.from({ length: n }, (_, i) => 'state=' + (i % 2 ? 'open' : 'closed')).join('&');
+    const r = GXS.canonicalResult(`https://github.com/o/r/issues?${q}`);
+    assert.equal(r.ok, false, `${n}回の繰り返しを通している`);
+    assert.equal(r.reason, 'ambiguous_query', `理由が違う（${n}回）: ${r.reason}`);
+  }
+});
+
+test('クエリの出力は、入力の並び順で変わらない（R16-002）', () => {
+  const a = GXS.canonicalUrl('https://github.com/o/r/issues?page=2&state=open', null);
+  const b = GXS.canonicalUrl('https://github.com/o/r/issues?state=open&page=2', null);
+  assert.ok(a, '共有できていない');
+  assert.equal(a, b, `並び順で出力が変わる: ${a} / ${b}`);
+});
+
+test('整数と真偽値は、決まった書き方へ直してから出す（R16-002）', () => {
+  /* 先頭ゼロは同じページの別表記。組み直した形が2通りある状態にしない */
+  assert.equal(GXS.canonicalUrl('https://github.com/o/r/issues?page=007', null),
+    'https://github.com/o/r/issues?page=7');
+  assert.equal(GXS.canonicalUrl('https://github.com/o/r/pull/1?w=true', null),
+    'https://github.com/o/r/pull/1?w=1');
+  assert.equal(GXS.canonicalUrl('https://github.com/o/r/pull/1?w=false', null),
+    'https://github.com/o/r/pull/1?w=0');
+});
+
+test('9種別の最大寸法を実際に作って測っても、外へ出る長さは有限（R16-002）', () => {
+  /*
+   * 長さを本当に縛っているのは**文法**であって、定数のほうではない。
+   * だから「上限を書いた」ことを証拠にせず、**9種別すべてを最大寸法で作って測る**。
+   * 文法をゆるめれば（自由文のクエリを足す・リポジトリ名を伸ばす）この値が動き、
+   * ここが落ちる。
+   */
+  const owner = 'a'.repeat(39);
+  const repo = 'b'.repeat(100);
+  const biggest = [
+    `https://github.com/${owner}/${repo}`,
+    `https://github.com/${owner}/${repo}/issues?page=999999&sort=help-wanted-issues&direction=desc&state=merged`,
+    `https://github.com/${owner}/${repo}/pulls?page=999999&sort=help-wanted-issues&direction=desc&state=merged`,
+    `https://github.com/${owner}/${repo}/discussions?page=999999`,
+    `https://github.com/${owner}/${repo}/releases?page=999999`,
+    `https://github.com/${owner}/${repo}/issues/1234567890`,
+    `https://github.com/${owner}/${repo}/pull/1234567890?diff=unified&w=1`,
+    `https://github.com/${owner}/${repo}/discussions/1234567890`,
+    `https://github.com/${owner}/${repo}/commit/${'a'.repeat(40)}?diff=unified&w=1`
+  ];
+  assert.equal(biggest.length, Object.keys(GXS.QUERY_RULES).length,
+    '9種別すべてを測っていない');
+  let maxUrl = 0, maxIntent = 0;
+  for (const u of biggest) {
+    const s = GXS.buildShare(u);
+    assert.ok(s, `最大寸法の普通のURLを拒否した: ${u}`);
+    maxUrl = Math.max(maxUrl, s.url.length);
+    maxIntent = Math.max(maxIntent, s.intentUrl.length);
+  }
+  assert.ok(maxUrl <= GXS.MAX_SHARE_URL_BYTES, `共有URLの実測最大が上限を超えた: ${maxUrl}`);
+  assert.ok(maxIntent <= GXS.MAX_INTENT_URL_BYTES, `投稿URLの実測最大が上限を超えた: ${maxIntent}`);
+  /* 監査の再現値（12,029 / 16,100）と桁が違うことを、数で残す */
+  assert.ok(maxUrl < 300, `実測最大が想定より大きい: ${maxUrl}`);
+  assert.ok(maxIntent < 700, `実測最大が想定より大きい: ${maxIntent}`);
+});
+
+test('名前の長さの上限そのものが、動いていない（上の「最大」が最大である根拠）', () => {
+  /*
+   * 上のテストは所有者39文字・リポジトリ100文字で組んだ最大を測っている。
+   * **その2つが本当に上限であること**をここで別に見る。
+   * ここが無いと、文法をゆるめても上のテストは古い寸法で測り続けて通ってしまう
+   * （長さの定数を外す変異が素通りしたので、効いている場所を測り直した）。
+   */
+  const ok = (u) => GXS.buildShare(u) !== null;
+  assert.ok(ok(`https://github.com/o/${'b'.repeat(100)}`), 'リポジトリ名100文字を拒否した');
+  assert.ok(!ok(`https://github.com/o/${'b'.repeat(101)}`), 'リポジトリ名101文字を通した');
+  assert.ok(ok(`https://github.com/${'a'.repeat(39)}/r`), '所有者名39文字を拒否した');
+  assert.ok(!ok(`https://github.com/${'a'.repeat(40)}/r`), '所有者名40文字を通した');
+  assert.ok(ok('https://github.com/o/r/issues/999999999'), '9桁の番号を拒否した');
+  assert.ok(!ok('https://github.com/o/r/issues/12345678901'), '11桁の番号を通した');
+  assert.ok(!ok(`https://github.com/o/r/commit/${'a'.repeat(41)}`), '41桁の16進を通した');
 });
 
 test('素の % を含む普通のページを、拒否しない（R12-002の回帰）', () => {

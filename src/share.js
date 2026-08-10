@@ -25,6 +25,22 @@
    */
   var MAX_WEIGHTED_TWEET = 280;   // 本文全体の上限
   var URL_WEIGHT = 23;            // t.co 変換後の固定長
+
+  /*
+   * 外へ出るURLの長さの上限（第16回監査 R16-002）。
+   *
+   * **正直に書く: いまの文法では、この2つに届かない。** 所有者39文字・
+   * リポジトリ100文字・整数10桁・クエリは表にある名前が1回ずつ、という
+   * 上限が全部かかるので、実際の最大は測ると 200 文字前後にしかならない。
+   * 長さを本当に縛っているのは文法のほうで、ここは2層目でしかない。
+   *
+   * それでも置くのは、文法をゆるめたときに「上限が消えたこと」に気づけない
+   * のを避けるため。効いていることは
+   * 「9種別すべての最大寸法を実際に作って測る」テストのほうで見る
+   * （この定数を外しても落ちないテストを、効いている証拠として数えない）。
+   */
+  var MAX_SHARE_URL_BYTES = 512;
+  var MAX_INTENT_URL_BYTES = 1024;
   var DEFAULT_WEIGHT = 2;
   var WEIGHT_ONE_RANGES = [
     [0x0000, 0x10FF],
@@ -194,6 +210,17 @@
     if (rule.type === 'bool') return ['0', '1', 'true', 'false'].indexOf(value) !== -1;
     if (rule.type === 'enum') return rule.values.indexOf(value) !== -1;
     return false;
+  }
+
+  /*
+   * 型に合った値を、**決まった書き方**へ直してから出す（第16回監査 R16-002）。
+   * `page=007` と `page=7`、`w=true` と `w=1` は同じ画面なのに、
+   * そのまま出すと共有URLが2通りできる。同じ画面からは同じURLが出るようにする。
+   */
+  function canonicalValue(rule, value) {
+    if (rule.type === 'int') return String(Number(value));
+    if (rule.type === 'bool') return (value === '1' || value === 'true') ? '1' : '0';
+    return value;                                   // enum は表に書いた文字列そのもの
   }
 
   /*
@@ -905,19 +932,44 @@
       return { ok: false, reason: isSensitiveUrl(rawUrl) ? 'sensitive_route' : 'unsupported' };
     }
 
-    /* 型に合う値だけ残す。自由文も識別子っぽい値も、表に無いので落ちる */
-    var kept = [];
-    if (QUERY_RULES[info.route]) {
+    /*
+     * 型に合う値だけ残す。自由文も識別子っぽい値も、表に無いので落ちる。
+     *
+     * 第16回監査 R16-002。値を int / bool / enum に絞っても、**同じ名前が
+     * 何回出てもすべて残していた**ので、`?state=open&state=closed&…` の
+     * 並びで任意長のビット列をXへ渡せた（1,000回で12,029文字・配布ZIPで再現）。
+     * 値の集合が有限でも、繰り返せる限り運べる量は有限にならない。
+     *
+     * 同じ名前が2回以上あればURLごと拒否する。黙って先頭/末尾を採ると、
+     * 利用者が見ている画面と共有URLの意味が変わりうる。
+     */
+    var rules = QUERY_RULES[info.route];
+    var kept = Object.create(null);
+    var ambiguous = false;
+    if (rules) {
       u.searchParams.forEach(function (value, name) {
-        if (keepParam(info.route, name, value)) kept.push([name, value]);
+        if (!keepParam(info.route, name, value)) return;      // 表に無い・型に合わないものは落とす
+        if (name in kept) { ambiguous = true; return; }
+        kept[name] = canonicalValue(rules[name], value);
       });
     }
+    if (ambiguous) return { ok: false, reason: 'ambiguous_query' };
 
+    /*
+     * 出す順番は**表に書いてある順**に固定する（入力の並び順を持ち出さない）。
+     * 順番用の表をもう1つ作らないのは、2つ持つと必ずずれるため——
+     * それが R16-001 で起きたことそのものだった。
+     */
     var qs = '';
-    if (kept.length) {
-      var sp = new URLSearchParams();
-      kept.forEach(function (kv) { sp.append(kv[0], kv[1]); });
-      qs = '?' + sp.toString();
+    if (rules) {
+      var names = Object.keys(rules);
+      var parts = [];
+      for (var qi = 0; qi < names.length; qi++) {
+        if (names[qi] in kept) {
+          parts.push(encodeURIComponent(names[qi]) + '=' + encodeURIComponent(kept[names[qi]]));
+        }
+      }
+      if (parts.length) qs = '?' + parts.join('&');
     }
 
     /*
@@ -926,6 +978,9 @@
      * 任意の文字列を運べる場所を1つでも残すと、この方式の意味が無くなる。
      */
     var url = 'https://github.com' + structuralPath(info) + qs;
+
+    /* 2層目。長さの上限（第16回監査 R16-002。いまの文法では届かない） */
+    if (url.length > MAX_SHARE_URL_BYTES) return { ok: false, reason: 'overlong_url' };
 
     /* 多層防御。ここまでで型は絞ってあるが、出て行くURLそのものも見る */
     var bad = credentialLikeShareUrl(url);
@@ -1013,13 +1068,17 @@
      * 資格情報の検査は canonicalResult が出て行くURLに対して1回だけ行う。
      */
 
+    var intentUrl = intentUrlFor(text, url);
+    /* 2層目。Xへ渡すURLの長さ（第16回監査 R16-002。いまの文法では届かない） */
+    if (intentUrl.length > MAX_INTENT_URL_BYTES) return null;
+
     return {
       kind: info.route,
       repo: info.repo,
       number: info.number,
       text: text,
       url: url,
-      intentUrl: intentUrlFor(text, url)
+      intentUrl: intentUrl
     };
   }
 
@@ -1040,6 +1099,8 @@
     weightedLength: weightedLength,
     MAX_WEIGHTED_TWEET: MAX_WEIGHTED_TWEET,
     URL_WEIGHT: URL_WEIGHT,
+    MAX_SHARE_URL_BYTES: MAX_SHARE_URL_BYTES,
+    MAX_INTENT_URL_BYTES: MAX_INTENT_URL_BYTES,
     NON_REPOSITORY_TOP_LEVEL: NON_REPOSITORY_TOP_LEVEL
   };
 })(typeof globalThis !== 'undefined' ? globalThis : self);
