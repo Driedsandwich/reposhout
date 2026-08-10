@@ -62,6 +62,21 @@ const argOf = (name) => (given.has(name) ? given.get(name) : null);
 
 const candidate = JSON.parse(read('store/SUBMISSION_CANDIDATE.json'));
 
+/* 無ければ null。壊れていれば止める（黙って「無い」ことにしない） */
+function readJsonOrNull(rel) {
+  let text;
+  try {
+    text = read(rel);
+  } catch (e) {
+    return null;
+  }
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    fail(`${rel} が JSON として読めません: ${e.message}`);
+  }
+}
+
 /* 確認日は本人の暮らしている時間帯で見る（第11回監査 R11-005） */
 const timeZone = argOf('--timezone') || candidate.confirmationTimeZone || 'Asia/Tokyo';
 let today;
@@ -217,6 +232,8 @@ const result = validateStoreReadiness({
   remote,
   metadataCi,
   runtime,
+  /* X の Web Intent の判断（第16回監査 R16-005）。無ければ null で渡して strict で落とす */
+  webIntentDecision: readJsonOrNull('store/WEB_INTENT_POLICY_DECISION.json'),
   sha256,
   readZipStrict: (buf) => readZip(buf)
 });

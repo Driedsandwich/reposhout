@@ -256,7 +256,8 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
      * CI でだけ落ちた。
      */
     if (locale === 'en') {
-      assert.equal(shown.title, "Send this page's title and URL to X's composer");
+      /* 第16回 R16-006 で「タイトルとURL」から「リンク」へ直した（タイトルは送らない） */
+      assert.equal(shown.title, "Send this page's link to X's composer");
     }
 
     const isNewShareWindow = (t) =>
@@ -393,6 +394,119 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
     await waitLoaded(r.opened[0].targetId);
     assert.ok(await escapeUntilClosed(r.opened[0].targetId), '窓が閉じない');
     await cdp.send('Target.closeTarget', { targetId: r.pageId });
+  });
+
+  it('実拡張でも、GitHubの機能ページと重複クエリでは開かない（R16-001 / R16-002）', async () => {
+    /*
+     * 第16回監査。単体テストは vm の中の share.js を見ているので、
+     * **実際に読み込まれた拡張**でも同じ境界になっていることを見る。
+     * 依頼を出すのは content script だが、断る判断をするのは service worker——
+     * ここが動いているなら、判断が service worker 側にあることの証拠にもなる。
+     */
+    for (const url of ['https://github.com/enterprises/acme',        // R16-001
+                       'https://github.com/o/r/issues?state=open&state=closed']) { // R16-002
+      const r = await clickShareOn(url);
+      assert.equal(r.opened.length, 0,
+        `投稿画面が開いた（${url}）: ${r.opened.map((t) => t.url).join(' | ')}`);
+      const sid = await attach(r.pageId);
+      await cdp.send('Runtime.enable', {}, sid);
+      const noticeRes = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const el = document.getElementById('gxs-notice');
+          return JSON.stringify(el ? el.textContent : null); })()`,
+        returnByValue: true
+      }, sid);
+      const notice = JSON.parse(noticeRes.result.value);
+      assert.ok(notice && notice.length > 0, `黙って終わっている（${url}）`);
+      assert.ok(!notice.includes('github.com'), `案内にURLが出ている（${url}）`);
+      await cdp.send('Target.closeTarget', { targetId: r.pageId });
+    }
+    /* 対照: 同じ経路・同じ押し方で、重複していない同じクエリなら開く */
+    const ok = await clickShareOn('https://github.com/o/r/issues?state=open');
+    assert.equal(ok.opened.length, 1,
+      `対照が成立していない（この経路自体が動いていない）: ${ok.opened.length} 個`);
+    await waitLoaded(ok.opened[0].targetId);
+    assert.ok(await escapeUntilClosed(ok.opened[0].targetId), '対照の窓が閉じない');
+    await cdp.send('Target.closeTarget', { targetId: ok.pageId });
+  });
+
+  it('完成済みのXのURLを渡す古い依頼では、何も開かない（R16-003・実拡張）', async () => {
+    /*
+     * 第16回監査 R16-003。監査は配布ZIPで、GitHubのタブを送信元に
+     * 完成済みのXのURLを渡すと popup が開くことを再現している。
+     *
+     * 送信元を本物にするため、**拡張の content script が動いている世界**から送る。
+     * ページ側の世界には chrome.runtime が無いので、CDP が知らせてくる
+     * 隔離された実行文脈（isolated world）を選んでそこで評価する。
+     */
+    const before = new Set((await targets()).map((t) => t.targetId));
+    const { targetId: ghId } = await cdp.send('Target.createTarget',
+      { url: 'https://github.com/octocat/Hello-World' });
+    const sessionId = await attach(ghId);
+
+    /* Runtime.enable の前に受け口を作る（有効化した瞬間に既存の文脈が流れてくる） */
+    const isolated = [];
+    cdp.on('Runtime.executionContextCreated', (params, sid) => {
+      if (sid !== sessionId) return;
+      const aux = params.context.auxData || {};
+      if (aux.isDefault === false) isolated.push(params.context.id);
+    });
+    await cdp.send('Runtime.enable', {}, sessionId);
+    await waitFor('content script が動いている', async () => {
+      const r = await cdp.send('Runtime.evaluate',
+        { expression: '!!document.getElementById("gxs-share-btn")', returnByValue: true }, sessionId);
+      return r.result.value === true;
+    });
+    const contextId = await waitFor('拡張の実行文脈が見つかる', async () => isolated[0]);
+
+    /* その世界に本当に chrome.runtime があることを先に確かめる（無ければ検査は空振り） */
+    const has = await cdp.send('Runtime.evaluate', {
+      expression: 'typeof chrome !== "undefined" && !!(chrome.runtime && chrome.runtime.sendMessage)',
+      returnByValue: true, contextId
+    }, sessionId);
+    assert.equal(has.result.value, true,
+      '拡張の世界を掴めていない（この検査は何も確かめていない）');
+
+    const evil = 'https://x.com/intent/post?text=access_token%3Ddummy-secret-value' +
+                 '&url=https%3A%2F%2Fgithub.com%2Fo%2Fr%2Fblob%2Fmain%2Fprivate';
+    const sent = await cdp.send('Runtime.evaluate', {
+      expression: `new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: 'gxs:open-share', url: ${JSON.stringify(evil)} },
+          (res) => resolve(JSON.stringify({ res: res, err: (chrome.runtime.lastError || {}).message })));
+      })`,
+      awaitPromise: true, returnByValue: true, contextId
+    }, sessionId);
+    const answer = JSON.parse(sent.result.value);
+
+    await sleep(1500);
+    const newX = (await targets()).filter(
+      (t) => t.type === 'page' && t.url.startsWith('https://x.com/intent/') && !before.has(t.targetId));
+    assert.equal(newX.length, 0,
+      `古い依頼で投稿画面が開いた: ${newX.map((t) => t.url).join(' | ')}`);
+    /* 古い呼び出し元が自分で window.open へ倒れない返事になっていること */
+    assert.ok(answer.res && answer.res.ok === true,
+      `古い呼び出し元が直接開く形の返事: ${sent.result.value}`);
+    assert.equal(answer.res.opened, 'none', '開いたことにしている');
+
+    /* 対照: 同じ世界から新しい形で送れば、ちゃんと1つ開く（経路が死んでいない証拠） */
+    await cdp.send('Runtime.evaluate', {
+      expression: `new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: 'gxs:request-share' }, () => resolve(1));
+      })`,
+      awaitPromise: true, returnByValue: true, contextId
+    }, sessionId);
+    const ok = await waitFor('新しい形なら開く', async () => {
+      const found = (await targets()).filter(
+        (t) => t.type === 'page' && t.url.startsWith('https://x.com/intent/') && !before.has(t.targetId));
+      return found.length ? found : null;
+    });
+    assert.equal(ok.length, 1, `対照で開いた数が違う: ${ok.map((t) => t.url).join(' | ')}`);
+    assert.ok(!decodeURIComponent(ok[0].url).includes('dummy-secret-value'),
+      `渡された値が生き残っている: ${ok[0].url}`);
+    assert.ok(decodeURIComponent(ok[0].url).includes('octocat/Hello-World'),
+      `送信元のタブから組み直していない: ${ok[0].url}`);
+    await waitLoaded(ok[0].targetId);
+    assert.ok(await escapeUntilClosed(ok[0].targetId), '対照の窓が閉じない');
+    await cdp.send('Target.closeTarget', { targetId: ghId });
   });
 
   /*

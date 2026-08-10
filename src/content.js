@@ -154,43 +154,40 @@
     if (event && event.isTrusted === false) return;
     event.preventDefault();
     event.stopPropagation();
+    requestShare();
+  }
 
-    /*
-     * 文面の組み立てで例外が出ても「押しても何も起きない」で終わらせない。
-     * 最低限URLだけは共有できるようフォールバックする。
-     */
-    var share = null;
-    var threw = false;
-    var reason = null;
+  /*
+   * 共有の依頼。**送るのは「押されました」だけ。**
+   *
+   * 第16回監査 R16-003。以前はここで共有URLと投稿文を組み立て、
+   * 出来上がったXのURLを service worker へ渡していた。service worker 側は
+   * 「送信元が github.com」「x.com/intent で始まる」しか見ずに開いていたので、
+   * **何を出すかの判断が2か所に分かれていた**。拡張を更新すると、開いたままの
+   * タブには古い content script が残る——そこが古い方針でURLを組めば、
+   * 新しい service worker を通しても古い方針のまま外へ出る。
+   *
+   * いまは、何を出すかを決めるのは service worker だけ。この file は
+   * URLも投稿文も組み立てない（組み立てる材料も持っていない）。
+   */
+  function requestShare() {
     try {
-      var res = window.GXS && window.GXS.buildShareResult(location.href, document.title);
-      if (res && res.ok) share = res.share;
-      else if (res) reason = res.reason;
+      if (!chrome || !chrome.runtime || !chrome.runtime.sendMessage) {
+        showNotice('reload_required');
+        return;
+      }
+      chrome.runtime.sendMessage({ type: 'gxs:request-share' }, function (res) {
+        /*
+         * 届かない＝この content script が古い（拡張の更新直後など）。
+         * **ここで開かない。** 以前は素の window.open で開いていたので、
+         * 更新後も古い方針の共有が生き続けた。開かずに再読み込みを促す。
+         * 断った理由の案内は service worker が別に送ってくる。
+         */
+        if (chrome.runtime.lastError || !res) showNotice('reload_required');
+      });
     } catch (e) {
-      threw = true;
+      showNotice('reload_required');
     }
-    /*
-     * 対象外・機微・資格情報の疑いで開かなかったときは、**理由だけ**を
-     * 伝える（第12回監査 R12-002）。以前は黙って何も起きず、利用者には
-     * 壊れているのか意図的なのか分からなかった。
-     * 表示するのは決まった文だけで、URLも値も出さない。
-     */
-    if (!share && !threw) {
-      showNotice(reason);
-      return;
-    }
-    /*
-     * 例外が出た場合だけ、URLだけの共有にフォールバックする（URL方針は本体と同じものを使う）。
-     * 方針が使えない・機微ページと判定された場合は何も開かない。
-     * 判断がつかないときは共有しない側へ倒す。
-     */
-    if (!share) {
-      var bare = window.GXS ? window.GXS.fallbackUrl(location.href) : null;
-      if (!bare) return;
-      share = { intentUrl: 'https://x.com/intent/post?url=' + encodeURIComponent(bare) };
-    }
-
-    openShareWindow(share.intentUrl);
   }
 
   /* ------------------------------------------------------------
@@ -217,6 +214,14 @@
       /* 開こうとしたが開けなかった（第15回監査 R15-005）。黙って終わらない */
       return t('noticeOpenFailed',
         'The X composer could not be opened. Nothing was sent to X.');
+    }
+    if (reason === 'reload_required') {
+      /*
+       * 拡張を更新した直後で、この画面に残っているのが古い部品（第16回監査 R16-003）。
+       * ここで開くと古い方針のまま外へ出るので、開かずに再読み込みを促す。
+       */
+      return t('noticeReloadRequired',
+        'The extension was updated. Reload this GitHub tab and try again. Nothing was sent to X.');
     }
     return t('noticeUnsupported', 'This page cannot be shared. Nothing was sent to X.');
   }
@@ -252,37 +257,6 @@
     chrome.runtime.onMessage.addListener(function (msg) {
       if (msg && msg.type === 'gxs-notice') showNotice(msg.reason);
     });
-  }
-
-  /*
-   * 共有ウィンドウは service worker に開いてもらう。
-   *
-   * ここで window.open すると、開いたウィンドウを拡張が識別する手段が
-   * window.name（＝どのページからでも詐称できる固定文字列）しか無くなる。
-   * service worker 経由なら chrome.windows.create が返す windowId を
-   * 所有権の根拠にでき、Esc の判定が推測でなくなる。
-   *
-   * 依頼が届かない場合（拡張の更新直後など）は素の window.open で開く。
-   * その窓は記録されないので Esc では閉じない＝安全側に倒れる。
-   */
-  function openShareWindow(intentUrl) {
-    var fellBack = false;
-    function fallback() {
-      if (fellBack) return;
-      fellBack = true;
-      window.open(intentUrl, '_blank', 'width=560,height=640,noopener,noreferrer,scrollbars=yes,resizable=yes');
-    }
-    try {
-      if (!chrome || !chrome.runtime || !chrome.runtime.sendMessage) {
-        fallback();
-        return;
-      }
-      chrome.runtime.sendMessage({ type: 'gxs:open-share', url: intentUrl }, function (res) {
-        if (chrome.runtime.lastError || !res || !res.ok) fallback();
-      });
-    } catch (e) {
-      fallback();
-    }
   }
 
   /*

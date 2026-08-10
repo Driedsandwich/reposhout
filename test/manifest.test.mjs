@@ -135,6 +135,29 @@ test('言語ファイルの鍵がそろっていて、manifest の参照が解�
   }
 });
 
+test('コードが呼ぶ翻訳キーが、言語ファイルに全部ある', () => {
+  /*
+   * 鍵の綴りを間違えても chrome.i18n.getMessage は空文字を返すだけで、
+   * 落ちも警告も出ない（バッジの見出しが空になる）。第16回監査 R16-003 で
+   * noticeReloadRequired を足したので、コード側から見た取りこぼしも見張る。
+   */
+  const used = new Set();
+  for (const f of ['src/background.js', 'src/content.js', 'src/esc-close.js']) {
+    const src = readFileSync(join(ROOT, f), 'utf8');
+    for (const m of src.matchAll(/getMessage\(\s*'([^']+)'\s*\)/g)) used.add(m[1]);
+    for (const m of src.matchAll(/\bt\(\s*'([^']+)'\s*,/g)) used.add(m[1]);
+  }
+  assert.ok(used.size >= 5, `拾えたキーが少なすぎる（拾い方が壊れている）: ${used.size}`);
+  for (const loc of ['en', 'ja']) {
+    const table = JSON.parse(readFileSync(join(ROOT, `_locales/${loc}/messages.json`), 'utf8'));
+    for (const k of used) {
+      assert.ok(k in table, `${loc} に ${k} が無い（空文字が表示される）`);
+    }
+  }
+  /* 対照: 拾い方が効いていること（実在するキーを1つ名指しで確かめる） */
+  assert.ok(used.has('noticeReloadRequired'), 'キーの拾い方が効いていない');
+});
+
 test('利用者に見える文字列をコードへ直書きしていない', () => {
   const content = readFileSync(join(ROOT, 'src/content.js'), 'utf8');
   const code = content.replace(/\/\*[\s\S]*?\*\//g, '').split('\n')
