@@ -511,7 +511,9 @@ test('GitHub の機能ページを、あとから見つけたぶんも拒否す�
    * かつ users API にアカウントが**無い**もの（＝そこにリポジトリは作れない＝
    * 拒否しても実在のリポジトリを巻き込まない）。
    */
-  for (const ns of ['customer-stories', 'resources', 'education', 'solutions']) {
+  for (const ns of ['customer-stories', 'resources', 'education', 'solutions',
+                    /* 第18回監査 R18-002。基準は合っていたが、候補に入れていなかった */
+                    'trust-center', 'mcp', 'newsletter', 'sitemap']) {
     assert.equal(GXS.buildShare(`https://github.com/${ns}/anything`), null,
       `リポジトリとして共有してしまう: ${ns}`);
   }
@@ -524,6 +526,13 @@ test('GitHub の機能ページを、あとから見つけたぶんも拒否す�
     assert.ok(GXS.buildShare(`https://github.com/${org}/some-repo`),
       `実在する所有者まで拒否している: ${org}`);
   }
+  /* 台帳（判断の根拠と日付）が、一覧と一緒に更新されていること */
+  const ledger = readFileSync(join(ROOT, 'store/NAMESPACE_INVENTORY.md'), 'utf8');
+  for (const ns of ['trust-center', 'mcp', 'newsletter', 'sitemap']) {
+    assert.ok(ledger.includes(ns), `台帳に判定の記録が無い: ${ns}`);
+  }
+  assert.ok(ledger.includes('github') && /557/.test(ledger),
+    '足さないと判定した実在組織の記録が台帳に無い');
 });
 
 test('クエリの出力は、入力の並び順で変わらない（R16-002）', () => {

@@ -45,11 +45,13 @@ admin pages are refused outright and are never shared.
 
 ### Single purpose
 
-変更なし。
+**直します**（第18回監査 R18-001。1.1.8 でタイトルを送らなくなったのに、
+掲載中の 1.0.1 の文面のままでした）。`LISTING.md` §3 と同じ文を貼ってください。
 
 ```
-RepoShout has one purpose: to open X's post composer pre-filled with the title
-and URL of the GitHub page the user is currently viewing.
+RepoShout has one purpose: to open X's post composer pre-filled with a one-line
+description generated from the route of the GitHub page the user is currently
+viewing, together with that page's link. The page title is not read or sent.
 ```
 
 ### Permission justification
@@ -74,7 +76,7 @@ and URL of the GitHub page the user is currently viewing.
 
 | 設問 | 1.0.1での回答 | 今回 | 理由 |
 |---|---|---|---|
-| Personally identifiable information | No | **Yes へ変更** | 共有するURL・タイトルに、GitHubのユーザー名または組織名が入る場合がある |
+| Personally identifiable information | No | **Yes へ変更** | 共有できるページでは、GitHubの所有者名とリポジトリ名が**必ず**投稿本文と共有URLに入る |
 | Health information | No | No | 扱わない |
 | Financial and payment information | No | No | 扱わない |
 | Authentication information | No | **要確認**（案: No） | 資格情報そのものは扱わないが、操作時に現在のタブのURL全体をいったん受け取る |
@@ -84,12 +86,14 @@ and URL of the GitHub page the user is currently viewing.
 | User activity | No | **要確認**（案: No） | クリック・スクロール・マウス位置・入力内容は読まない。keydown を1つ見て Escape かだけ判定する |
 | Website content | No | **Yes へ変更** | ボタンの位置を探すためにDOMを端末内で読む（タイトルは読まず、Xへも送らない） |
 
-**個人を識別できる情報（PII）を Yes にする理由**（第5回監査 R5-001）: 公式の User Data FAQ は、PIIの例に **username を明記**しています。RepoShout が共有するURLは `github.com/<ユーザー名>/<リポジトリ名>` の形で、タイトルや `(Issue #12 · owner/repo)` というサフィックスにもユーザー名・組織名が入ります。プロフィールページを共有した場合、そのユーザー名は本人を指します。**handle には transmit が含まれ**、これらはXへ渡ります。
+**個人を識別できる情報（PII）を Yes にする理由**（第5回監査 R5-001）: 公式の User Data FAQ は、PIIの例に **username を明記**しています。RepoShout が共有するURLは `github.com/<所有者名>/<リポジトリ名>` の形で、投稿本文（`owner/repo`・`Issue #12 · owner/repo` など）にも同じ2つが入ります。**共有できるページでは、所有者名とリポジトリ名が必ず入ります**（第15回監査 R15-001 以降、共有できるのはこの形のルートだけになったため）。**handle には transmit が含まれ**、これらはXへ渡ります。
 
-> **⚠️ 以前ここには「URLには必ずアカウント名が入る」と書いていましたが、これは言い過ぎでした。**
-> `github.com/search?q=…`・`github.com/explore`・`github.com/topics/…` は共有できて、
-> アカウント名を含みません（2026-08-06に実測）。正しくは「**入る場合がある**」です。
-> 少なく申告しないのと同じくらい、事実より広く言わないことも大事です。
+> **【履歴・現在の仕様ではありません】** 第5回監査（2026-08-06）の時点では、ここに
+> 「URLには必ずアカウント名が入る」と書いてあったのを「入る場合がある」へ弱めました。
+> 当時は `github.com/search?q=…`・`github.com/explore`・`github.com/topics/…` を
+> 共有でき、それらにアカウント名が入らなかったためです。
+> **第15回監査 R15-001 でこれらのルートは共有対象から外れたので、いまは
+> 「必ず入る」が正しくなっています。** 弱いままにすると、こんどは過少申告になります。
 
 **本人の確認が要る欄は2つ**（残りの7欄は判断が確定しています）。この2欄は、**確定するまで「要確認」のまま**にしてあります（第7回監査 R7-002）。確定したら `store/DATA_DISCLOSURE.json` の `ownerConfirmation` へ、読んだ設問文・確認日・選んだ答え・理由を書いてください。
 
@@ -132,14 +136,14 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 今回出すもの:
 
 ```
-成果物 : reposhout-package-cf3358ed162e3050569d4dd4aa1d7d5553cd3a8f
-中のZIP : reposhout-1.1.8.zip
-大きさ : 39,117 B / 11ファイル
-SHA-256 : 6980b87aa9f2d6662e56f5c529c12ad5106d852fe5699e16f8cbff1906304f5e
+status : pending_main_ci
 ```
 
+**いま出せる成果物はありません。** 第18回監査で直前の候補（`reposhout-package-cf3358ed…` /
+39,117 B / SHA-256 `6980b87a…`）を `rejected_by_R18` として外しました。
+
 正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) です。
-第12回〜第17回で却下した成果物は提出しません（理由も同ファイルにあります）。
+第12回〜第18回で却下した成果物は提出しません（理由も同ファイルにあります）。
 **「最新の main」では選ばず、上の成果物名とSHA-256 で選んでください**（第10回監査 R10-006）。
 
 ---

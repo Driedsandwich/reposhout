@@ -93,16 +93,16 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 **今回出す正本**（正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json)）:
 
 ```
-成果物 : reposhout-package-cf3358ed162e3050569d4dd4aa1d7d5553cd3a8f
-中のZIP : reposhout-1.1.8.zip
-大きさ : 39,117 B / 11ファイル
-SHA-256 : 6980b87aa9f2d6662e56f5c529c12ad5106d852fe5699e16f8cbff1906304f5e
+status : pending_main_ci
 ```
 
-main への push で走った CI（run 31449716737）が作ったものを、ダウンロードして実測した値です
-（外側の成果物のバイト数とハッシュも、GitHub の API が申告する digest と一致することを
-確かめました。値は [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) にあります）。
-**タグはまだ打っていません**（外部監査に合格してから打ちます）。第12回〜第17回で
+**いま出せる成果物はありません。** 第18回監査で、直前の候補
+（`reposhout-package-cf3358ed…` / 39,117 B / SHA-256 `6980b87a…`）を
+`rejected_by_R18` として外しました。R18の修正が main に入って CI が通ったあと、
+その成果物を**実際にダウンロードして実測してから**ここに書きます。
+**まだ動かしていない値を先に書きません**（第11回監査 Task B）。
+
+**タグはまだ打っていません**（外部監査に合格してから打ちます）。第12回〜第18回で
 却下した成果物は提出しません（理由は正本の `history` にあります）。
 
 **「最新の main」で成果物を選ばないでください。** 選ぶ基準は上の成果物名とSHA-256です
@@ -259,8 +259,9 @@ English (United States)
 ### Single purpose
 
 ```
-RepoShout has one purpose: to open X's post composer pre-filled with the title
-and URL of the GitHub page the user is currently viewing.
+RepoShout has one purpose: to open X's post composer pre-filled with a one-line
+description generated from the route of the GitHub page the user is currently
+viewing, together with that page's link. The page title is not read or sent.
 ```
 
 ### Permission justification
@@ -321,7 +322,9 @@ What the content script does on github.com:
   existing GitHub element, and it does nothing at all if the expected container
   is not found.
 - When -- and only when -- the user activates that button with a real click, it
-  reads location.href and document.title in order to build the X Web Intent
+  reads nothing from the page in order to build the X Web Intent: pressing the
+  button sends the background service worker a message that carries no data, and
+  the service worker builds the link from the tab's URL
   link. A click synthesised by page JavaScript is refused (event.isTrusted).
 - It does not read cookies or form fields, runs no analytics, and makes no
   network request of its own.

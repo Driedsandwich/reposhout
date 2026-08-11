@@ -17,12 +17,11 @@ RepoShout never posts on your behalf, and never stores what it sends.
 
 ### Information we process
 
-When — and only when — you activate the extension (by clicking the in-page **Share** button, clicking the toolbar icon, or pressing the keyboard shortcut), RepoShout reads two things from the tab you are currently viewing:
+When — and only when — you activate the extension (by clicking the in-page **Share** button, clicking the toolbar icon, or pressing the keyboard shortcut), RepoShout reads **one thing** from the tab you are currently viewing:
 
 - the page URL
-- the page title
 
-They are used solely to build the post text and the `x.com` share link. The composing itself happens in your browser; the finished link is then opened on X, which is how the values reach X.
+**The page title is not read at all** (it was until 1.1.8). The URL is read by the extension's background service worker, which decides whether the page may be shared and, if so, rebuilds a link from the validated parts of that URL. The in-page Share button reads nothing: pressing it sends the service worker a message that carries no data. The composing itself happens in your browser; the finished link is then opened on X, which is how the values reach X.
 
 ### Where data goes
 
@@ -108,12 +107,11 @@ RepoShout が代わりに投稿することはなく、送ったものを保存�
 
 ### 処理する情報
 
-拡張を操作したとき（画面内の **Share** ボタン、ツールバーアイコン、キーボードショートカットのいずれか）**に限り**、現在開いているタブから次の2つを読み取ります。
+拡張を操作したとき（画面内の **Share** ボタン、ツールバーアイコン、キーボードショートカットのいずれか）**に限り**、現在開いているタブから読み取るのは**1つだけ**です。
 
 - ページのURL
-- ページのタイトル
 
-これらは投稿用の文面と `x.com` の共有リンクを組み立てるためだけに使われます。組み立て自体はブラウザ内で行われ、できあがったリンクをXで開くことで、値がXへ渡ります。
+**ページのタイトルは読みません**（1.1.8 までは読んでいました）。URLを読むのは拡張のバックグラウンド（service worker）で、そのページを共有してよいかを判定し、共有できる場合は**URLの検査済みの部分からリンクを組み直します**。画面内の Share ボタンは何も読みません——押すと、データを持たないメッセージを service worker へ送るだけです。組み立て自体はブラウザ内で行われ、できあがったリンクをXで開くことで、値がXへ渡ります。
 
 ### 送信先
 
