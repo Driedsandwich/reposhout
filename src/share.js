@@ -74,11 +74,31 @@
    * 「共有される可能性がある形」で残さないことを優先する。
    */
   var SENSITIVE_FIRST_SEGMENTS = [
-    'login', 'logout', 'session', 'sessions', 'settings', 'account', 'user',
-    'signup', 'join', 'password_reset', 'auth', 'oauth', 'authorize', 'devices',
+    'login', 'logout', 'session', 'sessions', 'settings', 'account',
+    'signup', 'join', 'password_reset', 'auth', 'oauth', 'authorize',
     'sudo', 'two_factor', 'verify', 'billing', 'organizations', 'enterprises',
-    'invitations', 'account_verifications', 'password', 'security'
+    'invitations', 'account_verifications', 'security'
   ];
+
+  /*
+   * 第20回監査 R20-001。**`user` `devices` `password` をこの一覧から外した。**
+   *
+   * この3語は所有者名としても実在し、公開リポジトリを持っている。owner単位で
+   * 拒否していたため、`user/bitmap-fonts`・`devices/submit-site-to-marginalia-search`・
+   * `password/python-code-shifter`（いずれも browser で 200・リポジトリUIあり）を
+   * 共有できなかった。**普通のリポジトリで押しても拒否される**状態だった。
+   *
+   * 外しても認証系が漏れないことを実測した（2026-08-11）:
+   *   /password_reset        … 所有者名にアンダースコアを許していないので**文法で落ちる**
+   *   /login/device          … 'login' が一覧に残る
+   *   /login/oauth/authorize … 同上
+   *   /settings/tokens       … 'settings' が残る
+   *   /devices/new /password/new /user/emails … github.com では 404（存在しない）
+   *
+   * 残る risk は「GitHubが将来この名前の下に2セグメントの認証ルートを作る」ことで、
+   * それは一覧に無いあらゆる名前と同じ性質のもの。owner単位の拒否は、
+   * 実在の所有者を巻き込むぶんだけ**代償のほうが大きい**と判断した。
+   */
 
   /*
    * 第16回監査 R16-001。上の2つは**同じ1つの境界**を別々の配列で持っていた。

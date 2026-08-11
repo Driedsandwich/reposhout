@@ -1448,17 +1448,27 @@ test('実在のリポジトリを巻き込む拒否が、台帳に明記して�
   const suppressing = inv.namespaces
     .filter((e) => e.decision === 'deny' && e.suppressesReachableRepo)
     .map((e) => e.namespace).sort();
-  assert.deepEqual(suppressing, ['devices', 'password', 'user'],
-    '巻き込んでいる語が変わった。増えたなら、それが本当に必要か確かめてからここを直す');
-  for (const n of suppressing) {
+  /*
+   * 第20回監査 R20-001 で `user` `devices` `password` を owner単位の拒否から外したので、
+   * **いまは0件**。ここが増えたら、実在のリポジトリを巻き込む拒否をまた足したということ。
+   * そのときは代償を測って、本当に必要かを示してからこの数字を直す。
+   */
+  assert.deepEqual(suppressing, [],
+    `実在のリポジトリを巻き込む拒否が増えている: ${suppressing.join(' / ')}`);
+
+  /* 外した3語が、allow として実測つきで記録されていること */
+  for (const n of ['user', 'devices', 'password']) {
     const e = inv.namespaces.find((x) => x.namespace === n);
-    assert.match(e.reason, /実在|巻き込/, `${n}: 代償が理由に書かれていない`);
-    assert.equal(e.repositoryProbe.repositoryUiRendered, true);
+    assert.ok(e, `台帳に ${n} の記録が無い`);
+    assert.equal(e.decision, 'allow', `${n} が allow になっていない`);
+    assert.equal(e.repositoryProbe.repositoryUiRendered, true,
+      `${n}: 開けることを確かめずに allow にしている`);
+    assert.match(e.reason, /R20-001/, `${n}: 外した理由が記録されていない`);
   }
-  /* 経緯の文書からも、この代償が読めること */
+  /* 経緯の文書からも、この判断が読めること */
   const md = read('store/NAMESPACE_INVENTORY.md');
-  for (const n of suppressing) {
-    assert.ok(md.includes(n), `NAMESPACE_INVENTORY.md に ${n} の代償が書かれていない`);
+  for (const n of ['user', 'devices', 'password']) {
+    assert.ok(md.includes(n), `NAMESPACE_INVENTORY.md に ${n} の判断が書かれていない`);
   }
 });
 
@@ -1471,8 +1481,14 @@ test('台帳の説明が、名前と判定を書き写していない（R19-002�
   assert.ok(md.includes('GITHUB_NAMESPACE_INVENTORY.json'),
     '経緯の文書が、正本のJSONを指していない');
   const { GXS } = loadShare();
-  /* 説明のために出てよい語だけを許す。それ以外の拒否語が並んでいたら表が戻っている */
-  const ALLOWED_IN_PROSE = new Set(['customer-stories', 'trust-center', 'user', 'devices', 'password']);
+  /*
+   * 説明のために出てよい語だけを許す。それ以外の拒否語が並んでいたら表が戻っている。
+   * `login` `settings` は、第20回監査 R20-001 で3語を外したあとも
+   * **本物の認証ルートを守り続ける語**として、判断の説明にどうしても要る。
+   * 増やすときは「表を書き戻していないか」を確かめること（許す語＝守られない語）。
+   */
+  const ALLOWED_IN_PROSE = new Set(['customer-stories', 'trust-center',
+    'user', 'devices', 'password', 'login', 'settings']);
   const listed = GXS.NON_REPOSITORY_TOP_LEVEL.filter(
     (n) => !ALLOWED_IN_PROSE.has(n) && new RegExp(`\`${n}\`|\\| *${n} *\\|`).test(md));
   assert.deepEqual(listed, [],

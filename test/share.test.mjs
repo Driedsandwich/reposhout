@@ -395,17 +395,50 @@ test('GitHubの機能ページを、リポジトリとして共有しない（R1
     'https://github.com/enterprises/acme',        // 公式のenterprise account URL
     'https://github.com/invitations/whatever',
     'https://github.com/oauth/authorize',
-    'https://github.com/user/keys',
     'https://github.com/billing/plans',
-    'https://github.com/devices/x',
-    'https://github.com/password/x',
     'https://github.com/session/x',
     'https://github.com/sudo/x',
-    'https://github.com/verify/x'
+    'https://github.com/verify/x',
+    /* 本物の認証ルート（2026-08-11に実測。どちらもログイン画面へ飛ぶ） */
+    'https://github.com/login/device',
+    'https://github.com/settings/keys',
+    'https://github.com/password_reset'
   ];
   for (const u of shouldRefuse) {
     assert.equal(GXS.buildShare(u), null, `リポジトリとして共有してしまう: ${u}`);
   }
+});
+
+test('owner単位の拒否をやめた3語が、実在のリポジトリを共有できる（R20-001）', () => {
+  /*
+   * 第20回監査 R20-001。`user` `devices` `password` を owner単位で拒否していたので、
+   * **実在して browser でも開けるリポジトリ**が共有できなかった。
+   *
+   * この test は以前 `/user/keys` `/devices/x` `/password/x` を「拒否すべき」として
+   * いたが、2026-08-11 に実測すると**3つとも github.com で 404**（API専用のパスで、
+   * web のルートではない）。前提のほうが誤っていた。
+   */
+  for (const u of ['https://github.com/user/bitmap-fonts',
+                   'https://github.com/devices/submit-site-to-marginalia-search',
+                   'https://github.com/password/python-code-shifter']) {
+    assert.ok(GXS.buildShare(u), `実在のリポジトリを拒否している: ${u}`);
+  }
+  /*
+   * 外しても本物の認証ルートが漏れないこと。
+   * `/password_reset` は所有者名にアンダースコアを許していないので**文法で**落ちる
+   * ——語の一覧ではなく、そちらが効いていることをここで確かめる。
+   */
+  const src = readShareSource();
+  const m = src.match(/var SENSITIVE_FIRST_SEGMENTS = \[([\s\S]*?)\];/);
+  const words = m[1].match(/'([^']+)'/g).map((s) => s.slice(1, -1));
+  for (const gone of ['user', 'devices', 'password']) {
+    assert.ok(!words.includes(gone), `${gone} が一覧に残っている`);
+  }
+  for (const kept of ['login', 'settings', 'password_reset', 'oauth', 'auth']) {
+    assert.ok(words.includes(kept), `認証系を守る語が消えている: ${kept}`);
+  }
+  assert.equal(GXS.buildShare('https://github.com/password_reset/x'), null,
+    'アンダースコアを含む名前が所有者名として通っている');
 });
 
 test('2つの配列の差が、境界の穴にならない（R16-001の一般形）', () => {
