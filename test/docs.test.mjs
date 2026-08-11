@@ -1356,6 +1356,28 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
       `所有者名とリポジトリ名が出て行かないルートがある: ${u}`);
   }
 
+  /*
+   * 第20回監査 R20-002。**画面側は、操作していない間もDOMを見ている。**
+   * それまで Privacy の要約は「操作したときに限り読む」だけを言っており、
+   * GitHubのページを開いている間ずっと動く確認（1秒ごと）を説明していなかった。
+   * 正本へ書いた以上、それがコードと合っていることをここで測る。
+   */
+  assert.equal(C.contentScriptReadsDom, true);
+  assert.match(content, /querySelector/, '正本はDOMを見ると言うが、見ていない');
+  assert.match(C.domReadTiming, /1秒|1000/, '見る間隔が正本に書かれていない');
+  assert.match(content, /setInterval\(\s*inject\s*,\s*1000\s*\)/,
+    `正本の間隔（${C.domReadTiming}）とコードが合っていない`);
+  assert.match(C.domReadTiming, /visibilitychange|表示に戻/, '復帰時の確認が正本に無い');
+  assert.match(content, /visibilitychange/, '正本は復帰時にも見ると言うが、見ていない');
+  /* 逆に「読まない」と書いたものは、本当に読んでいないこと */
+  assert.equal(C.contentScriptReadsPageText, false);
+  assert.ok(!/=\s*[\w.]*\.textContent/.test(content) && !/innerText/.test(content),
+    '正本は本文を読まないと言うが、読んでいる');
+  assert.equal(C.contentScriptReadsFormValues, false);
+  assert.ok(!/(input|textarea)[^;]{0,40}\.value/.test(content),
+    '正本は入力欄を読まないと言うが、読んでいる');
+  assert.equal(C.domReadLeavesBrowser, false);
+
   /* 保留中の判断は、それぞれの正本と一致している */
   const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
   assert.equal(C.webIntentStatus, wi.status, 'Web Intent の状態が2か所で食い違っている');
@@ -1493,4 +1515,44 @@ test('台帳の説明が、名前と判定を書き写していない（R19-002�
     (n) => !ALLOWED_IN_PROSE.has(n) && new RegExp(`\`${n}\`|\\| *${n} *\\|`).test(md));
   assert.deepEqual(listed, [],
     `経緯の文書へ一覧が書き戻されている: ${listed.join(' / ')}`);
+});
+
+test('Privacy が、操作していない間のDOM確認も説明している（R20-002）', () => {
+  /*
+   * 第20回監査 R20-002。要約が「操作したときに限り読む」だけだと、
+   * GitHubのページを開いている間ずっと動く確認（1秒ごと・タブ復帰時）が
+   * 説明されないまま残る。**2つの場面を分けて書く**ことを要求する。
+   */
+  const body = activeText('PRIVACY.md');
+  for (const phrase of [
+    'two different moments',                // 英語: 2つの場面があるという宣言
+    'While a GitHub page is open',          // 英語: 表示中の場面
+    'about once a second',                  // 英語: 頻度
+    'When you activate the extension',      // 英語: 操作時の場面
+    '情報を扱う場面は**2つ**',                  // 日本語: 2つの場面があるという宣言
+    'GitHubのページを開いている間',              // 日本語: 表示中の場面
+    '約1秒ごと',                              // 日本語: 頻度
+    '拡張を操作したとき'                        // 日本語: 操作時の場面
+  ]) {
+    assert.ok(body.includes(phrase), `PRIVACY.md に「${phrase}」が無い（R20-002）`);
+  }
+  /*
+   * 「操作したときだけ読む」という**1段階の要約**へ戻していないこと。
+   * 変異で見つけた素通り——2段階の説明を残したまま冒頭に1段階の要約を足すと、
+   * 上の「書いてあるべき」検査は全部通ってしまう（矛盾は捕まらない）。
+   */
+  const ONE_STAGE = [
+    /reads information only when you activate/i,
+    /only when you activate .{0,20}does RepoShout read/i,
+    /操作したときだけ.{0,10}読み/,
+    /読み取るのは.{0,6}操作したときだけ/
+  ];
+  for (const re of ONE_STAGE) {
+    assert.ok(!re.test(body),
+      `PRIVACY.md に「操作時だけ」の1段階の要約が戻っている: ${re}`);
+  }
+  /* 「読まない」ものを、表示中の説明の中でも명示していること */
+  for (const phrase of ['It does not read the page text', 'ページの本文も、入力欄の値も、URLも、タイトルも読みません']) {
+    assert.ok(body.includes(phrase), `PRIVACY.md に「${phrase}」が無い`);
+  }
 });

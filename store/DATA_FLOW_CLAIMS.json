@@ -24,48 +24,66 @@
     "説明のために書いた目印を、検査は本物の囲いとして数えてしまうため。",
     "JSONは常に全体が現行の主張として検査される。"
   ],
-
   "measuredOn": "2026-08-11",
   "appliesToVersion": "1.1.8",
-
   "titleRead": false,
   "titleSent": false,
   "contentScriptReadsUrl": false,
   "contentScriptSendsData": false,
+  "contentScriptReadsDom": true,
+  "domReadTiming": "GitHubのページを開いている間。読み込み時・約1秒ごと（setInterval 1000）・タブが表示に戻ったとき（visibilitychange）",
+  "domReadPurpose": "GitHubが描く操作列を見つけて Share ボタンを置き、隣のボタンと高さを揃えるため",
+  "domReadScope": "決まった数個の CSS セレクタに一致する要素の有無と、隣接ボタンの高さだけ",
+  "contentScriptReadsPageText": false,
+  "contentScriptReadsFormValues": false,
+  "domReadLeavesBrowser": false,
   "serviceWorkerReadsUrl": true,
   "serviceWorkerBuildsIntent": true,
-
   "outboundText": "ルートから生成した1行（例: Issue #12 · owner/repo）。ページの中身は入らない",
   "outboundUrl": "検査済みパーツから組み直した https://github.com/… のURL。元の pathname は使わない",
   "ownerRepoAlwaysTransferred": true,
-
   "supportedRoutes": [
-    "repo", "issue-list", "pr-list", "discussion-list", "releases",
-    "issue", "pr", "discussion", "commit"
+    "repo",
+    "issue-list",
+    "pr-list",
+    "discussion-list",
+    "releases",
+    "issue",
+    "pr",
+    "discussion",
+    "commit"
   ],
   "unsupportedRoutes": [
-    "blob", "tree", "compare", "commits/<ref>", "search", "wiki",
-    "actions", "profile", "root", "pull/<n>/files"
+    "blob",
+    "tree",
+    "compare",
+    "commits/<ref>",
+    "search",
+    "wiki",
+    "actions",
+    "profile",
+    "root",
+    "pull/<n>/files"
   ],
-
   "fragmentPolicy": "drop_all",
   "queryPolicy": "int / bool / enum の値だけを、名前ごとに1回だけ残す。同じ名前が2回以上あればURLごと拒否する。自由文（q / query / discussions_q / title / body）は落とす",
-
   "recipient": "x.com（X Corp.）— 拡張の開発者のサーバーは存在しない",
   "transferTiming": "利用者が共有を操作し、Xの投稿画面が開いた時点。Postを押す前",
   "storage": "chrome.storage.session にウィンドウIDと時刻だけ。URLも投稿本文もタイトルも保存しない",
-
   "webIntentStatus": "pending",
   "ownerConfirmationStatus": {
     "authentication_information": "pending",
     "user_activity": "pending",
     "website_content": "Yes"
   },
-
   "_boundToCode": [
     "次は test/docs.test.mjs が実測して、この正本と食い違えば落とす:",
     "  titleRead / titleSent          → src/*.js（コメントを外した本体）に document.title が無い",
     "  contentScriptSendsData         → content.js が送るのは type だけ",
+    "  contentScriptReadsDom          → content.js に querySelector がある（表示中も動く）",
+    "  domReadTiming                  → setInterval の間隔と visibilitychange の登録を実測",
+    "  contentScriptReadsPageText     → textContent / innerText の読み取りが無い",
+    "  contentScriptReadsFormValues   → input/textarea の value 読み取りが無い",
     "  serviceWorkerBuildsIntent      → intentUrl を作るのは background.js だけ",
     "  supportedRoutes / unsupportedRoutes → buildShareResult を実際に呼んで確かめる",
     "  fragmentPolicy                 → #L10-L20 を渡して、残らないことを確かめる",
