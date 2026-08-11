@@ -1,7 +1,7 @@
 # Privacy Policy / プライバシーポリシー
 
 **RepoShout** — Chrome extension
-Last updated / 最終更新: 2026-08-07（1.1.8）
+Last updated / 最終更新: 2026-08-11（1.1.8）
 
 ---
 
@@ -21,7 +21,7 @@ When — and only when — you activate the extension (by clicking the in-page *
 
 - the page URL
 
-**The page title is not read at all** (it was until 1.1.8). The URL is read by the extension's background service worker, which decides whether the page may be shared and, if so, rebuilds a link from the validated parts of that URL. The in-page Share button reads nothing: pressing it sends the service worker a message that carries no data. The composing itself happens in your browser; the finished link is then opened on X, which is how the values reach X.
+**The page title is not read at all.** <!-- HISTORICAL_CLAIM:start reason="1.1.8より前の版の挙動。現在の仕様ではない" -->(Versions before 1.1.8 did read it.)<!-- HISTORICAL_CLAIM:end --> The URL is read by the extension's background service worker, which decides whether the page may be shared and, if so, rebuilds a link from the validated parts of that URL. The in-page Share button reads nothing: pressing it sends the service worker a message that carries no data. The composing itself happens in your browser; the finished link is then opened on X, which is how the values reach X.
 
 ### Where data goes
 
@@ -111,7 +111,7 @@ RepoShout が代わりに投稿することはなく、送ったものを保存�
 
 - ページのURL
 
-**ページのタイトルは読みません**（1.1.8 までは読んでいました）。URLを読むのは拡張のバックグラウンド（service worker）で、そのページを共有してよいかを判定し、共有できる場合は**URLの検査済みの部分からリンクを組み直します**。画面内の Share ボタンは何も読みません——押すと、データを持たないメッセージを service worker へ送るだけです。組み立て自体はブラウザ内で行われ、できあがったリンクをXで開くことで、値がXへ渡ります。
+**ページのタイトルは読みません。**<!-- HISTORICAL_CLAIM:start reason="1.1.8より前の版の挙動。現在の仕様ではない" -->（1.1.7 までは読んでいました。）<!-- HISTORICAL_CLAIM:end -->URLを読むのは拡張のバックグラウンド（service worker）で、そのページを共有してよいかを判定し、共有できる場合は**URLの検査済みの部分からリンクを組み直します**。画面内の Share ボタンは何も読みません——押すと、データを持たないメッセージを service worker へ送るだけです。組み立て自体はブラウザ内で行われ、できあがったリンクをXで開くことで、値がXへ渡ります。
 
 ### 送信先
 

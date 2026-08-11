@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { ROOT } from './helpers/load.mjs';
+import { ROOT, loadShare, stripComments } from './helpers/load.mjs';
 
 /* 利用者が読む文書。ここに旧説明が残ってはいけない */
 const USER_FACING = ['README.md', 'README.ja.md', 'PRIVACY.md', 'store/LISTING.md'];
@@ -950,69 +950,177 @@ test('README の表が、E2Eの件数を固定の数で書いていない（R14-
  * ここが増えるたびに、次から全面が守られる。
  */
 
-/* 過去を引用している塊は対象外にする（経緯を書けなくなるため） */
-const HISTORY_MARKER =
-  /以前|旧文|旧い説明|書いてありました|書いていました|【履歴|履歴・現在の仕様ではありません|until 1\.1\.8|was until|until the |までは|第\d+回監査で(?:指摘|直した)|対照が成立/i;
+/* ============================================================
+ * 履歴の除外は、**明示した目印だけ**で行う（第19回監査 R19-001）
+ * ============================================================
+ *
+ * 第18回では「以前」「までは」「until 1.1.8」などの語を含む塊を、
+ * 履歴とみなして丸ごと検査から外していた。これが逆に働いた——
+ * **現在の仕様を述べた段落が、自分の中の履歴表現のせいで検査を免れる。**
+ *
+ *   PRIVACY.md  「タイトルは読みません（1.1.8 までは読んでいました）」
+ *               → 「までは」で段落ごと除外。中身は誰も見ていなかった
+ *   PRIVACY.md  保存の表が「Until the window is closed」で除外
+ *   LISTING.md  「それ以前の同種拡張（2015 / 2018 / 2021）」で除外
+ *               → 競合の話で、こちらの履歴とは何の関係もない
+ *   share.js    §2.5 の設計説明ぜんぶが「第14回まではこうだった」で除外
+ *
+ * 実測すると、除外された9塊のうち**本当に履歴だけなのは1つ**だった。
+ * 語句から推測するのをやめ、書き手が明示的に囲った範囲だけを外す。
+ * 囲いは**文字の範囲として取り除く**ので、文の途中の括弧書きも囲える。
+ */
+const HISTORY_RE =
+  /(?:<!--\s*|\*\s*)HISTORICAL_CLAIM:start\s+reason="([^"]*)"\s*(?:-->)?[\s\S]*?(?:<!--\s*|\*\s*)HISTORICAL_CLAIM:end\s*(?:-->)?/g;
+const HISTORY_START = /HISTORICAL_CLAIM:start/g;
+const HISTORY_END = /HISTORICAL_CLAIM:end/g;
 
 /* 空白（改行を含む）をすべて1つの空白へつぶす＝改行で検査を迂回できなくする */
 const squash = (s) => s.replace(/\s+/g, ' ');
 
-/* ファイルを「空行で区切った塊」に分け、履歴の塊を落として返す */
+/*
+ * 区切り文字を1つに揃える。第19回で見つかった素通りの形——
+ * `URL・タイトル`（中黒）は `URLとタイトル` を探す検査に当たらなかった。
+ * 「と」「・」「/」「，」「、」全角スペースを同じ物として扱う。
+ */
+const SEPARATORS = /[・\/,，、]|\s+(?:or|and)\s+|\s*(?:と|または)\s*/gi;
+const normalizeSeparators = (s) => s.replace(SEPARATORS, '＋');
+
+/* 明示的に囲われた履歴を**取り除いた**本文を返す */
+function activeText(file) {
+  return read(file).replace(HISTORY_RE, ' ');
+}
+
+/* 履歴を外したうえで、空行区切りの塊にし、空白をつぶす */
 function activeBlocks(file) {
-  return read(file).split(/\n\s*\n/)
-    .filter((b) => !HISTORY_MARKER.test(b))
-    .map(squash);
+  return activeText(file).split(/\n\s*\n/).map(squash).filter((b) => b.trim());
 }
 
 /*
  * 主張ごとの「書いてはいけない言い回し」。
  * すべて**実際に残っていたもの**で、思いついた例ではない。
+ *
+ * `stale` は区切りを揃えたうえで当てる（`normalizeSeparators`）。
+ * `staleRaw` は原文のまま当てる（区切りを揃えると壊れる形のため）。
  */
 const CLAIMS = [
   { id: 'title_read_or_sent',
     why: 'ページのタイトルは読みも送りもしない（第15回監査 R15-001）',
-    stale: [/title and URL/i, /URL and title/i, /title and link/i,
-            /title or URL/i,                         // 予備の案内文に残っていた
-            /location\.href and document\.title/i,
-            /タイトルとURL/, /URLとタイトル/, /タイトルまたはURL/,
-            /ページのタイトルを読み/, /ページのタイトルが[^。]{0,12}Xへ渡る/,
-            /reads two things/i, /次の2つを読み取ります/] },
+    /* 区切りを＋へ揃えてから当てる＝「と」「・」「/」「改行」のどれでも当たる */
+    stale: [/title＋URL/i, /URL＋title/i, /title＋link/i,
+            /タイトル＋URL/, /URL＋タイトル/,
+            /location\.href＋document\.title/i,
+            /ページのタイトル＋正規化済みURL/],
+    staleRaw: [/ページのタイトルを読み/, /ページのタイトルが[^。]{0,12}Xへ渡る/,
+               /reads two things/i, /次の2つを読み取ります/,
+               /共有するURL[^。|]{0,8}タイトル/,
+               /タイトル[^。|]{0,8}URLは保存しない/] },
+
+  { id: 'version_boundary_unambiguous',
+    why: '現在の版を「まで／until」の境界に使わない（第19回監査 R19-001）。'
+       + '1.1.8 は**もう読んでいない**版なので、「1.1.8 までは読んでいた」は'
+       + '「1.1.8 も読んでいた」と読めてしまう。版の番号は manifest から取る',
+    /* 版が上がっても勝手に効き続けるよう、番号は正本から作る（下で組み立てる） */
+    versionBoundary: true },
+
+  { id: 'title_pii_reason',
+    why: 'PIIの理由は「必ず入る」。共有できるルートを型で絞ったので「場合がある」は過少申告',
+    only: ['store/LISTING.md', 'store/STORE_DASHBOARD_CHANGES.md', 'store/DATA_DISCLOSURE.json'],
+    staleRaw: [/ユーザー名または組織名が入る場合がある/, /アカウント名が入る場合がある/] },
+
   { id: 'source_never_touches_title',
-    why: '出荷するコードは document.title に触れない（コメントの説明も含めて）',
+    why: '出荷するコードは document.title に触れない（コメントを外した本体で見る）',
     only: ['src/share.js', 'src/content.js', 'src/background.js'],
-    stale: [/document\.title/] },
+    onCode: true,                       // コメントを外してから当てる
+    staleRaw: [/document\.title/, /tab\.title/] },
+
+  { id: 'source_comments_describe_now',
+    why: '出荷コードのコメントが、いまの作りを説明している（第19回監査 R19-003）',
+    only: ['src/share.js', 'src/content.js', 'src/background.js'],
+    staleRaw: [/url と title から/, /第2引数（ページのタイトル）/,
+               /content script と service worker の両方/,
+               /#L10-L20 [^*]{0,20}残す/, /issuecomment-123 [^*]{0,20}残す/,
+               /*
+                * 行頭アンカー（^…/m）で書いていたが、当てる前に空白をつぶすので
+                * **一度も発火しない検査**になっていた。変異で見つけた（第19回 M12）。
+                * 「slug を廃止した」という現行の説明には当たらない形にする。
+                */
+               /slug\s+英数/,
+               /URL と document\.title だけで動く/] },
+
   { id: 'post_text_shape',
     why: '本文はルートから生成する（タイトル入りの旧形式を書かない）',
-    stale: [/Title \(Issue #/, /Title \(PR #/, /Title \(Discussion #/,
-            /owner\/repo: description/, /タイトル \(Issue #/] },
+    staleRaw: [/Title \(Issue #/, /Title \(PR #/, /Title \(Discussion #/,
+               /owner\/repo: description/, /タイトル \(Issue #/] },
+
   { id: 'content_script_has_no_policy',
     why: '画面側は合図を送るだけで、URLも投稿文も組み立てない（第16回監査 R16-003）',
-    stale: [/Post this page to X/, /QUERY_ALLOW/] },
+    staleRaw: [/Post this page to X/, /QUERY_ALLOW/] },
+
   { id: 'routes_are_typed_only',
     why: '検索・explore・topics・プロフィールは共有できない（第15回監査 R15-001）',
-    stale: [/プロフィールページを共有した場合/,
-            /github\.com\/explore[^)]{0,40}は共有でき/,
-            /github\.com\/topics[^)]{0,40}は共有でき/] }
+    staleRaw: [/プロフィールページを共有した場合/,
+               /github\.com\/explore[^)]{0,40}は共有でき/,
+               /github\.com\/topics[^)]{0,40}は共有でき/] }
 ];
 
-/* 主張を当てる面。ストアへ貼る原稿と Privacy を必ず含める（第18回で漏れていた） */
+/*
+ * 主張を当てる面。**14面**（第19回監査 R19-001 で manifest.json と
+ * WEB_INTENT_POLICY_DECISION.json を追加）。
+ * ストアへ貼る原稿と Privacy は第18回で漏れていたので、必ず入れる。
+ */
 const SURFACES = [
   'README.md', 'README.ja.md', 'PRIVACY.md', 'SECURITY.md',
   'store/LISTING.md', 'store/STORE_DASHBOARD_CHANGES.md',
-  'store/DATA_DISCLOSURE.json',
+  'store/DATA_DISCLOSURE.json', 'store/WEB_INTENT_POLICY_DECISION.json',
+  'store/DATA_FLOW_CLAIMS.json',
   '_locales/en/messages.json', '_locales/ja/messages.json',
-  'src/share.js', 'src/content.js', 'src/background.js'
+  'src/share.js', 'src/content.js', 'src/background.js',
+  'manifest.json'
 ];
 
-test('主張の一覧が、すべての面で守られている（R18-001）', () => {
+/*
+ * 「現在の版を境界に使っていないか」の形を、manifest の版から組み立てる。
+ * ここを固定の文字列で書くと、版が上がった瞬間に検査が空振りになる。
+ */
+function versionBoundaryPatterns() {
+  const v = JSON.parse(read('manifest.json')).version;
+  const esc = v.replace(/\./g, '\\.');
+  return [
+    new RegExp(`until\\s+${esc}`, 'i'),
+    new RegExp(`was until.{0,12}${esc}`, 'i'),
+    new RegExp(`${esc}\\s*まで`),
+    new RegExp(`${esc}\\s*以前は`)
+  ];
+}
+
+test('主張の一覧が、すべての面で守られている（R18-001 / R19-001）', () => {
   const found = [];
   for (const file of SURFACES) {
-    for (const block of activeBlocks(file)) {
-      for (const claim of CLAIMS) {
-        if (claim.only && !claim.only.includes(file)) continue;
-        for (const re of claim.stale) {
+    for (const claim of CLAIMS) {
+      if (claim.only && !claim.only.includes(file)) continue;
+      if (claim.versionBoundary) {
+        for (const block of activeBlocks(file)) {
+          for (const re of versionBoundaryPatterns()) {
+            if (re.test(block)) {
+              found.push(`${file} [${claim.id}] ${re} → ${block.slice(0, 90)}`);
+            }
+          }
+        }
+        continue;
+      }
+      /* コードの主張は、コメントを外した本体だけを見る */
+      const source = claim.onCode
+        ? [squash(stripComments(activeText(file)))]
+        : activeBlocks(file);
+      for (const block of source) {
+        for (const re of (claim.stale || [])) {
+          if (re.test(normalizeSeparators(block))) {
+            found.push(`${file} [${claim.id}] ${re} → ${block.slice(0, 90)}`);
+          }
+        }
+        for (const re of (claim.staleRaw || [])) {
           if (re.test(block)) {
-            found.push(`${file} [${claim.id}] ${re} → ${block.slice(0, 100)}`);
+            found.push(`${file} [${claim.id}] ${re} → ${block.slice(0, 90)}`);
           }
         }
       }
@@ -1021,31 +1129,242 @@ test('主張の一覧が、すべての面で守られている（R18-001）', (
   assert.deepEqual(found, [], '古い主張が残っている:\n' + found.join('\n'));
 });
 
+/* ------------------------------------------------------------
+ * 履歴の目印そのものを検査する（ごまかしを防ぐ）
+ * ------------------------------------------------------------ */
+
+test('履歴の目印が、対になっていて入れ子でない（R19-001）', () => {
+  for (const file of SURFACES) {
+    const raw = read(file);
+    const starts = (raw.match(HISTORY_START) || []).length;
+    const ends = (raw.match(HISTORY_END) || []).length;
+    assert.equal(starts, ends, `${file}: 目印の数が合わない（start=${starts} end=${ends}）`);
+    /* 入れ子・閉じ忘れ・逆順を、位置を追って確かめる */
+    let depth = 0;
+    const marks = [...raw.matchAll(/HISTORICAL_CLAIM:(start|end)/g)];
+    for (const m of marks) {
+      depth += m[1] === 'start' ? 1 : -1;
+      assert.ok(depth === 0 || depth === 1,
+        `${file}: 目印が入れ子か、閉じる前に閉じている（位置 ${m.index}）`);
+    }
+    assert.equal(depth, 0, `${file}: 閉じていない目印がある`);
+    /* start は必ず理由を名乗る。無ければ HISTORY_RE に当たらず、除外もされない */
+    const withReason = (raw.match(/HISTORICAL_CLAIM:start\s+reason="[^"]+"/g) || []).length;
+    assert.equal(withReason, starts,
+      `${file}: 理由の無い履歴目印がある（${starts - withReason} 件）。reason="…" を書く`);
+  }
+});
+
+test('履歴で囲って検査を逃れていない——囲いの数と大きさを縛る（R19-001）', () => {
+  /*
+   * 目印を「都合の悪い段落を黙らせる道具」に使わせない。
+   * 囲った数をファイルごとに固定し、増えたらここが落ちる（＝レビューに出る）。
+   * 第18回の語句推測では、9塊が**誰にも見えないまま**外れていた。
+   */
+  const EXPECTED = {
+    'PRIVACY.md': 2,
+    'store/LISTING.md': 2,
+    'store/STORE_DASHBOARD_CHANGES.md': 3,
+    'src/share.js': 1
+  };
+  const actual = {};
+  for (const file of SURFACES) {
+    const n = (read(file).match(HISTORY_START) || []).length;
+    if (n) actual[file] = n;
+  }
+  assert.deepEqual(actual, EXPECTED,
+    '履歴で囲った箇所が変わった。増やすなら、それが本当に履歴か確かめてからここを直す');
+
+  /* 1つの囲いが大きくなりすぎない（章ごと黙らせるのを防ぐ） */
+  for (const file of Object.keys(EXPECTED)) {
+    const raw = read(file);
+    for (const m of raw.matchAll(HISTORY_RE)) {
+      assert.ok(m[0].length <= 900,
+        `${file}: 履歴の囲いが大きすぎる（${m[0].length}文字）。囲うのは履歴の文だけにする`);
+      assert.ok(m[1] && m[1].length >= 6, `${file}: 履歴の理由が短すぎる: "${m[1]}"`);
+    }
+    /* 囲いの合計がファイルの2割を超えない */
+    const hidden = [...raw.matchAll(HISTORY_RE)].reduce((a, m) => a + m[0].length, 0);
+    assert.ok(hidden / raw.length <= 0.2,
+      `${file}: 全体の ${Math.round(hidden / raw.length * 100)}% を履歴として外している`);
+  }
+});
+
 test('主張の検査そのものが効いている（対照）', () => {
-  /* ① 改行をまたいだ旧表現を、いまは捕まえられること（第17回の検査は素通りした） */
-  const across = squash("pre-filled with the title\nand URL of the GitHub page");
-  assert.ok(CLAIMS[0].stale.some((re) => re.test(across)),
-    '改行をまたいだ旧表現を捕まえられない＝第17回と同じ穴が残っている');
-  /* ② 1行に収まっている旧表現も、もちろん捕まえること */
-  const anyClaimCatches = (sample) =>
-    CLAIMS.some((c) => c.stale.some((re) => re.test(squash(sample))));
+  const catches = (sample) => CLAIMS.some((c) =>
+    (c.stale || []).some((re) => re.test(normalizeSeparators(squash(sample)))) ||
+    (c.staleRaw || []).some((re) => re.test(squash(sample))));
+
+  /* ① 区切りが何であっても当たること（第19回で素通りした形を含む） */
+  for (const sample of [
+    'pre-filled with the title\nand URL of the GitHub page',   // 改行（第17回の穴）
+    '共有するURL・タイトルに、ユーザー名が入る',                 // 中黒（第19回の穴）
+    'タイトル　と　URL を読みます',                             // 全角スペース
+    'ページのタイトル/URLを読み取ります',                        // スラッシュ
+    'reads location.href and document.title'
+  ]) {
+    assert.ok(catches(sample), `検査が空振りしている: ${sample.slice(0, 60)}`);
+  }
+
+  /* ② 1行に収まっている旧表現も捕まえること */
   for (const sample of [
     '    Issue        →  Title (Issue #123 · owner/repo)',
     "btn.title = t('shareButtonTooltip', 'Post this page to X');",
     'プロフィールページを共有した場合、そのユーザー名は本人を指します',
-    /* 変異で素通りした2つ（第18回の自己検証で見つけた） */
     "This page's title or URL may contain sensitive authentication information",
-    ' * 設計方針: DOMを一切見ない。URL と document.title だけで動く。'
+    ' * 設計方針: DOMを一切見ない。URL と document.title だけで動く。',
+    '| Xへ渡るか | 渡る。ページのタイトルと正規化済みURLが、リンクに入って届く |',
+    'ユーザー名または組織名が入る場合がある',
+    /* 変異で見つけた素通り（第19回 M12）——行頭アンカーは空白をつぶすと効かない */
+    '   *   slug  英数と . _ - / , : だけの短い識別子'
   ]) {
-    assert.ok(anyClaimCatches(sample), `検査が空振りしている: ${sample.slice(0, 60)}`);
+    assert.ok(catches(sample), `検査が空振りしている: ${sample.slice(0, 60)}`);
   }
-  /* ③ 履歴の除外が、全部を素通しにしていないこと */
-  assert.ok(HISTORY_MARKER.test('以前ここには「…」と書いていました'), '履歴の目印が効いていない');
-  assert.ok(!HISTORY_MARKER.test('RepoShout reads the page URL.'),
-    '履歴の除外が広すぎる＝ふつうの文まで検査を免れる');
-  /* ④ 面の一覧に、今回漏れていた2つが入っていること */
-  for (const f of ['PRIVACY.md', 'store/STORE_DASHBOARD_CHANGES.md', 'store/LISTING.md']) {
+
+  /* ③ ふつうの現行の文を、誤って捕まえないこと */
+  for (const ok of [
+    'RepoShout reads the page URL.',
+    'The page title is not read or sent.',
+    'ページのタイトルは読みません。',
+    'それ以前の同種拡張（2015 / 2018 / 2021）はいずれも更新停止',   // 第19回の誤除外
+    'Until the window is closed, or 12 hours, whichever comes first', // 同上
+    /*
+     * 区切りを揃える処理を作った直後に出た誤検知。`or` を語の途中でも
+     * 区切りとみなしていたので、**JSONのキー名**が旧主張に見えていた。
+     * 英字の区切りは前後に空白がある時だけ数える。
+     */
+    '"persistentStorageOfTitleOrUrl": "無い"'
+  ]) {
+    assert.ok(!catches(ok), `現行の文を古い主張として捕まえている: ${ok.slice(0, 60)}`);
+  }
+
+  /*
+   * ④ 現在の版を「まで」の境界に使う形を捕まえること。
+   * 第19回の変異でここが素通りした——履歴の囲いを外に出すだけで、
+   * 「タイトルは読みません（1.1.8 までは読んでいました）」が復活できた。
+   */
+  const vp = versionBoundaryPatterns();
+  for (const sample of ['(it was until 1.1.8)', '1.1.8 までは読んでいました',
+                        'The page title is not read (was until 1.1.8).']) {
+    assert.ok(vp.some((re) => re.test(sample)), `版の境界を捕まえられない: ${sample}`);
+  }
+  /* 過去の版を境界に使うのは正しいので、捕まえないこと */
+  for (const ok of ['1.1.7 までは読んでいました', 'before 1.1.8 it was read']) {
+    assert.ok(!vp.some((re) => re.test(ok)), `正しい書き方を捕まえている: ${ok}`);
+  }
+
+  /*
+   * ⑤ 履歴の除外が、語句の推測へ戻っていないこと。
+   * 文字列で書くと、検査の都合で語を足したときに誤って落ちる（実際に一度落ちた）。
+   * **振る舞いで見る**——語句だけの文は外れず、目印を書いた文だけが外れる。
+   */
+  const guessyText = '以前はこう書いていました。1.1.8 までは title and URL を送っていました。';
+  assert.ok(!new RegExp(HISTORY_RE.source).test(guessyText),
+    '語句だけで履歴として外れている（第19回 R19-001 の原因）');
+  const markedText =
+    '<!-- HISTORICAL_CLAIM:start reason="経緯のため" -->title and URL<!-- HISTORICAL_CLAIM:end -->';
+  assert.equal(markedText.replace(new RegExp(HISTORY_RE.source, 'g'), ' ').trim(), '',
+    '目印で囲った範囲が外れていない');
+  /* 目印はあっても理由が無ければ外れない（黙らせる近道を作らない） */
+  const noReason = '<!-- HISTORICAL_CLAIM:start -->title and URL<!-- HISTORICAL_CLAIM:end -->';
+  assert.ok(new RegExp(HISTORY_RE.source).test(noReason) === false,
+    '理由の無い目印で検査を外せている');
+
+  /* ⑤ 面の一覧に、これまで漏れていた物が入っていること */
+  for (const f of ['PRIVACY.md', 'store/STORE_DASHBOARD_CHANGES.md', 'store/LISTING.md',
+                   'manifest.json', 'store/WEB_INTENT_POLICY_DECISION.json']) {
     assert.ok(SURFACES.includes(f), `面の一覧に ${f} が無い`);
+  }
+  assert.ok(SURFACES.length >= 14, `面が ${SURFACES.length} しかない`);
+});
+
+/* ------------------------------------------------------------
+ * 正本（DATA_FLOW_CLAIMS.json）を、実際のコードへ縛る
+ * ------------------------------------------------------------
+ * ここが無いと、正本そのものが古くなっても誰も気づかない。
+ * 第18回で学んだ形——正本の外へ出した値は、指す先が変わっても取り残される。
+ */
+
+test('正本の主張が、実際のコードと一致している（R19-001）', () => {
+  const C = JSON.parse(read('store/DATA_FLOW_CLAIMS.json'));
+  const { GXS } = loadShare();
+
+  /* タイトル: コメントを外した本体に document.title が無い */
+  for (const f of ['src/share.js', 'src/content.js', 'src/background.js']) {
+    const code = stripComments(read(f));
+    assert.ok(!/document\.title|tab\.title/.test(code),
+      `${f} がタイトルを読んでいるのに、正本は titleRead=${C.titleRead}`);
+  }
+  assert.equal(C.titleRead, false);
+  assert.equal(C.titleSent, false);
+
+  /* 画面側は合図だけ。URLも投稿文も組み立てない */
+  const content = stripComments(read('src/content.js'));
+  assert.equal(C.contentScriptSendsData, false);
+  assert.ok(!/x\.com\/intent/.test(content), 'content.js がXのURLを組んでいる');
+  assert.ok(!/location\.href/.test(content), 'content.js がURLを読んでいる');
+  assert.equal(C.contentScriptReadsUrl, false);
+
+  /* 出口は service worker だけ */
+  assert.equal(C.serviceWorkerBuildsIntent, true);
+  assert.ok(/intentUrlFor|intentUrl/.test(stripComments(read('src/background.js'))));
+
+  /* ルート: 実際に呼んで確かめる */
+  const probe = {
+    repo: 'https://github.com/o/r', 'issue-list': 'https://github.com/o/r/issues',
+    'pr-list': 'https://github.com/o/r/pulls', 'discussion-list': 'https://github.com/o/r/discussions',
+    releases: 'https://github.com/o/r/releases', issue: 'https://github.com/o/r/issues/12',
+    pr: 'https://github.com/o/r/pull/12', discussion: 'https://github.com/o/r/discussions/12',
+    commit: `https://github.com/o/r/commit/${'a'.repeat(40)}`,
+    blob: 'https://github.com/o/r/blob/main/a.js', tree: 'https://github.com/o/r/tree/main',
+    compare: 'https://github.com/o/r/compare/a...b', 'commits/<ref>': 'https://github.com/o/r/commits/main',
+    search: 'https://github.com/search?q=a', wiki: 'https://github.com/o/r/wiki',
+    actions: 'https://github.com/o/r/actions', profile: 'https://github.com/o',
+    root: 'https://github.com/', 'pull/<n>/files': 'https://github.com/o/r/pull/12/files'
+  };
+  const shareable = (u) => GXS.buildShareResult(u).ok;
+  for (const name of C.supportedRoutes) {
+    assert.ok(probe[name], `正本が知らないルート名を書いている: ${name}`);
+    assert.ok(shareable(probe[name]), `正本は共有できると言うが、実際は拒否される: ${name}`);
+  }
+  for (const name of C.unsupportedRoutes) {
+    assert.ok(probe[name], `正本が知らないルート名を書いている: ${name}`);
+    assert.ok(!shareable(probe[name]), `正本は共有できないと言うが、実際は通る: ${name}`);
+  }
+  assert.equal(C.supportedRoutes.length + C.unsupportedRoutes.length,
+    Object.keys(probe).length, '正本のルート一覧に、試した物が全部載っていない');
+
+  /* フラグメントは全部落ちる */
+  assert.equal(C.fragmentPolicy, 'drop_all');
+  for (const frag of ['#L10-L20', '#issuecomment-123', '#anything']) {
+    const r = GXS.buildShareResult(`https://github.com/o/r/issues/12${frag}`);
+    assert.ok(r.ok && !r.share.url.includes('#'),
+      `正本は全部落とすと言うが、${frag} が残った: ${r.ok ? r.share.url : r.reason}`);
+  }
+
+  /* クエリの型は int / bool / enum だけ */
+  const types = new Set(Object.values(GXS.QUERY_RULES)
+    .flatMap((o) => Object.values(o).map((r) => r.type)));
+  assert.deepEqual([...types].sort(), ['bool', 'enum', 'int'],
+    `正本の書いた型と実際が違う: ${[...types].join(' / ')}`);
+
+  /* 所有者名とリポジトリ名は必ず出て行く */
+  assert.equal(C.ownerRepoAlwaysTransferred, true);
+  for (const u of C.supportedRoutes.map((n) => probe[n])) {
+    const r = GXS.buildShareResult(u);
+    assert.ok(r.share.url.includes('/o/r') || r.share.url.endsWith('/o/r'),
+      `所有者名とリポジトリ名が出て行かないルートがある: ${u}`);
+  }
+
+  /* 保留中の判断は、それぞれの正本と一致している */
+  const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
+  assert.equal(C.webIntentStatus, wi.status, 'Web Intent の状態が2か所で食い違っている');
+  const dd = JSON.parse(read('store/DATA_DISCLOSURE.json'));
+  for (const [id, expected] of Object.entries(C.ownerConfirmationStatus)) {
+    const cat = (dd.categories || dd.disclosures || []).find((c) => c.id === id);
+    assert.ok(cat, `申告の正本に ${id} が無い`);
+    const state = cat.requiresOwnerConfirmation ? cat.confirmationStatus : cat.answer;
+    assert.equal(state, expected, `${id} の状態が2か所で食い違っている`);
   }
 });
 
@@ -1055,12 +1374,107 @@ test('言うべきことを、言っている（主張の裏返し）', () => {
     'PRIVACY.md': ['The page title is not read at all', 'ページのタイトルは読みません'],
     'store/LISTING.md': ['carries no data', 'The page title is not read or sent'],
     'README.md': ['never its title'],
-    'README.ja.md': ['タイトルではありません']
+    'README.ja.md': ['タイトルではありません'],
+    'store/STORE_DASHBOARD_CHANGES.md': ['ページのタイトルは読まず、渡らない']
   };
   for (const [file, phrases] of Object.entries(must)) {
-    const body = read(file);
+    const body = activeText(file);        // 履歴の中に書いて済ませられないようにする
     for (const p of phrases) {
-      assert.ok(body.includes(p), `${file} に「${p}」が無い`);
+      assert.ok(body.includes(p), `${file} に「${p}」が無い（履歴の囲いの外に書く）`);
     }
   }
+});
+
+/* ============================================================
+ * 第19回監査 R19-002 — 名前空間の台帳を、実測とコードへ縛る
+ * ============================================================ */
+
+test('拒否する語の一覧と、台帳の deny が1語も違わない（R19-002）', () => {
+  const inv = JSON.parse(read('store/GITHUB_NAMESPACE_INVENTORY.json'));
+  const { GXS } = loadShare();
+  const runtime = [...GXS.NON_REPOSITORY_TOP_LEVEL].sort();
+  const ledger = inv.namespaces.filter((e) => e.decision === 'deny')
+    .map((e) => e.namespace).sort();
+  assert.deepEqual(ledger, runtime,
+    '台帳とコードがずれている。片方だけ直すと、次に見た人はどちらを信じるか分からなくなる');
+  assert.equal(inv.runtimeDenylistCount, runtime.length, '台帳が数えている語数が違う');
+
+  /* allow と決めた語が、拒否の一覧に紛れていないこと */
+  for (const e of inv.namespaces.filter((x) => x.decision === 'allow')) {
+    assert.ok(!runtime.includes(e.namespace),
+      `${e.namespace} は allow と決めたのに拒否している（実在のリポジトリを巻き込む）`);
+  }
+});
+
+test('台帳が、APIで見た事実と browser で見た事実を分けている（R19-002）', () => {
+  const inv = JSON.parse(read('store/GITHUB_NAMESPACE_INVENTORY.json'));
+  const REQUIRED = ['namespace', 'measuredAt', 'discoverySource', 'accountApi',
+    'repositoryProbe', 'browserPathProbe', 'redirectChain', 'routeShadow',
+    'decision', 'reason', 'evidence'];
+  for (const e of inv.namespaces) {
+    for (const k of REQUIRED) {
+      assert.ok(k in e, `${e.namespace}: ${k} が無い`);
+    }
+    assert.ok(e.reason && e.reason.length >= 20, `${e.namespace}: 理由が短すぎる`);
+
+    /*
+     * **アカウントの有無だけで「案内ページが覆っている」と断定しない**
+     * （第19回監査 R19-002 の核心）。shadow と言うなら、
+     * browser で実際にリポジトリを開こうとした記録が要る。
+     */
+    if (e.routeShadow === true) {
+      assert.equal(e.accountApi.present, true,
+        `${e.namespace}: アカウントが無いのに「覆っている」と書いている`);
+      assert.ok(e.repositoryProbe && 'repositoryUiRendered' in e.repositoryProbe,
+        `${e.namespace}: browser でリポジトリを開いた記録が無いのに shadow と断定している`);
+      assert.equal(e.repositoryProbe.repositoryUiRendered, false,
+        `${e.namespace}: リポジトリUIが出ているのに shadow と書いている`);
+    }
+    /* allow は、実際に開けることを見てから決めている */
+    if (e.decision === 'allow') {
+      assert.equal(e.repositoryProbe.repositoryUiRendered, true,
+        `${e.namespace}: 開けることを確かめずに allow にしている`);
+    }
+  }
+});
+
+test('実在のリポジトリを巻き込む拒否が、台帳に明記してある（R19-002）', () => {
+  /*
+   * 第19回で初めて測って分かったこと——認証系を守るための3語が、
+   * **実在して browser でも開けるリポジトリ**を拒否している。
+   * 落とすほうへ倒す判断は変えないが、代償を数えずに済ませない。
+   */
+  const inv = JSON.parse(read('store/GITHUB_NAMESPACE_INVENTORY.json'));
+  const suppressing = inv.namespaces
+    .filter((e) => e.decision === 'deny' && e.suppressesReachableRepo)
+    .map((e) => e.namespace).sort();
+  assert.deepEqual(suppressing, ['devices', 'password', 'user'],
+    '巻き込んでいる語が変わった。増えたなら、それが本当に必要か確かめてからここを直す');
+  for (const n of suppressing) {
+    const e = inv.namespaces.find((x) => x.namespace === n);
+    assert.match(e.reason, /実在|巻き込/, `${n}: 代償が理由に書かれていない`);
+    assert.equal(e.repositoryProbe.repositoryUiRendered, true);
+  }
+  /* 経緯の文書からも、この代償が読めること */
+  const md = read('store/NAMESPACE_INVENTORY.md');
+  for (const n of suppressing) {
+    assert.ok(md.includes(n), `NAMESPACE_INVENTORY.md に ${n} の代償が書かれていない`);
+  }
+});
+
+test('台帳の説明が、名前と判定を書き写していない（R19-002）', () => {
+  /*
+   * 同じ境界を2つの一覧で持たない。Markdown 側へ表を戻すと、
+   * 片方だけ直る形ができる（第18回 R18-002 で直したばかりの型）。
+   */
+  const md = read('store/NAMESPACE_INVENTORY.md');
+  assert.ok(md.includes('GITHUB_NAMESPACE_INVENTORY.json'),
+    '経緯の文書が、正本のJSONを指していない');
+  const { GXS } = loadShare();
+  /* 説明のために出てよい語だけを許す。それ以外の拒否語が並んでいたら表が戻っている */
+  const ALLOWED_IN_PROSE = new Set(['customer-stories', 'trust-center', 'user', 'devices', 'password']);
+  const listed = GXS.NON_REPOSITORY_TOP_LEVEL.filter(
+    (n) => !ALLOWED_IN_PROSE.has(n) && new RegExp(`\`${n}\`|\\| *${n} *\\|`).test(md));
+  assert.deepEqual(listed, [],
+    `経緯の文書へ一覧が書き戻されている: ${listed.join(' / ')}`);
 });

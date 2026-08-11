@@ -10,8 +10,9 @@
 初回提出と更新提出の両方でこの文書を使います。
 
 > **⚠️ 今回（1.0.1 → 1.1.8）の更新では、§0 事前確認・§1 パッケージ・§2 Store listing・§3 Privacy practices を
-> すべて完了させてください（第10回監査 R10-004）。** 以前ここには「更新なら §1 と §2 だけで足りる」と
-> 書いていましたが、今回は §3 も必ず直す必要があります。掲載中の 1.0.1 は9項目を**すべて No** で申告して
+> すべて完了させてください（第10回監査 R10-004）。**
+> <!-- HISTORICAL_CLAIM:start reason="第10回監査より前の、この手順書自身の記述。製品仕様の説明ではない" -->以前ここには「更新なら §1 と §2 だけで足りる」と書いていました。<!-- HISTORICAL_CLAIM:end -->
+> 今回は §3 も必ず直す必要があります。掲載中の 1.0.1 は9項目を**すべて No** で申告して
 > おり、そのままにすると事実と違う申告を残したまま提出することになります。§3 で直すのは次の4つです。
 >
 > - データの取り扱い（すべて No → PII / Web history / Website content を Yes へ。残り2欄は本人確認待ち）
@@ -93,16 +94,17 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 **今回出す正本**（正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json)）:
 
 ```
-成果物 : reposhout-package-1429708d65901929df44cc0515f9bceb9c054457
-中のZIP : reposhout-1.1.8.zip
-大きさ : 39,536 B / 11ファイル
-SHA-256 : accd14bec13625371868198e4b07878a1e7ca8827fa16b43dcc7ec28c0a3efbe
+状態 : pending_main_ci — **出す成果物はまだ決まっていません**
+中のZIP : reposhout-1.1.8.zip（名前だけは版から決まる）
+成果物名 / 大きさ / SHA-256 : 未定
 ```
 
-main への push で走った CI（run 31456006836）が作ったものを、ダウンロードして実測した値です
-（外側の成果物のバイト数とハッシュも、GitHub の API が申告する digest と一致することを
-確かめました。値は [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) にあります）。
-**タグはまだ打っていません**（外部監査に合格してから打ちます）。第12回〜第18回で
+第19回監査の指摘4件（R19-001〜R19-004）が実在したため、**それまでの成果物
+（`reposhout-package-1429708d…`）は `rejected_by_R19` として提出候補から外しました。**
+次の成果物は、是正を main へ入れたあとに走る CI が作ります。その実物をダウンロードして
+バイト数・SHA-256・収録数を実測してから、この欄と正本を埋めます。
+**まだ存在しない値をここへ書かないでください**（書けば必ず作り話になります）。
+**タグはまだ打っていません**（外部監査に合格してから打ちます）。第12回〜第19回で
 却下した成果物は提出しません（理由は正本の `history` にあります）。
 
 **「最新の main」で成果物を選ばないでください。** 選ぶ基準は上の成果物名とSHA-256です
@@ -364,13 +366,12 @@ the popup (for example to /i/flow/login when the user is signed out).
 
 ### Data usage
 
-**この欄の答えは [DATA_DISCLOSURE.json](DATA_DISCLOSURE.json) が正本です。** 以前はこの表と
-[STORE_DASHBOARD_CHANGES.md](STORE_DASHBOARD_CHANGES.md) で答えが食い違っていて、どちらを見るかで
-申告が変わる状態でした（第5回監査 R5-001）。いまは正本から写した表で、ずれるとテストが落ちます。
+**この欄の答えは [DATA_DISCLOSURE.json](DATA_DISCLOSURE.json) が正本です。** いまは正本から写した表で、ずれるとテストが落ちます。
+<!-- HISTORICAL_CLAIM:start reason="第5回監査より前の文書構成。現在の運用ではない" -->以前はこの表と [STORE_DASHBOARD_CHANGES.md](STORE_DASHBOARD_CHANGES.md) で答えが食い違っていて、どちらを見るかで申告が変わる状態でした（第5回監査 R5-001）。<!-- HISTORICAL_CLAIM:end -->
 
 | 質問 | 回答 | 理由 |
 |---|---|---|
-| Personally identifiable information | **Yes** | 共有するURL・タイトルに、GitHubのユーザー名または組織名が入る場合がある（公式FAQはPIIの例に username を挙げている） |
+| Personally identifiable information | **Yes** | 共有できるページでは、GitHubの所有者名とリポジトリ名が**必ず**共有URLと投稿本文に入る（公式FAQはPIIの例に username を挙げている）。ページのタイトルは読まず送らない |
 | Health information | No | 扱わない |
 | Financial and payment information | No | 扱わない |
 | Authentication information | **要確認**（案: No） | 資格情報そのものは扱わないが、操作時に現在のタブのURL全体をいったん受け取る。設問文を読んで本人が確定する |

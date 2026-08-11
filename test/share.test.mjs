@@ -526,13 +526,26 @@ test('GitHub の機能ページを、あとから見つけたぶんも拒否す�
     assert.ok(GXS.buildShare(`https://github.com/${org}/some-repo`),
       `実在する所有者まで拒否している: ${org}`);
   }
-  /* 台帳（判断の根拠と日付）が、一覧と一緒に更新されていること */
-  const ledger = readFileSync(join(ROOT, 'store/NAMESPACE_INVENTORY.md'), 'utf8');
+  /*
+   * 台帳（判断の根拠と日付）が、一覧と一緒に更新されていること。
+   * **正本は JSON**（第19回監査 R19-002 で機械可読へ移した）。
+   * Markdown は考え方だけを持ち、名前と判定は書き写さない。
+   */
+  const ledger = JSON.parse(
+    readFileSync(join(ROOT, 'store/GITHUB_NAMESPACE_INVENTORY.json'), 'utf8'));
+  const record = (n) => ledger.namespaces.find((e) => e.namespace === n);
   for (const ns of ['trust-center', 'mcp', 'newsletter', 'sitemap']) {
-    assert.ok(ledger.includes(ns), `台帳に判定の記録が無い: ${ns}`);
+    const e = record(ns);
+    assert.ok(e, `台帳に判定の記録が無い: ${ns}`);
+    assert.equal(e.decision, 'deny');
+    assert.equal(e.accountApi.present, false, `${ns}: アカウント不在の実測が記録されていない`);
+    assert.equal(e.browserPathProbe.httpCode, 200, `${ns}: browser の実測が記録されていない`);
   }
-  assert.ok(ledger.includes('github') && /557/.test(ledger),
-    '足さないと判定した実在組織の記録が台帳に無い');
+  /* 足さないと判定した実在組織も、開けることを測ったうえで記録してある */
+  const gh = record('github');
+  assert.ok(gh && gh.decision === 'allow', '足さないと判定した実在組織の記録が台帳に無い');
+  assert.ok(gh.accountApi.publicRepos > 500, `実在組織の公開件数が記録されていない: ${gh.accountApi.publicRepos}`);
+  assert.equal(gh.repositoryProbe.repositoryUiRendered, true);
 });
 
 test('クエリの出力は、入力の並び順で変わらない（R16-002）', () => {

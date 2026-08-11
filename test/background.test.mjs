@@ -15,14 +15,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import vm from 'node:vm';
-import { ROOT } from './helpers/load.mjs';
+import { ROOT, stripComments } from './helpers/load.mjs';
 
 const SHARE = readFileSync(join(ROOT, 'src/share.js'), 'utf8');
 const BG = readFileSync(join(ROOT, 'src/background.js'), 'utf8');
 
 /* Chrome を丸ごと偽物にして service worker を読み込む */
 function mount({ queryResult = null, contentScript = true,
-                openFails = false, fakeTimers = false } = {}) {
+                openFails = false, fakeTimers = false, fault = null } = {}) {
   const log = { opened: [], notified: [], badges: [], titles: [], created: [] };
   /*
    * 偽のタイマー（第15回監査 R15-005）。
@@ -91,6 +91,12 @@ function mount({ queryResult = null, contentScript = true,
   ctx.self = ctx;
   vm.createContext(ctx);
   vm.runInContext(SHARE, ctx, { filename: 'share.js' });
+  /*
+   * 第19回監査 R19-004。share.js の関数を壊してから service worker を読み込む。
+   * 「組み立てが例外を投げ、かつフォールバックも取れない」という重なりは
+   * 通常入力では作れないので、ここで**その状態そのもの**を作って観測する。
+   */
+  if (fault) fault(ctx.GXS);
   vm.runInContext(BG, ctx, { filename: 'background.js' });
 
   /*
@@ -277,15 +283,8 @@ test('タブIDが数でなければ、案内もバッジも試さない（R14-00
 
 const GH_SENDER = { tab: { id: 11, url: 'https://github.com/a/repo', title: 'GitHub - a/repo · GitHub' } };
 
-/*
- * 「もう書いていない」を確かめる検査は、**コードだけ**に当てる。
- * 注釈まで見ると「以前は window.open で開いていた」と経緯を書いた行で落ちる——
- * 落ちる理由が実装と関係なくなり、経緯を書けなくなる。
- * 消しすぎ・消せなさすぎに気づけるよう、この関数自身も下で検査する。
- */
-function stripComments(src) {
-  return src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
-}
+/* stripComments は test/helpers/load.mjs が唯一の定義（第19回監査で共通化）。
+   消しすぎ・消せなさすぎは、すぐ下の検査が実物で確かめる */
 
 test('注釈を外す処理そのものが、正しく動いている（上の検査の土台）', () => {
   const sample = [
@@ -399,4 +398,111 @@ test('content script 側に、Xを直接開く道が残っていない（R16-003
   assert.ok(!/openShareWindow\(\s*msg\.url\s*\)/.test(bg), '渡されたURLを開いている');
   assert.ok(!/tab\.title/.test(bg), 'service worker がタイトルを読んでいる');
   assert.ok(!/\bmsg\.url\b/.test(bg), 'service worker が渡されたURLを見ている');
+});
+
+/* ============================================================
+ * 第19回監査 R19-004 — 押しても何も起きない経路を無くす
+ * ============================================================
+ *
+ * それまでは、拒否の理由を言える経路だけが案内を出していた。
+ * 組み立てが例外を投げ、かつフォールバックのURLも取れないときは、
+ * **案内もバッジも出さずに終わって**いた（実測: notice=0 / badge=0）。
+ * 利用者からは「押しても何も起きない」と見える。
+ *
+ * 通常入力からこの重なりへ到達する経路は見つかっていない。
+ * だが share.js を読み込めていない・将来の改修で例外が増える、という形で
+ * 起こりうるので、**理由を言えないときこそ**案内を出す側へ倒す。
+ */
+const THROWS = (G) => { G.buildShareResult = () => { throw new Error('boom'); }; };
+const TAB_OK = { id: 7, url: 'https://github.com/o/r' };
+
+/* 「1回だけ案内が出た」を1か所で判定する（notice と badge を足して数える） */
+function announced(log) {
+  return log.notified.length + log.badges.filter((b) => b.text).length;
+}
+
+test('組み立てが例外＋フォールバックも取れないとき、黙って終わらない（R19-004）', async () => {
+  const { bg, log } = mount({
+    fault: (G) => { THROWS(G); G.fallbackUrl = () => null; }
+  });
+  const ret = await bg.shareTab(TAB_OK);
+  assert.equal(log.opened.length, 0, '開いてはいけない');
+  assert.equal(announced(log), 1,
+    `案内が1回でない（0なら黙って終わっている）: notice=${log.notified.length} badge=${log.badges.length}`);
+  assert.equal(ret.opened, false);
+  assert.equal(ret.notified, true, '通知したことを戻り値で名乗っていない');
+});
+
+test('フォールバック自体が例外を投げても、黙って終わらない（R19-004）', async () => {
+  /* GXS が読み込めていない等。以前は例外が shareTab の外へ抜けていた */
+  const { bg, log } = mount({
+    fault: (G) => { THROWS(G); G.fallbackUrl = () => { throw new Error('no GXS'); }; }
+  });
+  let ret, threw = null;
+  try { ret = await bg.shareTab(TAB_OK); } catch (e) { threw = e.message; }
+  assert.equal(threw, null, `例外が外へ抜けた: ${threw}`);
+  assert.equal(announced(log), 1, `案内が1回でない: ${JSON.stringify(log.notified)}`);
+  assert.equal(ret.opened, false);
+});
+
+test('案内が届かない相手には、バッジで1回だけ伝える（R19-004）', async () => {
+  const { bg, log } = mount({
+    contentScript: false,                       // content script がいない
+    fault: (G) => { THROWS(G); G.fallbackUrl = () => null; }
+  });
+  const ret = await bg.shareTab(TAB_OK);
+  assert.equal(log.notified.length, 0, '届かないはずの画面へ送ったことになっている');
+  assert.equal(log.badges.filter((b) => b.text).length, 1,
+    `バッジが1回でない: ${JSON.stringify(log.badges)}`);
+  assert.equal(ret.notified, true);
+});
+
+test('案内は1回だけ——画面にもバッジにも二重に出さない（R19-004）', async () => {
+  /* 届く相手には notice だけ。バッジは出さない */
+  const { bg, log } = mount({ fault: (G) => { THROWS(G); G.fallbackUrl = () => null; } });
+  await bg.shareTab(TAB_OK);
+  assert.equal(log.notified.length, 1, '画面への案内が1回でない');
+  assert.equal(log.badges.filter((b) => b.text).length, 0,
+    '画面へ届いたのにバッジも出している（二重）');
+});
+
+test('開かずに終わる出口が、すべて refuse を通っている（R19-004）', () => {
+  /*
+   * 経路を1つずつ試すのではなく、**出口の数を数える**。
+   * refuse を通らない `opened: false` を書けば、ここで落ちる。
+   * （第18回で学んだ形——直す場所を並べず、通るべき所を1つに縛る）
+   */
+  const src = stripComments(readFileSync(join(ROOT, 'src/background.js'), 'utf8'));
+  const falseExits = src.match(/opened:\s*false/g) || [];
+  assert.equal(falseExits.length, 1,
+    `opened:false が ${falseExits.length} か所ある。refuse() の中の1つだけにする`);
+  /* その1つが refuse の中にあること */
+  const refuseBody = src.match(/async function refuse\s*\([^)]*\)\s*\{[\s\S]*?\n\}/);
+  assert.ok(refuseBody, 'refuse() が見つからない');
+  assert.match(refuseBody[0], /opened:\s*false/, 'refuse() が opened:false を返していない');
+  assert.match(refuseBody[0], /announceRefusal/, 'refuse() が案内を出していない');
+  /*
+   * 案内を出す口は refuse ひとつだけ。行番号で範囲を出し、
+   * refuse の外から announceRefusal を呼んでいないことを見る
+   * （定義そのものと、末尾の公開一覧は数えない）。
+   */
+  const lines = src.split('\n');
+  const defLine = lines.findIndex((l) => /async function refuse\s*\(/.test(l));
+  assert.ok(defLine >= 0, 'refuse() の定義が見つからない');
+  let depth = 0, endLine = -1;
+  for (let i = defLine; i < lines.length; i++) {
+    depth += (lines[i].match(/\{/g) || []).length - (lines[i].match(/\}/g) || []).length;
+    if (depth === 0 && i > defLine) { endLine = i; break; }
+  }
+  assert.ok(endLine > defLine, 'refuse() の終わりが見つからない');
+  const strays = [];
+  lines.forEach((l, i) => {
+    if (!/announceRefusal\s*\(/.test(l)) return;         // 呼び出しだけを見る
+    if (/^async function announceRefusal/.test(l)) return; // 定義そのもの
+    if (/^\s*announceRefusal:\s*announceRefusal,?\s*$/.test(l)) return; // 公開一覧
+    if (i >= defLine && i <= endLine) return;             // refuse の中
+    strays.push(`${i + 1}: ${l.trim()}`);
+  });
+  assert.deepEqual(strays, [],
+    'refuse() の外から announceRefusal を呼んでいる（二重通知と数え漏れの元）:\n' + strays.join('\n'));
 });

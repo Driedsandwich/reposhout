@@ -1,0 +1,76 @@
+{
+  "_about": [
+    "**RepoShout が外へ何を出すか**の正本（第19回監査 R19-001）。",
+    "",
+    "なぜこのファイルがあるのか:",
+    "第16回・第17回・第18回・第19回と、『送らなくなったページのタイトルを送ると言い続けている』",
+    "誤りが4回続けて別のファイルから出た。毎回、直す場所を人が列挙していたのが原因。",
+    "",
+    "ここを唯一の正本にして、両側から縛る:",
+    "  ① この正本 ←→ 実際のコード   test/docs.test.mjs が実測して突き合わせる",
+    "  ② この正本 ←→ 全部の文書     14面へ、空白をつぶしてから当てる",
+    "",
+    "**片側だけでは足りない。** ①が無ければ、この正本自身が古くなっても誰も気づかない",
+    "（第18回で学んだ——正本の外へ出した値は誰も直さない）。",
+    "",
+    "履歴を書きたいときは、その範囲を目印で囲う。語句からの推測では除外しない",
+    "（第19回監査 R19-001。『以前』『までは』を含む段落を丸ごと外していたため、",
+    "現在の仕様を述べた段落が、自分の中の履歴表現のせいで検査を免れていた）。",
+    "",
+    "囲いの書き方は test/docs.test.mjs の HISTORY_RE が正本。Markdown はHTMLコメント、",
+    "JS はブロックコメントの中へ置き、開く側には必ず reason を書く（理由の無い囲いは効かない）。",
+    "実例は PRIVACY.md・store/LISTING.md・src/share.js にある。",
+    "**このファイル自身には目印を書かない**——JSONにはコメントが書けず、",
+    "説明のために書いた目印を、検査は本物の囲いとして数えてしまうため。",
+    "JSONは常に全体が現行の主張として検査される。"
+  ],
+
+  "measuredOn": "2026-08-11",
+  "appliesToVersion": "1.1.8",
+
+  "titleRead": false,
+  "titleSent": false,
+  "contentScriptReadsUrl": false,
+  "contentScriptSendsData": false,
+  "serviceWorkerReadsUrl": true,
+  "serviceWorkerBuildsIntent": true,
+
+  "outboundText": "ルートから生成した1行（例: Issue #12 · owner/repo）。ページの中身は入らない",
+  "outboundUrl": "検査済みパーツから組み直した https://github.com/… のURL。元の pathname は使わない",
+  "ownerRepoAlwaysTransferred": true,
+
+  "supportedRoutes": [
+    "repo", "issue-list", "pr-list", "discussion-list", "releases",
+    "issue", "pr", "discussion", "commit"
+  ],
+  "unsupportedRoutes": [
+    "blob", "tree", "compare", "commits/<ref>", "search", "wiki",
+    "actions", "profile", "root", "pull/<n>/files"
+  ],
+
+  "fragmentPolicy": "drop_all",
+  "queryPolicy": "int / bool / enum の値だけを、名前ごとに1回だけ残す。同じ名前が2回以上あればURLごと拒否する。自由文（q / query / discussions_q / title / body）は落とす",
+
+  "recipient": "x.com（X Corp.）— 拡張の開発者のサーバーは存在しない",
+  "transferTiming": "利用者が共有を操作し、Xの投稿画面が開いた時点。Postを押す前",
+  "storage": "chrome.storage.session にウィンドウIDと時刻だけ。URLも投稿本文もタイトルも保存しない",
+
+  "webIntentStatus": "pending",
+  "ownerConfirmationStatus": {
+    "authentication_information": "pending",
+    "user_activity": "pending",
+    "website_content": "Yes"
+  },
+
+  "_boundToCode": [
+    "次は test/docs.test.mjs が実測して、この正本と食い違えば落とす:",
+    "  titleRead / titleSent          → src/*.js（コメントを外した本体）に document.title が無い",
+    "  contentScriptSendsData         → content.js が送るのは type だけ",
+    "  serviceWorkerBuildsIntent      → intentUrl を作るのは background.js だけ",
+    "  supportedRoutes / unsupportedRoutes → buildShareResult を実際に呼んで確かめる",
+    "  fragmentPolicy                 → #L10-L20 を渡して、残らないことを確かめる",
+    "  queryPolicy                    → QUERY_RULES の型が int/bool/enum だけであること",
+    "  webIntentStatus                → store/WEB_INTENT_POLICY_DECISION.json の status と一致",
+    "  ownerConfirmationStatus        → store/DATA_DISCLOSURE.json の確認状態と一致"
+  ]
+}

@@ -1,0 +1,1811 @@
+{
+  "_about": [
+    "GitHub の第1セグメントを「所有者名として扱わない」と決めた記録の正本（第19回監査 R19-002）。",
+    "",
+    "なぜ機械可読にしたか: 第18回までは Markdown の表だったので、",
+    "API で見た事実と browser で見た事実が1つの欄に混ざっていた。",
+    "第19回の監査で customer-stories について「APIはリポジトリが在ると言っている」と指摘され、",
+    "**どちらも真**（APIには在る／browserでは開けない）だと分かった。軸を分けて記録する。",
+    "",
+    "判定の基準:",
+    "  ① アカウントが無い → 拒否してよい（その名前でリポジトリを作れない）",
+    "  ② アカウントは在るが browser でリポジトリUIが出ない → 拒否してよい（案内ページが覆っている）",
+    "  ③ アカウントが在り browser でも開ける → 原則 allow。",
+    "     例外は認証・アカウント系の入口を守る語で、その場合 suppressesReachableRepo=true を立てる",
+    "",
+    "**アカウントの有無だけで route shadow を断定しない**（第19回 R19-002）。両方を測る。",
+    "",
+    "この方式の限界:",
+    "  ・ナビゲーションに出ない機能ページは、この集め方では見つからない",
+    "  ・アカウントの有無は測定時点のもの。GitHubが名前を解放すれば実在のリポジトリを誤って拒否する",
+    "  ・拒否する語の一覧であって、「その名前が実在の所有者だ」と示すものではない"
+  ],
+  "measuredOn": "2026-08-11",
+  "discoveryMethod": {
+    "step1": "curl -sL https://github.com/ を Chrome の User-Agent で取得",
+    "step2": "href=\"/<第1セグメント>\" を正規表現で全部拾う（ドットを含むものは静的ファイルとして除外）",
+    "step3": "既に一覧にある語を引き、残りだけを上の基準で分類する",
+    "lastRunFound": 20,
+    "lastRunNewNames": [],
+    "note": "2026-08-11 の実行で集まったのは 20 語。GitHub のトップページは出し分けがあるため、実行ごとに集まる語は変わる"
+  },
+  "runtimeDenylistCount": 75,
+  "namespaces": [
+    {
+      "namespace": "orgs",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/orgs",
+        "httpCode": 404,
+        "finalUrl": "https://github.com/orgs"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/orgs → 404; gh api users/orgs → absent"
+    },
+    {
+      "namespace": "settings",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/settings",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fsettings"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/settings → 200; gh api users/settings → absent"
+    },
+    {
+      "namespace": "notifications",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/notifications",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fnotifications"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/notifications → 200; gh api users/notifications → absent"
+    },
+    {
+      "namespace": "marketplace",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から） / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/marketplace",
+        "httpCode": 400,
+        "finalUrl": "https://github.com/marketplace"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/marketplace → 400; gh api users/marketplace → absent"
+    },
+    {
+      "namespace": "features",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から） / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/features",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/features"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/features → 200; gh api users/features → absent"
+    },
+    {
+      "namespace": "topics",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/topics",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/topics"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/topics → 200; gh api users/topics → absent"
+    },
+    {
+      "namespace": "sponsors",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から） / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/sponsors",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/open-source/sponsors"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/sponsors → 200; gh api users/sponsors → absent"
+    },
+    {
+      "namespace": "collections",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/collections",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/collections"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/collections → 200; gh api users/collections → absent"
+    },
+    {
+      "namespace": "explore",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/explore",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/explore"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/explore → 200; gh api users/explore → absent"
+    },
+    {
+      "namespace": "trending",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/trending",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/trending"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/trending → 200; gh api users/trending → absent"
+    },
+    {
+      "namespace": "search",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/search",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/search"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/search → 200; gh api users/search → absent"
+    },
+    {
+      "namespace": "apps",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/apps",
+        "httpCode": 400,
+        "finalUrl": "https://github.com/marketplace"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/apps → 400; gh api users/apps → absent"
+    },
+    {
+      "namespace": "codespaces",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/codespaces",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fcodespaces"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/codespaces → 200; gh api users/codespaces → absent"
+    },
+    {
+      "namespace": "new",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/new",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fnew"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/new → 200; gh api users/new → absent"
+    },
+    {
+      "namespace": "about",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から） / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/about",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/about"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/about → 200; gh api users/about → absent"
+    },
+    {
+      "namespace": "pricing",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から） / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/pricing",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/pricing"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/pricing → 200; gh api users/pricing → absent"
+    },
+    {
+      "namespace": "enterprise",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から） / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/enterprise",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/enterprise"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/enterprise → 200; gh api users/enterprise → absent"
+    },
+    {
+      "namespace": "login",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から） / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/login",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/login"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/login → 200; gh api users/login → absent"
+    },
+    {
+      "namespace": "logout",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/logout",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/logout → 200; gh api users/logout → absent"
+    },
+    {
+      "namespace": "join",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/join",
+        "httpCode": 403,
+        "finalUrl": "https://github.com/signup"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/join → 403; gh api users/join → absent"
+    },
+    {
+      "namespace": "site",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/site",
+        "httpCode": 404,
+        "finalUrl": "https://github.com/site"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/site → 404; gh api users/site → absent"
+    },
+    {
+      "namespace": "account",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/account",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Faccount"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/account → 200; gh api users/account → absent"
+    },
+    {
+      "namespace": "dashboard",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/dashboard",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fdashboard"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/dashboard → 200; gh api users/dashboard → absent"
+    },
+    {
+      "namespace": "stars",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/stars",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fstars"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/stars → 200; gh api users/stars → absent"
+    },
+    {
+      "namespace": "watching",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": true,
+        "type": "User",
+        "publicRepos": 0
+      },
+      "repositoryProbe": {
+        "note": "公開リポジトリが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/watching",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fwatching"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "アカウントは在るが公開リポジトリが 0 件。認証・アカウント系の入口を守るため拒否する",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/watching → 200; gh api users/watching → present"
+    },
+    {
+      "namespace": "issues",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/issues",
+        "httpCode": 404,
+        "finalUrl": "https://github.com/issues"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/issues → 404; gh api users/issues → absent"
+    },
+    {
+      "namespace": "pulls",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/pulls",
+        "httpCode": 404,
+        "finalUrl": "https://github.com/pulls"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/pulls → 404; gh api users/pulls → absent"
+    },
+    {
+      "namespace": "discussions",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/discussions",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fdiscussions"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/discussions → 200; gh api users/discussions → absent"
+    },
+    {
+      "namespace": "security",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から） / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/security",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/security"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/security → 200; gh api users/security → absent"
+    },
+    {
+      "namespace": "events",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_github_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/events",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/resources/events"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/events → 200; gh api users/events → absent"
+    },
+    {
+      "namespace": "sessions",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/sessions",
+        "httpCode": 404,
+        "finalUrl": "https://github.com/sessions"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/sessions → 404; gh api users/sessions → absent"
+    },
+    {
+      "namespace": "organizations",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/organizations",
+        "httpCode": 404,
+        "finalUrl": "https://github.com/organizations"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/organizations → 404; gh api users/organizations → absent"
+    },
+    {
+      "namespace": "session",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/session",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/login"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/session → 200; gh api users/session → absent"
+    },
+    {
+      "namespace": "user",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": true,
+        "type": "User",
+        "publicRepos": 11
+      },
+      "repositoryProbe": {
+        "repo": "user/bitmap-fonts",
+        "httpCode": 200,
+        "repositoryUiRendered": true
+      },
+      "browserPathProbe": {
+        "path": "/user",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/user"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": false,
+      "suppressesReachableRepo": true,
+      "decision": "deny",
+      "reason": "**実在の到達できるリポジトリを巻き込んでいる**（user/bitmap-fonts は browser で 200 / リポジトリUIあり）。それでも拒否するのは、この語が認証・アカウント系の入口を守るための一覧に入っているため。落とすほうへ倒す判断で、代償として実在の 11 件が共有できない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/user → 200; gh api users/user → present"
+    },
+    {
+      "namespace": "signup",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/signup",
+        "httpCode": 403,
+        "finalUrl": "https://github.com/signup"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/signup → 403; gh api users/signup → absent"
+    },
+    {
+      "namespace": "password_reset",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/password_reset",
+        "httpCode": 403,
+        "finalUrl": "https://github.com/password_reset"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/password_reset → 403; gh api users/password_reset → absent"
+    },
+    {
+      "namespace": "auth",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/auth",
+        "httpCode": 404,
+        "finalUrl": "https://github.com/auth"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/auth → 404; gh api users/auth → absent"
+    },
+    {
+      "namespace": "oauth",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/oauth",
+        "httpCode": 404,
+        "finalUrl": "https://github.com/oauth"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/oauth → 404; gh api users/oauth → absent"
+    },
+    {
+      "namespace": "authorize",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": true,
+        "type": "User",
+        "publicRepos": 0
+      },
+      "repositoryProbe": {
+        "note": "公開リポジトリが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/authorize",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/authorize"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "アカウントは在るが公開リポジトリが 0 件。認証・アカウント系の入口を守るため拒否する",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/authorize → 200; gh api users/authorize → present"
+    },
+    {
+      "namespace": "devices",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": true,
+        "type": "User",
+        "publicRepos": 1
+      },
+      "repositoryProbe": {
+        "repo": "devices/submit-site-to-marginalia-search",
+        "httpCode": 200,
+        "repositoryUiRendered": true
+      },
+      "browserPathProbe": {
+        "path": "/devices",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/devices"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": false,
+      "suppressesReachableRepo": true,
+      "decision": "deny",
+      "reason": "**実在の到達できるリポジトリを巻き込んでいる**（devices/submit-site-to-marginalia-search は browser で 200 / リポジトリUIあり）。それでも拒否するのは、この語が認証・アカウント系の入口を守るための一覧に入っているため。落とすほうへ倒す判断で、代償として実在の 1 件が共有できない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/devices → 200; gh api users/devices → present"
+    },
+    {
+      "namespace": "sudo",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/sudo",
+        "httpCode": 404,
+        "finalUrl": "https://github.com/sudo"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/sudo → 404; gh api users/sudo → absent"
+    },
+    {
+      "namespace": "two_factor",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/two_factor",
+        "httpCode": 404,
+        "finalUrl": "https://github.com/two_factor"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/two_factor → 404; gh api users/two_factor → absent"
+    },
+    {
+      "namespace": "verify",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": true,
+        "type": "User",
+        "publicRepos": 0
+      },
+      "repositoryProbe": {
+        "note": "公開リポジトリが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/verify",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/verify"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "アカウントは在るが公開リポジトリが 0 件。認証・アカウント系の入口を守るため拒否する",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/verify → 200; gh api users/verify → present"
+    },
+    {
+      "namespace": "billing",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/billing",
+        "httpCode": 404,
+        "finalUrl": "https://github.com/billing"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/billing → 404; gh api users/billing → absent"
+    },
+    {
+      "namespace": "enterprises",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/enterprises",
+        "httpCode": 404,
+        "finalUrl": "https://github.com/enterprises"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/enterprises → 404; gh api users/enterprises → absent"
+    },
+    {
+      "namespace": "invitations",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/invitations",
+        "httpCode": 404,
+        "finalUrl": "https://github.com/invitations"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/invitations → 404; gh api users/invitations → absent"
+    },
+    {
+      "namespace": "account_verifications",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/account_verifications",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/account_verifications → 200; gh api users/account_verifications → absent"
+    },
+    {
+      "namespace": "password",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "structural_auth_route（設計当初から）",
+      "accountApi": {
+        "present": true,
+        "type": "User",
+        "publicRepos": 1
+      },
+      "repositoryProbe": {
+        "repo": "password/python-code-shifter",
+        "httpCode": 200,
+        "repositoryUiRendered": true
+      },
+      "browserPathProbe": {
+        "path": "/password",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/password"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": false,
+      "suppressesReachableRepo": true,
+      "decision": "deny",
+      "reason": "**実在の到達できるリポジトリを巻き込んでいる**（password/python-code-shifter は browser で 200 / リポジトリUIあり）。それでも拒否するのは、この語が認証・アカウント系の入口を守るための一覧に入っているため。落とすほうへ倒す判断で、代償として実在の 1 件が共有できない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/password → 200; gh api users/password → present"
+    },
+    {
+      "namespace": "advisories",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R16-001 で単一の一覧へ統合",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/advisories",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/advisories"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/advisories → 200; gh api users/advisories → absent"
+    },
+    {
+      "namespace": "security-advisories",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R16-001 で単一の一覧へ統合",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/security-advisories",
+        "httpCode": 502,
+        "finalUrl": "https://github.com/security-advisories"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/security-advisories → 502; gh api users/security-advisories → absent"
+    },
+    {
+      "namespace": "copilot",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R16-001 で単一の一覧へ統合",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/copilot",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/copilot"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/copilot → 200; gh api users/copilot → absent"
+    },
+    {
+      "namespace": "github-copilot",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R16-001 で単一の一覧へ統合",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/github-copilot",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/copilot"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/github-copilot → 200; gh api users/github-copilot → absent"
+    },
+    {
+      "namespace": "contact",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R16-001 で単一の一覧へ統合",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/contact",
+        "httpCode": 200,
+        "finalUrl": "https://support.github.com/request/landing"
+      },
+      "redirectChain": "github.com の外へ出る: https://support.github.com/request/landing",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/contact → 200; gh api users/contact → absent"
+    },
+    {
+      "namespace": "signin",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R16-001 で単一の一覧へ統合",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/signin",
+        "httpCode": 404,
+        "finalUrl": "https://github.com/signin"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/signin → 404; gh api users/signin → absent"
+    },
+    {
+      "namespace": "sign_in",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R16-001 で単一の一覧へ統合",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/sign_in",
+        "httpCode": 404,
+        "finalUrl": "https://github.com/sign_in"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/sign_in → 404; gh api users/sign_in → absent"
+    },
+    {
+      "namespace": "sign_up",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R16-001 で単一の一覧へ統合",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/sign_up",
+        "httpCode": 404,
+        "finalUrl": "https://github.com/sign_up"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/sign_up → 404; gh api users/sign_up → absent"
+    },
+    {
+      "namespace": "customer-stories",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R17-002 の指摘＋実測 / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": true,
+        "type": "User",
+        "publicRepos": 1
+      },
+      "repositoryProbe": {
+        "repo": "customer-stories/test",
+        "httpCode": 404,
+        "repositoryUiRendered": false
+      },
+      "browserPathProbe": {
+        "path": "/customer-stories",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/customer-stories"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": true,
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "アカウントは在る（公開1件）が、browser で test を開くと 404 でリポジトリUIが出ない＝GitHubの案内ページが名前空間を覆っている。ブラウザで開けないページは共有の対象にならない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/customer-stories → 200; gh api users/customer-stories → present"
+    },
+    {
+      "namespace": "resources",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R17-002 の指摘＋実測",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/resources",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/resources"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/resources → 200; gh api users/resources → absent"
+    },
+    {
+      "namespace": "education",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R17-002 の指摘＋実測 / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/education",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/education"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/education → 200; gh api users/education → absent"
+    },
+    {
+      "namespace": "solutions",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R17-002 の指摘＋実測 / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/solutions",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/solutions"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/solutions → 200; gh api users/solutions → absent"
+    },
+    {
+      "namespace": "readme",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R17-002 の指摘＋実測 / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/readme",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/readme"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/readme → 200; gh api users/readme → absent"
+    },
+    {
+      "namespace": "git-guides",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R17-002 の指摘＋実測 / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/git-guides",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/git-guides"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/git-guides → 200; gh api users/git-guides → absent"
+    },
+    {
+      "namespace": "why-github",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R17-002 の指摘＋実測 / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/why-github",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/why-github"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/why-github → 200; gh api users/why-github → absent"
+    },
+    {
+      "namespace": "newsroom",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R17-002 の指摘＋実測 / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/newsroom",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/newsroom"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/newsroom → 200; gh api users/newsroom → absent"
+    },
+    {
+      "namespace": "partners",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R17-002 の指摘＋実測",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/partners",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/partners"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/partners → 200; gh api users/partners → absent"
+    },
+    {
+      "namespace": "mobile",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R17-002 の指摘＋実測 / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/mobile",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/mobile"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/mobile → 200; gh api users/mobile → absent"
+    },
+    {
+      "namespace": "team",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R17-002 の指摘＋実測 / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/team",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/team"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/team → 200; gh api users/team → absent"
+    },
+    {
+      "namespace": "open-source",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R17-002 の指摘＋実測",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/open-source",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/open-source"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/open-source → 200; gh api users/open-source → absent"
+    },
+    {
+      "namespace": "social-impact",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R17-002 の指摘＋実測",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/social-impact",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/social-impact"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/social-impact → 200; gh api users/social-impact → absent"
+    },
+    {
+      "namespace": "premium-support",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R17-002 の指摘＋実測",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/premium-support",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/enterprise/premium-support"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/premium-support → 200; gh api users/premium-support → absent"
+    },
+    {
+      "namespace": "press",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "audit_R17-002 の指摘＋実測",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/press",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/about/press"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/press → 200; gh api users/press → absent"
+    },
+    {
+      "namespace": "trust-center",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "github_home_nav_scrape（第18回 R18-002）",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/trust-center",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/trust-center"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/trust-center → 200; gh api users/trust-center → absent"
+    },
+    {
+      "namespace": "mcp",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "github_home_nav_scrape（第18回 R18-002） / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/mcp",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/mcp"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/mcp → 200; gh api users/mcp → absent"
+    },
+    {
+      "namespace": "newsletter",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "github_home_nav_scrape（第18回 R18-002） / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/newsletter",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/newsletter"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/newsletter → 200; gh api users/newsletter → absent"
+    },
+    {
+      "namespace": "sitemap",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "github_home_nav_scrape（第18回 R18-002） / 今日のナビ収集にも出た",
+      "accountApi": {
+        "present": false
+      },
+      "repositoryProbe": {
+        "note": "アカウントが無いので試していない"
+      },
+      "browserPathProbe": {
+        "path": "/sitemap",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/sitemap"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": "not_applicable",
+      "suppressesReachableRepo": false,
+      "decision": "deny",
+      "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+      "evidence": "curl -A <Chrome UA> -L https://github.com/sitemap → 200; gh api users/sitemap → absent"
+    },
+    {
+      "namespace": "github",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "github_home_nav_scrape / 監査の指摘",
+      "accountApi": {
+        "present": true,
+        "type": "Organization",
+        "publicRepos": 557
+      },
+      "repositoryProbe": {
+        "repo": "github/.github",
+        "httpCode": 200,
+        "repositoryUiRendered": true
+      },
+      "browserPathProbe": {
+        "path": "/github",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/github"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": false,
+      "suppressesReachableRepo": false,
+      "decision": "allow",
+      "reason": "実在の所有者で、公開リポジトリが browser でも開ける（github/.github が 200 でリポジトリUIあり）。拒否すると実在のリポジトリを巻き込む",
+      "evidence": "gh api users/github → Organization / 公開557件; curl -L https://github.com/github/.github → 200"
+    },
+    {
+      "namespace": "skills",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "github_home_nav_scrape / 監査の指摘",
+      "accountApi": {
+        "present": true,
+        "type": "Organization",
+        "publicRepos": 52
+      },
+      "repositoryProbe": {
+        "repo": "skills/.github",
+        "httpCode": 200,
+        "repositoryUiRendered": true
+      },
+      "browserPathProbe": {
+        "path": "/skills",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/skills"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": false,
+      "suppressesReachableRepo": false,
+      "decision": "allow",
+      "reason": "実在の所有者で、公開リポジトリが browser でも開ける（skills/.github が 200 でリポジトリUIあり）。拒否すると実在のリポジトリを巻き込む",
+      "evidence": "gh api users/skills → Organization / 公開52件; curl -L https://github.com/skills/.github → 200"
+    },
+    {
+      "namespace": "accessibility",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "github_home_nav_scrape / 監査の指摘",
+      "accountApi": {
+        "present": true,
+        "type": "Organization",
+        "publicRepos": 16
+      },
+      "repositoryProbe": {
+        "repo": "accessibility/a11y-courses",
+        "httpCode": 200,
+        "repositoryUiRendered": true
+      },
+      "browserPathProbe": {
+        "path": "/accessibility",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/accessibility"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": false,
+      "suppressesReachableRepo": false,
+      "decision": "allow",
+      "reason": "実在の所有者で、公開リポジトリが browser でも開ける（accessibility/a11y-courses が 200 でリポジトリUIあり）。拒否すると実在のリポジトリを巻き込む",
+      "evidence": "gh api users/accessibility → Organization / 公開16件; curl -L https://github.com/accessibility/a11y-courses → 200"
+    },
+    {
+      "namespace": "security-lab",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "github_home_nav_scrape / 監査の指摘",
+      "accountApi": {
+        "present": true,
+        "type": "Organization",
+        "publicRepos": 6
+      },
+      "repositoryProbe": {
+        "repo": "security-lab/CheatSheetSeries",
+        "httpCode": 200,
+        "repositoryUiRendered": true
+      },
+      "browserPathProbe": {
+        "path": "/security-lab",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/security-lab"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": false,
+      "suppressesReachableRepo": false,
+      "decision": "allow",
+      "reason": "実在の所有者で、公開リポジトリが browser でも開ける（security-lab/CheatSheetSeries が 200 でリポジトリUIあり）。拒否すると実在のリポジトリを巻き込む",
+      "evidence": "gh api users/security-lab → Organization / 公開6件; curl -L https://github.com/security-lab/CheatSheetSeries → 200"
+    }
+  ]
+}
