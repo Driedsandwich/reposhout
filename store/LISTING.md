@@ -94,15 +94,16 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 **今回出す正本**（正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json)）:
 
 ```
-成果物 : reposhout-package-00c4e0972ca028337b886fa4f7dc44f739e82236
-中のZIP : reposhout-1.1.8.zip
-大きさ : 41,466 B / 11ファイル
-SHA-256 : d7e6dbf248ad7b77daa52c089142200c5b01252ef1667056ab2c0943cecedd16
+状態 : pending_main_ci — **出す成果物はまだ決まっていません**
+中のZIP : reposhout-1.1.8.zip（名前だけは版から決まる）
+成果物名 / 大きさ / SHA-256 : 未定
 ```
 
-main への push で走った CI（run 31484538235）が作ったものを、ダウンロードして実測した値です
-（外側の成果物のバイト数とハッシュも、GitHub の API が申告する digest と一致することを
-確かめました）。**タグはまだ打っていません**（外部監査に合格してから打ちます）。
+第21回監査の指摘が実在したため、**それまでの成果物は `rejected_by_R21` として提出候補から
+外しました。** 次の成果物は、是正を main へ入れたあとに走る CI が作ります。その実物を
+ダウンロードしてバイト数・SHA-256・収録数を実測してから、この欄と正本を埋めます。
+**まだ存在しない値をここへ書かないでください**（書けば必ず作り話になります）。
+**タグはまだ打っていません**（外部監査に合格してから打ちます）。
 却下した成果物は提出しません（理由は正本の `history` にあります）。
 
 **「最新の main」で成果物を選ばないでください。** 選ぶ基準は上の成果物名とSHA-256です
@@ -318,9 +319,17 @@ What the content script does on github.com:
   row, and it does not inspect the body content of the page.
 - It adds one <style> element to the document head, and one wrapper containing
   one Share button. The wrapper is an <li> or a <div>, depending on which
-  container GitHub uses on that page. It does not modify, delete, or replace any
-  existing GitHub element, and it does nothing at all if the expected container
-  is not found.
+  container GitHub uses on that page. To line the button up it also reads a
+  little of the surrounding layout: whether the row exists, how its first child
+  is built, and the computed display, float, margin and height of the
+  neighbouring button. It re-checks that shortly after insertion (about 100, 500
+  and 1500 ms), roughly once a second, and when you return to the tab.
+- When a page cannot be shared, it adds one small status message near the corner
+  of the window. It removes itself after a few seconds and contains no URL, no
+  parameter name and no value -- only a fixed sentence for the reason. This is
+  added even on pages where the expected container was never found.
+- It does not modify, delete, or replace any existing GitHub element. If the
+  expected container is not found, no button is added.
 - When -- and only when -- the user activates that button with a real click, it
   reads nothing from the page in order to build the X Web Intent: pressing the
   button sends the background service worker a message that carries no data, and

@@ -50,10 +50,10 @@ From version 1.1.0 RepoShout stores one thing: **the identifiers of the windows 
 
 | | |
 |---|---|
-| What is stored | Chrome's internal window ID (a number) and a timestamp |
-| What is **not** stored | URLs, page titles, page content, browsing history, anything about you |
+| What is stored | Chrome's internal window ID (a number) and the time the extension opened it |
+| What is **not** stored | The URL, the page title, the page content, the owner or repository name, the post text, your browsing history |
 | Where | `chrome.storage.session` — held in memory, never written to disk |
-| How long | Until the window is closed, until you quit the browser, or 12 hours, whichever comes first |
+| How long | The record is deleted when that window closes. It is also lost whenever Chrome clears session storage: when you quit the browser, and when this extension is disabled, reloaded or updated. After 12 hours the record **stops counting** as one of the extension's own windows even if it is still in memory, and it is deleted the next time the extension looks at it. **There is no timer that wakes the extension at the 12-hour mark to delete it**, so a record may sit unused in memory until then |
 | Who can read it | The extension's own service worker. Content scripts cannot read it (Chrome's default access level for session storage, which this extension does not change) |
 | Sent anywhere | No |
 
@@ -70,7 +70,7 @@ RepoShout also runs content scripts on two sites:
 
 | Site | What the script does |
 |---|---|
-| `https://github.com/*` | Adds the Share button. It reads the page only to locate the button row. **When you press it (a trusted click), it sends the service worker one message that carries no data — literally "the button was pressed"** — and reads neither the address bar nor the page title nor the page body. The service worker decides what may leave, working from the URL of the tab the message came from. It adds one `<style>` element and one wrapper holding one button (an `<li>` or a `<div>`, matching the container) and modifies nothing else. It deletes and replaces nothing of GitHub's own. |
+| `https://github.com/*` | Adds the Share button. It reads the page only to locate the button row. **When you press it (a trusted click), it sends the service worker one message that carries no data — literally "the button was pressed"** — and reads neither the address bar nor the page title nor the page body. The service worker decides what may leave, working from the URL of the tab the message came from. It adds one `<style>` element and one wrapper holding one button (an `<li>` or a `<div>`, matching the container). When a page cannot be shared it also adds one small status message near the corner of the window, which removes itself after a few seconds and contains no URL, parameter name or value. It reads a little of the surrounding layout (whether the row exists, how its first child is built, and the height and spacing of the neighbouring button) so the button lines up. **It deletes and replaces nothing of GitHub's own.** |
 | `https://x.com/*` | **Registers one `keydown` listener and looks at `event.key` on each key press; anything other than an unmodified Escape is ignored immediately.** It closes the share window this extension opened. It does not read field values or page content, and does not store, aggregate or transmit anything from X. |
 
 The X script is deliberately blind to page content. Before closing anything it asks the service worker whether this window is one the extension itself opened, and the only evidence accepted is the window ID recorded at creation time. **If it does not match — which is the case for every X tab you opened yourself — it does nothing.** It cannot close your normal X tabs.
@@ -150,10 +150,10 @@ RepoShout はバックグラウンドでの通信を行わず、独自のサー�
 
 | | |
 |---|---|
-| 保存するもの | Chrome内部のウィンドウID（数値）と時刻 |
-| 保存**しない**もの | URL・ページタイトル・ページの中身・閲覧履歴・利用者に関する情報 |
+| 保存するもの | Chrome内部のウィンドウID（数値）と、拡張がその窓を開いた時刻 |
+| 保存**しない**もの | URL・ページタイトル・ページの中身・所有者名やリポジトリ名・投稿本文・閲覧履歴 |
 | 保存先 | `chrome.storage.session`（メモリ上のみ・ディスクには書きません） |
-| 保存期間 | そのウィンドウを閉じるまで／ブラウザを終了するまで／12時間、のいずれか早い方 |
+| 保存期間 | その窓を閉じた時点で消します。Chromeがセッション保存領域を消すとき——ブラウザの終了時、およびこの拡張を無効化・再読み込み・更新したとき——にも消えます。12時間を過ぎた記録は、メモリに残っていても**「拡張が開いた窓」として数えなくなり**、次に拡張がその記録を見た時点で削除します。**12時間の時点で拡張を起こして消すタイマーはありません**ので、それまでは使われないままメモリに残ることがあります |
 | 読める相手 | この拡張の service worker のみ。コンテンツスクリプトからは読めません（Chromeのセッションストレージの既定設定で、本拡張はこれを変更していません） |
 | 外部送信 | しません |
 
@@ -170,7 +170,7 @@ RepoShout はバックグラウンドでの通信を行わず、独自のサー�
 
 | サイト | スクリプトがすること |
 |---|---|
-| `https://github.com/*` | Share ボタンを追加します。ページを読むのはボタン行の位置を探すためだけです。**押された時点（利用者の操作によるクリック）で service worker へ送るのは、データを何も持たないメッセージ1つ——「押されました」だけ**で、アドレスもページのタイトルもページ本文も読みません。何を外へ出すかは、そのメッセージが来たタブのURLを見て service worker が決めます。`<style>` を1つとボタン1個を包む要素を1つ足す以外は何も変更しません（包む要素はコンテナに合わせて `<li>` または `<div>`）。GitHub側の要素は消しも置き換えもしません。 |
+| `https://github.com/*` | Share ボタンを追加します。ページを読むのはボタン行の位置を探すためだけです。**押された時点（利用者の操作によるクリック）で service worker へ送るのは、データを何も持たないメッセージ1つ——「押されました」だけ**で、アドレスもページのタイトルもページ本文も読みません。何を外へ出すかは、そのメッセージが来たタブのURLを見て service worker が決めます。`<style>` を1つと、ボタン1個を包む要素を1つ足します（包む要素はコンテナに合わせて `<li>` または `<div>`）。共有できなかったときは、画面の隅に小さな案内をもう1つ足します——数秒で自分から消え、URL・パラメータ名・値は含みません。ボタンの見た目を隣とそろえるため、**周りの配置も少しだけ読みます**（操作列があるか、その先頭の子がどう作られているか、隣のボタンの高さと余白）。**GitHub側の要素は消しも置き換えもしません。** |
 | `https://x.com/*` | **`keydown` を1つ登録し、押されたキーの `event.key` を毎回見ます。修飾なしの Escape 以外は直ちに無視します。** 拡張が開いた共有用ウィンドウを閉じるためです。入力欄の値やページの中身は読まず、保存も集計も送信もしません。 |
 
 X側のスクリプトは、意図的にページの中身を見ません。閉じる前に、service worker へ「このウィンドウは拡張が開いたものか」とだけ尋ねます。根拠として使うのは、開いた時点で記録したウィンドウIDだけです。**一致しない場合（＝あなたが自分で開いたXのタブはすべてこれに当たります）、何もしません。** 通常のXのタブを閉じることはできません。

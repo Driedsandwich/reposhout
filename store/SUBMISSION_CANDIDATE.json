@@ -13,22 +13,42 @@
     "",
     "history には、提出しないことにした成果物も理由つきで残す。"
   ],
-  "status": "ready",
+  "status": "pending_main_ci",
   "itemId": "joaipdjaiefbenoijcekdnjagiadikkd",
   "version": "1.1.8",
   "tag": null,
-  "sourceCommit": "00c4e0972ca028337b886fa4f7dc44f739e82236",
-  "treeSha": "77b8d1c9102b5b9f237b4535b5f89270c696e1c8",
-  "runId": "31484538235",
-  "artifactName": "reposhout-package-00c4e0972ca028337b886fa4f7dc44f739e82236",
+  "sourceCommit": null,
+  "treeSha": null,
+  "runId": null,
+  "artifactName": null,
   "innerName": "reposhout-1.1.8.zip",
-  "innerBytes": 41466,
-  "innerFiles": 11,
-  "innerSha256": "d7e6dbf248ad7b77daa52c089142200c5b01252ef1667056ab2c0943cecedd16",
+  "innerBytes": null,
+  "innerFiles": null,
+  "innerSha256": null,
   "privacyPolicyUrl": "https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md",
   "confirmationTimeZone": "Asia/Tokyo",
   "note": "選ぶ基準は、上の構造化された欄（artifactName / innerSha256 / innerBytes / innerFiles）だけ。ここに run 番号・バイト数・ハッシュ・監査の回次を書き写さない（第20回監査 R20-004。写した値は成果物を差し替えても取り残され、どちらが正しいか分からなくなる）。タグは外部監査に合格するまで打たない。却下した成果物は history にある。",
   "history": [
+    {
+      "version": "1.1.8",
+      "sourceCommit": "00c4e0972ca028337b886fa4f7dc44f739e82236",
+      "treeSha": "77b8d1c9102b5b9f237b4535b5f89270c696e1c8",
+      "runId": "31484538235",
+      "artifactName": "reposhout-package-00c4e0972ca028337b886fa4f7dc44f739e82236",
+      "innerName": "reposhout-1.1.8.zip",
+      "innerBytes": 41466,
+      "innerFiles": 11,
+      "innerSha256": "d7e6dbf248ad7b77daa52c089142200c5b01252ef1667056ab2c0943cecedd16",
+      "status": "rejected_by_R21",
+      "auditRound": 21,
+      "findingIds": [
+        "R21-001",
+        "R21-002",
+        "R21-003",
+        "R21-004"
+      ],
+      "reason": "R21-001: 画面側が読むDOMの範囲（子構造・computed style・寸法）と、共有できないときに足す通知要素が、Privacy とストア原稿と正本の説明より広かった。R21-002: 12時間を物理的な保存上限のように書いていたが、実際は論理的な失効で、削除は次に読んだときに起きる。R21-003: 却下記録の理由文に R20-001 が欠けていた。R21-004: 変異ランナーがリポジトリの外にあり、適用の証跡が残らなかった"
+    },
     {
       "version": "1.1.8",
       "sourceCommit": "7435e5cc25d811fe46d80704ee3242e84fd975c6",
@@ -40,7 +60,15 @@
       "innerFiles": 11,
       "innerSha256": "ae64474c718af3eb3546d4a19762bce3da76638e7e820947ce3c660b8922e7ca",
       "status": "rejected_by_R20",
-      "reason": "R20-002: Privacy の「操作したときに限り読む」という要約が、GitHubページ表示中に1秒ごと動くDOM確認を説明していなかった。R20-003: 面の一覧を >= 14 でしか見ておらず、15面のうち1面を外しても検査が通った。R20-004: candidate の note が前回 run のままだった。R20-005: Xのアドレスを組み立てるところが try の外にあり、そこで例外が出ると案内もバッジも出さずに終わっていた（リスナーも Promise を捨てていた）"
+      "reason": "R20-002: Privacy の「操作したときに限り読む」という要約が、GitHubページ表示中に1秒ごと動くDOM確認を説明していなかった。R20-003: 面の一覧を >= 14 でしか見ておらず、15面のうち1面を外しても検査が通った。R20-004: candidate の note が前回 run のままだった。R20-005: Xのアドレスを組み立てるところが try の外にあり、そこで例外が出ると案内もバッジも出さずに終わっていた（リスナーも Promise を捨てていた）",
+      "auditRound": 20,
+      "findingIds": [
+        "R20-001",
+        "R20-002",
+        "R20-003",
+        "R20-004",
+        "R20-005"
+      ]
     },
     {
       "version": "1.1.8",
@@ -53,7 +81,15 @@
       "innerFiles": 11,
       "innerSha256": "accd14bec13625371868198e4b07878a1e7ca8827fa16b43dcc7ec28c0a3efbe",
       "status": "rejected_by_R19",
-      "reason": "R19-001: 履歴の除外を語句から推測していたため、現在の仕様を述べた段落が自分の中の履歴表現で検査を免れ、PRIVACY・LISTING・DASHBOARD のデータフロー記述が実装と食い違ったまま残った。R19-002: customer-stories の拒否根拠が、APIで見た事実とbrowserで見た事実を分けずに書かれていた。R19-003: 出荷 share.js のコメントが slug 型・フラグメント保持・content script からの呼び出し・title 第2引数という旧設計を説明していた。R19-004: 組み立てが例外を投げ、かつフォールバックが取れないとき、案内もバッジも出さずに終わっていた"
+      "reason": "R19-001: 履歴の除外を語句から推測していたため、現在の仕様を述べた段落が自分の中の履歴表現で検査を免れ、PRIVACY・LISTING・DASHBOARD のデータフロー記述が実装と食い違ったまま残った。R19-002: customer-stories の拒否根拠が、APIで見た事実とbrowserで見た事実を分けずに書かれていた。R19-003: 出荷 share.js のコメントが slug 型・フラグメント保持・content script からの呼び出し・title 第2引数という旧設計を説明していた。R19-004: 組み立てが例外を投げ、かつフォールバックが取れないとき、案内もバッジも出さずに終わっていた",
+      "auditRound": 19,
+      "findingIds": [
+        "R19-001",
+        "R19-002",
+        "R19-003",
+        "R19-004",
+        "R19-005"
+      ]
     },
     {
       "version": "1.1.8",
@@ -66,7 +102,14 @@
       "innerFiles": 11,
       "innerSha256": "6980b87aa9f2d6662e56f5c529c12ad5106d852fe5699e16f8cbff1906304f5e",
       "status": "rejected_by_R18",
-      "reason": "R18-001: ストアへ貼る原稿・Privacy Policy・実装のデータフローが一致していなかった（PRIVACYが「URLとタイトルの2つを読む」のまま／Single purposeと権限説明が旧仕様／申告の理由がプロフィール共有や検索ページ共有を前提にしていた）。第17回で足した検査が1行ずつしか見ていなかったため、改行をまたいだ旧表現を見つけられなかった。R18-002: GitHubのナビゲーションに出ている trust-center などが一覧に無かった。R18-003: Web Intent を confirmed_allowed にしたときの証跡（ticket・decision・日付の前後）を検査していなかった。R18-005: 出荷コードのコメントと予備文言が旧モデルを説明していた"
+      "reason": "R18-001: ストアへ貼る原稿・Privacy Policy・実装のデータフローが一致していなかった（PRIVACYが「URLとタイトルの2つを読む」のまま／Single purposeと権限説明が旧仕様／申告の理由がプロフィール共有や検索ページ共有を前提にしていた）。第17回で足した検査が1行ずつしか見ていなかったため、改行をまたいだ旧表現を見つけられなかった。R18-002: GitHubのナビゲーションに出ている trust-center などが一覧に無かった。R18-003: Web Intent を confirmed_allowed にしたときの証跡（ticket・decision・日付の前後）を検査していなかった。R18-005: 出荷コードのコメントと予備文言が旧モデルを説明していた",
+      "auditRound": 18,
+      "findingIds": [
+        "R18-001",
+        "R18-002",
+        "R18-003",
+        "R18-005"
+      ]
     },
     {
       "version": "1.1.8",
@@ -79,7 +122,12 @@
       "innerFiles": 11,
       "innerSha256": "e628aaedaa699ac924ae5dd89d9e12d0fc988c5f5a7bae72b4519577b6e2cd50",
       "status": "rejected_by_R17",
-      "reason": "R17-001: 同じ名前のクエリの重複を、値が型に合うか調べたあとでしか数えていなかった。片方の値が型に合わないと2回書いてあっても1回として通り、残った側を黙って共有していた（?state=open&state=invalid → state=open）。R17-002: GitHubが運営している機能ページの名前空間に漏れがあり、customer-stories / resources / education / solutions をリポジトリとして共有していた"
+      "reason": "R17-001: 同じ名前のクエリの重複を、値が型に合うか調べたあとでしか数えていなかった。片方の値が型に合わないと2回書いてあっても1回として通り、残った側を黙って共有していた（?state=open&state=invalid → state=open）。R17-002: GitHubが運営している機能ページの名前空間に漏れがあり、customer-stories / resources / education / solutions をリポジトリとして共有していた",
+      "auditRound": 17,
+      "findingIds": [
+        "R17-001",
+        "R17-002"
+      ]
     },
     {
       "version": "1.1.8",
@@ -92,7 +140,15 @@
       "innerFiles": 11,
       "innerSha256": "97bcf769ed0a3a25d91a78011902c11dcf3f17d6caf469731f8914f8d29e9caf",
       "status": "rejected_by_R16",
-      "reason": "R16-001: GitHubの機能ページ（/enterprises/… /oauth/… /user/… など）をリポジトリとして共有していた——同じ境界を2つの配列で持ち、出荷側の判定は片方しか見ていなかった。R16-002: 型に合うクエリを同じ名前で何回でも重ねられ、任意長の列をXへ渡せた（1,000回で12,029文字）。R16-003: 画面内ボタンが完成済みのXのURLを組み立てて渡し、service worker は中身を見ずに開いていた（届かないときは画面側が直接 window.open していた）。R16-004: データ申告の説明が実装とずれていた。R16-006（自分で発見）: 拡張のUIが、送らなくなったページのタイトルを「送ります」と言い続けていた"
+      "reason": "R16-001: GitHubの機能ページ（/enterprises/… /oauth/… /user/… など）をリポジトリとして共有していた——同じ境界を2つの配列で持ち、出荷側の判定は片方しか見ていなかった。R16-002: 型に合うクエリを同じ名前で何回でも重ねられ、任意長の列をXへ渡せた（1,000回で12,029文字）。R16-003: 画面内ボタンが完成済みのXのURLを組み立てて渡し、service worker は中身を見ずに開いていた（届かないときは画面側が直接 window.open していた）。R16-004: データ申告の説明が実装とずれていた。R16-006（自分で発見）: 拡張のUIが、送らなくなったページのタイトルを「送ります」と言い続けていた",
+      "auditRound": 16,
+      "findingIds": [
+        "R16-001",
+        "R16-002",
+        "R16-003",
+        "R16-004",
+        "R16-005"
+      ]
     },
     {
       "version": "1.1.8",
@@ -105,7 +161,15 @@
       "innerFiles": 11,
       "innerSha256": "376338a38c58f4e6bfd97419e8f4362f0e428a2a9b4acb27a5143c82997ed8a2",
       "status": "rejected_by_R15",
-      "reason": "第15回監査 R15-001。定義したパターンの外にある現実的な資格情報の形が37件そのまま投稿画面まで届き（X-Api-Key / Private-Token / AWS_SECRET_ACCESS_KEY / SAMLResponse / client_assertion / ya29. / hf_ / whsec_ など）、同時に普通の開発者向け表題4件（key=value / Token= / signature= / auth=none）を誤って拒否していた。**検出器を厳しくすると製品が壊れ、緩めると漏れる**という両側の問題なので、この成果物は提出しない"
+      "reason": "第15回監査 R15-001。定義したパターンの外にある現実的な資格情報の形が37件そのまま投稿画面まで届き（X-Api-Key / Private-Token / AWS_SECRET_ACCESS_KEY / SAMLResponse / client_assertion / ya29. / hf_ / whsec_ など）、同時に普通の開発者向け表題4件（key=value / Token= / signature= / auth=none）を誤って拒否していた。**検出器を厳しくすると製品が壊れ、緩めると漏れる**という両側の問題なので、この成果物は提出しない",
+      "auditRound": 15,
+      "findingIds": [
+        "R15-001",
+        "R15-002",
+        "R15-003",
+        "R15-004",
+        "R15-005"
+      ]
     },
     {
       "version": "1.1.8",
@@ -118,7 +182,13 @@
       "innerFiles": 11,
       "innerSha256": "5ecec372b19948839bfa521bd00e13f4b6e8a5ac624c6574f005f4a96cb45b86",
       "status": "rejected_by_R14",
-      "reason": "第14回監査 R14-001（Basic 認証つきURL・セッションIDと署名の名前・全角やゼロ幅で崩した書き方・そして**切り詰めで既知のトークンが最小長を下回り断片が残る**——検査が変換のあとだけだった）と R14-002（渡されたタブに url が無いとき、別のタブを引き直して共有しえた）。この成果物は提出しない"
+      "reason": "第14回監査 R14-001（Basic 認証つきURL・セッションIDと署名の名前・全角やゼロ幅で崩した書き方・そして**切り詰めで既知のトークンが最小長を下回り断片が残る**——検査が変換のあとだけだった）と R14-002（渡されたタブに url が無いとき、別のタブを引き直して共有しえた）。この成果物は提出しない",
+      "auditRound": 14,
+      "findingIds": [
+        "R14-001",
+        "R14-002",
+        "R14-003"
+      ]
     },
     {
       "version": "1.1.8",
@@ -131,7 +201,13 @@
       "innerFiles": 11,
       "innerSha256": "91c5e7983d383f33dfe8c38ab40262af1c828c1f97bce8bddffad767e6256dba",
       "status": "rejected_by_R13",
-      "reason": "第13回監査 R13-001（投稿本文を検査していなかった／識別子として残していた labels・author・branch・path 等にトークンを入れられた／別ベンダのトークン形が一覧に無かった）と R13-003（ツールバー・ショートカットが Chrome の渡すタブを使っていなかった）。この成果物は提出しない"
+      "reason": "第13回監査 R13-001（投稿本文を検査していなかった／識別子として残していた labels・author・branch・path 等にトークンを入れられた／別ベンダのトークン形が一覧に無かった）と R13-003（ツールバー・ショートカットが Chrome の渡すタブを使っていなかった）。この成果物は提出しない",
+      "auditRound": 13,
+      "findingIds": [
+        "R13-001",
+        "R13-002",
+        "R13-003"
+      ]
     },
     {
       "version": "1.1.8",
@@ -144,7 +220,12 @@
       "innerFiles": 11,
       "innerSha256": "b4bb967e76c9d6d570e1edffaf206b9effefd6971ac5d6814fdd1e070dcd440b",
       "status": "rejected_by_R12",
-      "reason": "第12回監査 R12-001（資格情報の検出漏れ: 5回以上のエンコード・camelCase の名前・パスの中の値・一覧に無いトークン形）と R12-002（素の % を含む普通の検索を落としていた）。この成果物は提出しない"
+      "reason": "第12回監査 R12-001（資格情報の検出漏れ: 5回以上のエンコード・camelCase の名前・パスの中の値・一覧に無いトークン形）と R12-002（素の % を含む普通の検索を落としていた）。この成果物は提出しない",
+      "auditRound": 12,
+      "findingIds": [
+        "R12-001",
+        "R12-002"
+      ]
     },
     {
       "version": "1.1.7",

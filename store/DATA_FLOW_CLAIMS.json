@@ -24,10 +24,8 @@
     "説明のために書いた目印を、検査は本物の囲いとして数えてしまうため。",
     "JSONは常に全体が現行の主張として検査される。"
   ],
-
   "measuredOn": "2026-08-11",
   "appliesToVersion": "1.1.8",
-
   "_claimSurfacesAbout": [
     "主張を当てる面の**正本**（第20回監査 R20-003）。",
     "それまでテスト側は `SURFACES.length >= 14` としか見ておらず、",
@@ -51,49 +49,56 @@
     "store/STORE_DASHBOARD_CHANGES.md",
     "store/WEB_INTENT_POLICY_DECISION.json"
   ],
-
   "titleRead": false,
   "titleSent": false,
   "contentScriptReadsUrl": false,
   "contentScriptSendsData": false,
-
   "contentScriptReadsDom": true,
-  "domReadTiming": "GitHubのページを開いている間。読み込み時・約1秒ごと（setInterval 1000）・タブが表示に戻ったとき（visibilitychange）",
+  "domReadTiming": "GitHubのページを開いている間。document_idle での読み込み時・**ボタンを入れた後の 100 / 500 / 1500 ms の再測定**・約1秒ごと（setInterval 1000）・タブが表示に戻ったとき（visibilitychange）",
   "domReadPurpose": "GitHubが描く操作列を見つけて Share ボタンを置き、隣のボタンと高さを揃えるため",
-  "domReadScope": "決まった数個の CSS セレクタに一致する要素の有無と、隣接ボタンの高さだけ",
+  "domReadScope": "限定した CSS セレクタに一致する要素の有無に加えて、その要素の**限定された子構造と種別**（children の数と先頭の子・tagName）と、**配置合わせのための computed style**（display / cssFloat / marginRight）、**隣接ボタンの寸法**（getBoundingClientRect().height）を読む。ページの本文も、入力欄の値も、URLも、タイトルも読まない",
   "contentScriptReadsPageText": false,
   "contentScriptReadsFormValues": false,
   "domReadLeavesBrowser": false,
   "serviceWorkerReadsUrl": true,
   "serviceWorkerBuildsIntent": true,
-
   "outboundText": "ルートから生成した1行（例: Issue #12 · owner/repo）。ページの中身は入らない",
   "outboundUrl": "検査済みパーツから組み直した https://github.com/… のURL。元の pathname は使わない",
   "ownerRepoAlwaysTransferred": true,
-
   "supportedRoutes": [
-    "repo", "issue-list", "pr-list", "discussion-list", "releases",
-    "issue", "pr", "discussion", "commit"
+    "repo",
+    "issue-list",
+    "pr-list",
+    "discussion-list",
+    "releases",
+    "issue",
+    "pr",
+    "discussion",
+    "commit"
   ],
   "unsupportedRoutes": [
-    "blob", "tree", "compare", "commits/<ref>", "search", "wiki",
-    "actions", "profile", "root", "pull/<n>/files"
+    "blob",
+    "tree",
+    "compare",
+    "commits/<ref>",
+    "search",
+    "wiki",
+    "actions",
+    "profile",
+    "root",
+    "pull/<n>/files"
   ],
-
   "fragmentPolicy": "drop_all",
   "queryPolicy": "int / bool / enum の値だけを、名前ごとに1回だけ残す。同じ名前が2回以上あればURLごと拒否する。自由文（q / query / discussions_q / title / body）は落とす",
-
   "recipient": "x.com（X Corp.）— 拡張の開発者のサーバーは存在しない",
   "transferTiming": "利用者が共有を操作し、Xの投稿画面が開いた時点。Postを押す前",
   "storage": "chrome.storage.session にウィンドウIDと時刻だけ。URLも投稿本文もタイトルも保存しない",
-
   "webIntentStatus": "pending",
   "ownerConfirmationStatus": {
     "authentication_information": "pending",
     "user_activity": "pending",
     "website_content": "Yes"
   },
-
   "_boundToCode": [
     "次は test/docs.test.mjs が実測して、この正本と食い違えば落とす:",
     "  titleRead / titleSent          → src/*.js（コメントを外した本体）に document.title が無い",
@@ -102,11 +107,18 @@
     "  domReadTiming                  → setInterval の間隔と visibilitychange の登録を実測",
     "  contentScriptReadsPageText     → textContent / innerText の読み取りが無い",
     "  contentScriptReadsFormValues   → input/textarea の value 読み取りが無い",
+    "  domReadScope                   → computed style と寸法の読み取りが実際にある",
+    "  contentScriptMayInsertNotice   → body へ通知要素を追加する経路がある",
     "  serviceWorkerBuildsIntent      → intentUrl を作るのは background.js だけ",
     "  supportedRoutes / unsupportedRoutes → buildShareResult を実際に呼んで確かめる",
     "  fragmentPolicy                 → #L10-L20 を渡して、残らないことを確かめる",
     "  queryPolicy                    → QUERY_RULES の型が int/bool/enum だけであること",
     "  webIntentStatus                → store/WEB_INTENT_POLICY_DECISION.json の status と一致",
     "  ownerConfirmationStatus        → store/DATA_DISCLOSURE.json の確認状態と一致"
-  ]
+  ],
+  "contentScriptMayInsertNotice": true,
+  "noticePurpose": "共有できなかった理由を、値を出さずに利用者へ伝えるため（第12回監査 R12-002）",
+  "noticeData": "理由ごとの定型文だけ。URL・パラメータ名・値・所有者名・リポジトリ名は入れない",
+  "noticeLifetime": "一定時間で自分を取り除く。GitHub の既存要素は削除も置換もしない",
+  "contentScriptInsertsInto": "document.head へ <style> 1つ、操作列へボタンの入れ物1つ、および拒否の案内が必要なときだけ document.body へ <div id=\"gxs-notice\"> 1つ"
 }

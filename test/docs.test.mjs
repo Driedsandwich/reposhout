@@ -1388,6 +1388,42 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
     '正本は入力欄を読まないと言うが、読んでいる');
   assert.equal(C.domReadLeavesBrowser, false);
 
+  /*
+   * 第21回監査 R21-001。**読む範囲は「有無と高さだけ」ではなかった。**
+   * 子構造・要素の種別・computed style・寸法も読み、拒否のときは
+   * 画面へ通知要素を1つ足す。正本に書いた以上、実物と合っていることを測る。
+   */
+  const domReads = {
+    'children': /children/, 'tagName': /\.tagName/, 'computed style': /getComputedStyle/,
+    'cssFloat': /cssFloat/, 'marginRight': /marginRight/, 'display': /\.display/,
+    '寸法': /getBoundingClientRect/
+  };
+  for (const [what, re] of Object.entries(domReads)) {
+    assert.ok(re.test(content), `content.js が ${what} を読んでいない（正本の説明が古い）`);
+  }
+  /* 正本の説明が、その読み取りを覆っていること */
+  for (const word of ['children', 'tagName', 'display', 'cssFloat', 'marginRight']) {
+    assert.ok(C.domReadScope.includes(word),
+      `正本の domReadScope が ${word} を説明していない`);
+  }
+  /* 再測定のタイミングも、コードの値と合っていること */
+  const delays = [...content.matchAll(/\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]\.forEach/g)][0];
+  assert.ok(delays, 'ボタン挿入後の再測定が見つからない');
+  for (const d of delays.slice(1)) {
+    assert.ok(C.domReadTiming.includes(d),
+      `正本の domReadTiming に ${d}ms の再測定が書かれていない`);
+  }
+
+  /* 通知要素を足すことを、正本が認めていること */
+  assert.equal(C.contentScriptMayInsertNotice, true);
+  assert.match(content, /createElement\('div'\)/, 'content.js が要素を作っていない');
+  assert.match(content, /body\.appendChild/, 'content.js が body へ足していない');
+  assert.ok(C.contentScriptInsertsInto.includes('gxs-notice'),
+    '正本が、足す通知要素を説明していない');
+  for (const k of ['noticePurpose', 'noticeData', 'noticeLifetime']) {
+    assert.ok(C[k] && C[k].length >= 10, `正本に ${k} が無い`);
+  }
+
   /* 保留中の判断は、それぞれの正本と一致している */
   const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
   assert.equal(C.webIntentStatus, wi.status, 'Web Intent の状態が2か所で食い違っている');
@@ -1601,4 +1637,136 @@ test('提出候補の note に、可変な事実を書き写していない（R2
       assert.ok(cand[k], `${k} が空。note を消した代わりが無い`);
     }
   }
+});
+
+test('却下の記録が、実在した指摘IDを漏れなく持っている（R21-003）', () => {
+  /*
+   * 第21回監査 R21-003。`rejected_by_R20` の理由文には R20-002〜005 しか無く、
+   * **実在した R20-001 が抜けていた**。自由文で管理すると、書き忘れても誰も気づかない。
+   * 指摘IDを配列で持ち、回次と突き合わせる。
+   */
+  const cand = JSON.parse(read('store/SUBMISSION_CANDIDATE.json'));
+  const rejected = cand.history.filter(
+    (h) => typeof h.status === 'string' && h.status.startsWith('rejected_by_'));
+  assert.ok(rejected.length >= 9, `却下の記録が少なすぎる: ${rejected.length}`);
+
+  for (const h of rejected) {
+    const round = Number(h.status.replace('rejected_by_R', ''));
+    assert.ok(Number.isInteger(round), `回次が読めない: ${h.status}`);
+    assert.equal(h.auditRound, round, `${h.status}: auditRound が status と食い違う`);
+    assert.ok(Array.isArray(h.findingIds) && h.findingIds.length,
+      `${h.status}: findingIds が無い`);
+    /* IDの重複が無く、すべてその回次のものであること */
+    assert.equal(new Set(h.findingIds).size, h.findingIds.length,
+      `${h.status}: findingIds が重複している`);
+    for (const id of h.findingIds) {
+      assert.match(id, new RegExp(`^R${round}-\\d{3}$`),
+        `${h.status}: 別の回次のIDが混ざっている: ${id}`);
+    }
+  }
+
+  /* 第20回は5件そろっていること（R20-001 が抜けていたのが今回の指摘） */
+  const r20 = rejected.find((h) => h.status === 'rejected_by_R20');
+  assert.ok(r20, 'rejected_by_R20 の記録が無い');
+  assert.deepEqual(r20.findingIds,
+    ['R20-001', 'R20-002', 'R20-003', 'R20-004', 'R20-005'],
+    'PR #20 で直した指摘の集合と一致していない');
+});
+
+test('「それ以外は変更しない」という全称が撤回されている（R21-001）', () => {
+  /*
+   * 第21回監査 R21-001。Privacy とストア原稿は
+   * 「`<style>` 1つとボタンの入れ物1つ**以外は何も変更しない**」と書いていたが、
+   * 共有できないときは **body へ通知要素をもう1つ足す**（実測）。
+   * 全称の言い切りをやめ、足すものを数え上げる。
+   */
+  const priv = activeText('PRIVACY.md');
+  const listing = activeText('store/LISTING.md');
+  for (const [file, body, stale] of [
+    ['PRIVACY.md', priv, [/and modifies nothing else/i, /以外は何も変更しません/]],
+    ['store/LISTING.md', listing, [/and modifies nothing else/i]]
+  ]) {
+    for (const re of stale) {
+      assert.ok(!re.test(body), `${file} に「それ以外は変更しない」が残っている: ${re}`);
+    }
+  }
+  /* 代わりに、通知要素を足すことが書いてあること */
+  for (const [file, body, phrases] of [
+    ['PRIVACY.md', priv, ['status message', '画面の隅に小さな案内']],
+    ['store/LISTING.md', listing, ['status message near the corner']]
+  ]) {
+    for (const p of phrases) {
+      assert.ok(body.includes(p), `${file} に通知要素の説明が無い: ${p}`);
+    }
+  }
+  /* 「GitHubの要素は消さない」は事実なので、残っていること */
+  assert.ok(/deletes and replaces nothing/i.test(priv), 'PRIVACY.md から事実の記述まで消えている');
+  assert.ok(/消しも置き換えもしません/.test(priv), 'PRIVACY.md（日本語）から事実の記述まで消えている');
+});
+
+test('通知は、操作列が無いページでも出る（R21-001の再現）', () => {
+  /*
+   * ストア原稿は「expected container が無ければ何もしない」と書いていたが、
+   * 通知は container の有無と関係なく body へ足される。
+   * ここでは content.js の構造から、通知が container を必要としないことを見る。
+   */
+  const src = stripComments(read('src/content.js'));
+  const notice = src.match(/function showNotice\([\s\S]*?\n  \}/);
+  assert.ok(notice, 'showNotice が見つからない');
+  assert.ok(!/findContainer|CONTAINERS/.test(notice[0]),
+    '通知が操作列の有無に依存している（実装が変わったなら文書も直す）');
+  assert.match(notice[0], /body\.appendChild/, '通知が body へ足されていない');
+  /* 通知に値が入らないこと（定型文だけ） */
+  assert.ok(!/location\.href|document\.title|tab\.url/.test(notice[0]),
+    '通知にURLや値が入っている');
+});
+
+/* ============================================================
+ * 第21回監査 R21-004 — 変異ランナー自身の検査
+ * ============================================================
+ *
+ * 第20回に、変異15件が全件「素通り」と表示されたが、実は**一度も適用されて
+ * いなかった**。ランナーが壊れていると、検査の結果そのものが読めなくなる。
+ * ランナーをリポジトリへ置いたうえで、**ランナーが正しく区別すること**を測る。
+ */
+
+test('変異の定義が、対象ファイルの実物と一致している（R21-004）', () => {
+  const spec = JSON.parse(read('test/mutations.json'));
+  assert.ok(spec.mutations.length >= 40, `変異が少なすぎる: ${spec.mutations.length}`);
+  const seen = new Set();
+  for (const m of spec.mutations) {
+    assert.ok(!seen.has(m.id), `変異IDが重複している: ${m.id}`);
+    seen.add(m.id);
+    for (const k of ['file', 'test', 'desc', 'find', 'replace']) {
+      assert.ok(k in m, `${m.id}: ${k} が無い`);
+    }
+    /* find が、期待した回数だけ実在すること＝**変異が当たることの事前証明** */
+    const body = read(m.file);
+    const n = body.split(m.find).length - 1;
+    const expected = m.expectMatches === undefined ? 1 : m.expectMatches;
+    assert.equal(n, expected,
+      `${m.id} (${m.file}): find の一致数が ${n}、期待は ${expected}。` +
+      `当たらない変異は「素通り」と見分けがつかない`);
+    /* 置換で中身が実際に変わること */
+    assert.notEqual(body.replace(m.find, m.replace), body,
+      `${m.id}: 置換しても中身が変わらない`);
+  }
+});
+
+test('変異ランナーが、当たらなかった変異を素通りと数えない（R21-004の対照）', () => {
+  /*
+   * ランナーの分類そのものを見る。`not_applied` を `survived` へ寄せる書き方に
+   * 戻すと、第20回と同じ読み違いがまた起きる。
+   */
+  const src = stripComments(read('scripts/run-mutations.mjs'));
+  for (const outcome of ['applied_and_killed', 'applied_but_survived', 'not_applied', 'runner_error']) {
+    assert.ok(src.includes(outcome), `ランナーが ${outcome} を区別していない`);
+  }
+  /* 一致数とハッシュで適用を証明していること */
+  assert.match(src, /actualMatches/, 'ランナーが一致数を数えていない');
+  assert.match(src, /beforeSha256[\s\S]{0,200}afterSha256/, 'ランナーが前後のハッシュを記録していない');
+  assert.match(src, /restore/, 'ランナーが復旧していない');
+  /* 素通り・不適用・ランナー失敗のどれかがあれば、終了コードが0にならないこと */
+  assert.match(src, /survived\.length === 0[\s\S]{0,160}notApplied\.length === 0/,
+    'ランナーが、当たらなかった変異を成功として終えている');
 });

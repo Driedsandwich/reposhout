@@ -600,7 +600,7 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
     await cdp.send('Target.closeTarget', { targetId: otherId });
   });
 
-  it('ウィンドウを閉じると記録が消える（ID再利用への備え）', async () => {
+  it('ウィンドウを閉じると記録が消える（古い記録を許可として残さない）', async () => {
     const { windowId } = await openShareWindowFromSw();
     assert.equal(await evalInSw(`self.GXS_BG.isShareWindow(${windowId})`), true);
     await evalInSw(`chrome.windows.remove(${windowId})`);
