@@ -1064,8 +1064,12 @@ const CLAIMS = [
 ];
 
 /*
- * 主張を当てる面。**14面**（第19回監査 R19-001 で manifest.json と
- * WEB_INTENT_POLICY_DECISION.json を追加）。
+ * 主張を当てる面。**正本は store/DATA_FLOW_CLAIMS.json の claimSurfaces**
+ * （第20回監査 R20-003）。ここは実際に検査へ渡す一覧で、下のテストが
+ * 正本と**並べ替えたうえで完全一致**することを要求する。
+ *
+ * それまでは `SURFACES.length >= 14` としか見ていなかったので、
+ * **15面のうち1面を外しても14面で通り**、その面のclaim検査が黙って止まった。
  * ストアへ貼る原稿と Privacy は第18回で漏れていたので、必ず入れる。
  */
 const SURFACES = [
@@ -1270,12 +1274,18 @@ test('主張の検査そのものが効いている（対照）', () => {
   assert.ok(new RegExp(HISTORY_RE.source).test(noReason) === false,
     '理由の無い目印で検査を外せている');
 
-  /* ⑤ 面の一覧に、これまで漏れていた物が入っていること */
+  /*
+   * ⑥ 面の一覧が、正本と**1つ残らず**一致すること（第20回監査 R20-003）。
+   * `>= 14` で見ていたので、15面のうち1面を外しても通った——
+   * その面へのclaim検査が黙って止まり、誰も気づかない。
+   */
+  const claims = JSON.parse(read('store/DATA_FLOW_CLAIMS.json'));
+  assert.deepEqual([...SURFACES].sort(), [...claims.claimSurfaces].sort(),
+    '検査する面と、正本の claimSurfaces がずれている');
   for (const f of ['PRIVACY.md', 'store/STORE_DASHBOARD_CHANGES.md', 'store/LISTING.md',
                    'manifest.json', 'store/WEB_INTENT_POLICY_DECISION.json']) {
     assert.ok(SURFACES.includes(f), `面の一覧に ${f} が無い`);
   }
-  assert.ok(SURFACES.length >= 14, `面が ${SURFACES.length} しかない`);
 });
 
 /* ------------------------------------------------------------
@@ -1355,6 +1365,28 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
     assert.ok(r.share.url.includes('/o/r') || r.share.url.endsWith('/o/r'),
       `所有者名とリポジトリ名が出て行かないルートがある: ${u}`);
   }
+
+  /*
+   * 第20回監査 R20-002。**画面側は、操作していない間もDOMを見ている。**
+   * それまで Privacy の要約は「操作したときに限り読む」だけを言っており、
+   * GitHubのページを開いている間ずっと動く確認（1秒ごと）を説明していなかった。
+   * 正本へ書いた以上、それがコードと合っていることをここで測る。
+   */
+  assert.equal(C.contentScriptReadsDom, true);
+  assert.match(content, /querySelector/, '正本はDOMを見ると言うが、見ていない');
+  assert.match(C.domReadTiming, /1秒|1000/, '見る間隔が正本に書かれていない');
+  assert.match(content, /setInterval\(\s*inject\s*,\s*1000\s*\)/,
+    `正本の間隔（${C.domReadTiming}）とコードが合っていない`);
+  assert.match(C.domReadTiming, /visibilitychange|表示に戻/, '復帰時の確認が正本に無い');
+  assert.match(content, /visibilitychange/, '正本は復帰時にも見ると言うが、見ていない');
+  /* 逆に「読まない」と書いたものは、本当に読んでいないこと */
+  assert.equal(C.contentScriptReadsPageText, false);
+  assert.ok(!/=\s*[\w.]*\.textContent/.test(content) && !/innerText/.test(content),
+    '正本は本文を読まないと言うが、読んでいる');
+  assert.equal(C.contentScriptReadsFormValues, false);
+  assert.ok(!/(input|textarea)[^;]{0,40}\.value/.test(content),
+    '正本は入力欄を読まないと言うが、読んでいる');
+  assert.equal(C.domReadLeavesBrowser, false);
 
   /* 保留中の判断は、それぞれの正本と一致している */
   const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
@@ -1448,17 +1480,27 @@ test('実在のリポジトリを巻き込む拒否が、台帳に明記して�
   const suppressing = inv.namespaces
     .filter((e) => e.decision === 'deny' && e.suppressesReachableRepo)
     .map((e) => e.namespace).sort();
-  assert.deepEqual(suppressing, ['devices', 'password', 'user'],
-    '巻き込んでいる語が変わった。増えたなら、それが本当に必要か確かめてからここを直す');
-  for (const n of suppressing) {
+  /*
+   * 第20回監査 R20-001 で `user` `devices` `password` を owner単位の拒否から外したので、
+   * **いまは0件**。ここが増えたら、実在のリポジトリを巻き込む拒否をまた足したということ。
+   * そのときは代償を測って、本当に必要かを示してからこの数字を直す。
+   */
+  assert.deepEqual(suppressing, [],
+    `実在のリポジトリを巻き込む拒否が増えている: ${suppressing.join(' / ')}`);
+
+  /* 外した3語が、allow として実測つきで記録されていること */
+  for (const n of ['user', 'devices', 'password']) {
     const e = inv.namespaces.find((x) => x.namespace === n);
-    assert.match(e.reason, /実在|巻き込/, `${n}: 代償が理由に書かれていない`);
-    assert.equal(e.repositoryProbe.repositoryUiRendered, true);
+    assert.ok(e, `台帳に ${n} の記録が無い`);
+    assert.equal(e.decision, 'allow', `${n} が allow になっていない`);
+    assert.equal(e.repositoryProbe.repositoryUiRendered, true,
+      `${n}: 開けることを確かめずに allow にしている`);
+    assert.match(e.reason, /R20-001/, `${n}: 外した理由が記録されていない`);
   }
-  /* 経緯の文書からも、この代償が読めること */
+  /* 経緯の文書からも、この判断が読めること */
   const md = read('store/NAMESPACE_INVENTORY.md');
-  for (const n of suppressing) {
-    assert.ok(md.includes(n), `NAMESPACE_INVENTORY.md に ${n} の代償が書かれていない`);
+  for (const n of ['user', 'devices', 'password']) {
+    assert.ok(md.includes(n), `NAMESPACE_INVENTORY.md に ${n} の判断が書かれていない`);
   }
 });
 
@@ -1471,10 +1513,92 @@ test('台帳の説明が、名前と判定を書き写していない（R19-002�
   assert.ok(md.includes('GITHUB_NAMESPACE_INVENTORY.json'),
     '経緯の文書が、正本のJSONを指していない');
   const { GXS } = loadShare();
-  /* 説明のために出てよい語だけを許す。それ以外の拒否語が並んでいたら表が戻っている */
-  const ALLOWED_IN_PROSE = new Set(['customer-stories', 'trust-center', 'user', 'devices', 'password']);
+  /*
+   * 説明のために出てよい語だけを許す。それ以外の拒否語が並んでいたら表が戻っている。
+   * `login` `settings` は、第20回監査 R20-001 で3語を外したあとも
+   * **本物の認証ルートを守り続ける語**として、判断の説明にどうしても要る。
+   * 増やすときは「表を書き戻していないか」を確かめること（許す語＝守られない語）。
+   */
+  const ALLOWED_IN_PROSE = new Set(['customer-stories', 'trust-center',
+    'user', 'devices', 'password', 'login', 'settings']);
   const listed = GXS.NON_REPOSITORY_TOP_LEVEL.filter(
     (n) => !ALLOWED_IN_PROSE.has(n) && new RegExp(`\`${n}\`|\\| *${n} *\\|`).test(md));
   assert.deepEqual(listed, [],
     `経緯の文書へ一覧が書き戻されている: ${listed.join(' / ')}`);
+});
+
+test('Privacy が、操作していない間のDOM確認も説明している（R20-002）', () => {
+  /*
+   * 第20回監査 R20-002。要約が「操作したときに限り読む」だけだと、
+   * GitHubのページを開いている間ずっと動く確認（1秒ごと・タブ復帰時）が
+   * 説明されないまま残る。**2つの場面を分けて書く**ことを要求する。
+   */
+  const body = activeText('PRIVACY.md');
+  for (const phrase of [
+    'two different moments',                // 英語: 2つの場面があるという宣言
+    'While a GitHub page is open',          // 英語: 表示中の場面
+    'about once a second',                  // 英語: 頻度
+    'When you activate the extension',      // 英語: 操作時の場面
+    '情報を扱う場面は**2つ**',                  // 日本語: 2つの場面があるという宣言
+    'GitHubのページを開いている間',              // 日本語: 表示中の場面
+    '約1秒ごと',                              // 日本語: 頻度
+    '拡張を操作したとき'                        // 日本語: 操作時の場面
+  ]) {
+    assert.ok(body.includes(phrase), `PRIVACY.md に「${phrase}」が無い（R20-002）`);
+  }
+  /*
+   * 「操作したときだけ読む」という**1段階の要約**へ戻していないこと。
+   * 変異で見つけた素通り——2段階の説明を残したまま冒頭に1段階の要約を足すと、
+   * 上の「書いてあるべき」検査は全部通ってしまう（矛盾は捕まらない）。
+   */
+  const ONE_STAGE = [
+    /reads information only when you activate/i,
+    /only when you activate .{0,20}does RepoShout read/i,
+    /操作したときだけ.{0,10}読み/,
+    /読み取るのは.{0,6}操作したときだけ/
+  ];
+  for (const re of ONE_STAGE) {
+    assert.ok(!re.test(body),
+      `PRIVACY.md に「操作時だけ」の1段階の要約が戻っている: ${re}`);
+  }
+  /* 「読まない」ものを、表示中の説明の中でも명示していること */
+  for (const phrase of ['It does not read the page text', 'ページの本文も、入力欄の値も、URLも、タイトルも読みません']) {
+    assert.ok(body.includes(phrase), `PRIVACY.md に「${phrase}」が無い`);
+  }
+});
+
+test('提出候補の note に、可変な事実を書き写していない（R20-004）', () => {
+  /*
+   * 第20回監査 R20-004。構造化された欄は正しく差し替わっていたのに、
+   * `note` だけ前回の run 番号・外側のバイト数・「第12回〜第18回」という
+   * 古い範囲を抱えたまま残っていた。**同じ事実を2か所に書けば、片方が必ず古くなる。**
+   * 数える対象を「一致するか」ではなく「いくつ書いてあるか」にする。
+   */
+  const cand = JSON.parse(read('store/SUBMISSION_CANDIDATE.json'));
+  const note = String(cand.note || '');
+  const MUTABLE = [
+    [/\b\d{9,}\b/, 'run 番号のような長い数字'],
+    [/\b[0-9a-f]{7,}\b/i, 'コミットSHAやハッシュ'],
+    [/\b\d{1,3}(,\d{3})+\s*B\b/, 'バイト数'],
+    [/\b\d{4,}\s*B\b/, 'バイト数'],
+    [/第\d+回〜第\d+回/, '監査の回次の範囲（増えるたびに古くなる）'],
+    [/reposhout-(package|1\.)/, '成果物の名前']
+  ];
+  const found = MUTABLE.filter(([re]) => re.test(note)).map(([, label]) => label);
+  assert.deepEqual(found, [],
+    `note に可変な事実が書き写されている: ${found.join(' / ')}\n  note: ${note.slice(0, 160)}`);
+
+  /* 対照: この検査が本当に効くこと（実際に残っていた旧 note で確かめる） */
+  const stale = 'main への push で走った CI（run 31456006836）が作ったもの。外側は 40,621 B で、'
+    + 'digest と一致。第12回〜第18回で却下した成果物は提出しない';
+  const caught = MUTABLE.filter(([re]) => re.test(stale)).length;
+  assert.ok(caught >= 3,
+    `対照が成立していない＝この検査は旧 note を捕まえられない（${caught} 件しか当たらない）`);
+
+  /* 構造化された欄のほうは、空でないこと（note を消しただけにしない） */
+  if (cand.status === 'ready') {
+    for (const k of ['artifactName', 'innerSha256', 'innerBytes', 'innerFiles']) {
+      assert.ok(cand[k], `${k} が空。note を消した代わりが無い`);
+    }
+  }
 });

@@ -308,11 +308,16 @@ async function shareResolvedTab(tab) {
     var bare = null;
     try {
       bare = self.GXS.fallbackUrl(tab.url);
+      /*
+       * 第20回監査 R20-005。**Xのアドレスを組み立てるところまで同じ try に入れる。**
+       * それまで intentUrlFor はこの外にあり、ここが投げると例外がそのまま
+       * shareTab の外へ抜けて、案内もバッジも出ないまま終わっていた（実測）。
+       */
+      if (bare) share = { intentUrl: self.GXS.intentUrlFor('', bare) };
     } catch (e) {
-      bare = null;
+      share = null;
     }
-    if (!bare) return refuse(tab, 'unsupported');
-    share = { intentUrl: self.GXS.intentUrlFor('', bare) };
+    if (!share || !share.intentUrl) return refuse(tab, 'unsupported');
   }
 
   /*
@@ -334,14 +339,31 @@ async function queryActiveTab() {
   }
 }
 
+/*
+ * 第20回監査 R20-005。**リスナーは Promise を捨てていた。**
+ * shareTab の中で予期しない例外が出ると、拒否は未処理の rejection になって
+ * 消え、利用者からは「押しても何も起きない」と見えた（実測）。
+ * ここで受けて、最後の砦としてバッジを出す。
+ */
+function runShare(tab) {
+  Promise.resolve()
+    .then(function () { return shareTab(tab); })
+    .catch(function () {
+      /* ここまで来る＝shareTab の中で拒否へ倒せなかった。
+         理由は名乗れないので、値を含まない既定の案内を**同じ出口から**出す */
+      return refuse(tab, 'unsupported');
+    })
+    .catch(function () { /* 案内すら出せない相手なら、そこで終わり */ });
+}
+
 // MV3のservice workerは停止と再開を繰り返すため、リスナーは必ずトップレベルで登録する
 // Chrome が渡してくるタブをそのまま使う（第13回監査 R13-003）
 chrome.action.onClicked.addListener(function (tab) {
-  shareTab(tab);
+  runShare(tab);
 });
 
 chrome.commands.onCommand.addListener(function (command, tab) {
-  if (command === 'share-to-x') shareTab(tab);
+  if (command === 'share-to-x') runShare(tab);
 });
 
 /*
@@ -371,10 +393,25 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
       sendResponse({ ok: false });
       return false;
     }
+    /*
+     * 第20回監査 R20-005。**notified を返す。**
+     * それまで拒否のときは `{ok:false}` を返すだけで、service worker が
+     * 案内を出せたかどうかを画面側が知る手段が無かった。中で予期しない例外が
+     * 出た場合（下の rejection 側）は案内も出ず、画面側も何も出さないので、
+     * 利用者からは「押しても何も起きない」と見えた。
+     */
     shareResolvedTab(sender.tab).then(function (r) {
-      try { sendResponse({ ok: !!(r && r.opened), reason: r && r.reason }); } catch (e) {}
+      try {
+        sendResponse({ ok: !!(r && r.opened), reason: r && r.reason,
+                       notified: !!(r && r.notified) });
+      } catch (e) {}
     }, function () {
-      try { sendResponse({ ok: false }); } catch (e) {}
+      /* 例外で倒れたときも、同じ出口から案内を出してから返す */
+      refuse(sender.tab, 'unsupported').then(function (r) {
+        try { sendResponse({ ok: false, reason: r.reason, notified: r.notified }); } catch (e) {}
+      }, function () {
+        try { sendResponse({ ok: false, notified: false }); } catch (e) {}
+      });
     });
     return true; // 非同期応答
   }

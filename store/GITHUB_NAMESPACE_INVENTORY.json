@@ -29,7 +29,7 @@
     "lastRunNewNames": [],
     "note": "2026-08-11 の実行で集まったのは 20 語。GitHub のトップページは出し分けがあるため、実行ごとに集まる語は変わる"
   },
-  "runtimeDenylistCount": 75,
+  "runtimeDenylistCount": 72,
   "namespaces": [
     {
       "namespace": "orgs",
@@ -760,32 +760,6 @@
       "evidence": "curl -A <Chrome UA> -L https://github.com/session → 200; gh api users/session → absent"
     },
     {
-      "namespace": "user",
-      "measuredAt": "2026-08-11",
-      "discoverySource": "structural_auth_route（設計当初から）",
-      "accountApi": {
-        "present": true,
-        "type": "User",
-        "publicRepos": 11
-      },
-      "repositoryProbe": {
-        "repo": "user/bitmap-fonts",
-        "httpCode": 200,
-        "repositoryUiRendered": true
-      },
-      "browserPathProbe": {
-        "path": "/user",
-        "httpCode": 200,
-        "finalUrl": "https://github.com/user"
-      },
-      "redirectChain": "github.com 内で完結（外部への転送なし）",
-      "routeShadow": false,
-      "suppressesReachableRepo": true,
-      "decision": "deny",
-      "reason": "**実在の到達できるリポジトリを巻き込んでいる**（user/bitmap-fonts は browser で 200 / リポジトリUIあり）。それでも拒否するのは、この語が認証・アカウント系の入口を守るための一覧に入っているため。落とすほうへ倒す判断で、代償として実在の 11 件が共有できない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/user → 200; gh api users/user → present"
-    },
-    {
       "namespace": "signup",
       "measuredAt": "2026-08-11",
       "discoverySource": "structural_auth_route（設計当初から）",
@@ -896,32 +870,6 @@
       "decision": "deny",
       "reason": "アカウントは在るが公開リポジトリが 0 件。認証・アカウント系の入口を守るため拒否する",
       "evidence": "curl -A <Chrome UA> -L https://github.com/authorize → 200; gh api users/authorize → present"
-    },
-    {
-      "namespace": "devices",
-      "measuredAt": "2026-08-11",
-      "discoverySource": "structural_auth_route（設計当初から）",
-      "accountApi": {
-        "present": true,
-        "type": "User",
-        "publicRepos": 1
-      },
-      "repositoryProbe": {
-        "repo": "devices/submit-site-to-marginalia-search",
-        "httpCode": 200,
-        "repositoryUiRendered": true
-      },
-      "browserPathProbe": {
-        "path": "/devices",
-        "httpCode": 200,
-        "finalUrl": "https://github.com/devices"
-      },
-      "redirectChain": "github.com 内で完結（外部への転送なし）",
-      "routeShadow": false,
-      "suppressesReachableRepo": true,
-      "decision": "deny",
-      "reason": "**実在の到達できるリポジトリを巻き込んでいる**（devices/submit-site-to-marginalia-search は browser で 200 / リポジトリUIあり）。それでも拒否するのは、この語が認証・アカウント系の入口を守るための一覧に入っているため。落とすほうへ倒す判断で、代償として実在の 1 件が共有できない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/devices → 200; gh api users/devices → present"
     },
     {
       "namespace": "sudo",
@@ -1078,32 +1026,6 @@
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
       "evidence": "curl -A <Chrome UA> -L https://github.com/account_verifications → 200; gh api users/account_verifications → absent"
-    },
-    {
-      "namespace": "password",
-      "measuredAt": "2026-08-11",
-      "discoverySource": "structural_auth_route（設計当初から）",
-      "accountApi": {
-        "present": true,
-        "type": "User",
-        "publicRepos": 1
-      },
-      "repositoryProbe": {
-        "repo": "password/python-code-shifter",
-        "httpCode": 200,
-        "repositoryUiRendered": true
-      },
-      "browserPathProbe": {
-        "path": "/password",
-        "httpCode": 200,
-        "finalUrl": "https://github.com/password"
-      },
-      "redirectChain": "github.com 内で完結（外部への転送なし）",
-      "routeShadow": false,
-      "suppressesReachableRepo": true,
-      "decision": "deny",
-      "reason": "**実在の到達できるリポジトリを巻き込んでいる**（password/python-code-shifter は browser で 200 / リポジトリUIあり）。それでも拒否するのは、この語が認証・アカウント系の入口を守るための一覧に入っているため。落とすほうへ倒す判断で、代償として実在の 1 件が共有できない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/password → 200; gh api users/password → present"
     },
     {
       "namespace": "advisories",
@@ -1806,6 +1728,84 @@
       "decision": "allow",
       "reason": "実在の所有者で、公開リポジトリが browser でも開ける（security-lab/CheatSheetSeries が 200 でリポジトリUIあり）。拒否すると実在のリポジトリを巻き込む",
       "evidence": "gh api users/security-lab → Organization / 公開6件; curl -L https://github.com/security-lab/CheatSheetSeries → 200"
+    },
+    {
+      "namespace": "user",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "github_home_nav_scrape / 監査の指摘",
+      "accountApi": {
+        "present": true,
+        "type": "User",
+        "publicRepos": 11
+      },
+      "repositoryProbe": {
+        "repo": "user/bitmap-fonts",
+        "httpCode": 200,
+        "repositoryUiRendered": true
+      },
+      "browserPathProbe": {
+        "path": "/user",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/user"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": false,
+      "suppressesReachableRepo": false,
+      "decision": "allow",
+      "reason": "**第20回監査 R20-001 で owner単位の拒否をやめた。** 実在の所有者で、user/bitmap-fonts は browser で 200・リポジトリUIあり。認証系を守るための語だったが、本物の認証ルートは別の仕組みで拒否され続ける（/password_reset は所有者名にアンダースコアを許していないので文法で落ち、/login/* と /settings/* はそれぞれの語が一覧に残る）。外して新たに通るのは /devices/new・/password/new・/user/emails だが、いずれも github.com で 404",
+      "evidence": "gh api users/user → User / 公開11件; curl -L https://github.com/user/bitmap-fonts → 200"
+    },
+    {
+      "namespace": "devices",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "github_home_nav_scrape / 監査の指摘",
+      "accountApi": {
+        "present": true,
+        "type": "User",
+        "publicRepos": 1
+      },
+      "repositoryProbe": {
+        "repo": "devices/submit-site-to-marginalia-search",
+        "httpCode": 200,
+        "repositoryUiRendered": true
+      },
+      "browserPathProbe": {
+        "path": "/devices",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/devices"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": false,
+      "suppressesReachableRepo": false,
+      "decision": "allow",
+      "reason": "**第20回監査 R20-001 で owner単位の拒否をやめた。** 実在の所有者で、devices/submit-site-to-marginalia-search は browser で 200・リポジトリUIあり。認証系を守るための語だったが、本物の認証ルートは別の仕組みで拒否され続ける（/password_reset は所有者名にアンダースコアを許していないので文法で落ち、/login/* と /settings/* はそれぞれの語が一覧に残る）。外して新たに通るのは /devices/new・/password/new・/user/emails だが、いずれも github.com で 404",
+      "evidence": "gh api users/devices → User / 公開1件; curl -L https://github.com/devices/submit-site-to-marginalia-search → 200"
+    },
+    {
+      "namespace": "password",
+      "measuredAt": "2026-08-11",
+      "discoverySource": "github_home_nav_scrape / 監査の指摘",
+      "accountApi": {
+        "present": true,
+        "type": "User",
+        "publicRepos": 1
+      },
+      "repositoryProbe": {
+        "repo": "password/python-code-shifter",
+        "httpCode": 200,
+        "repositoryUiRendered": true
+      },
+      "browserPathProbe": {
+        "path": "/password",
+        "httpCode": 200,
+        "finalUrl": "https://github.com/password"
+      },
+      "redirectChain": "github.com 内で完結（外部への転送なし）",
+      "routeShadow": false,
+      "suppressesReachableRepo": false,
+      "decision": "allow",
+      "reason": "**第20回監査 R20-001 で owner単位の拒否をやめた。** 実在の所有者で、password/python-code-shifter は browser で 200・リポジトリUIあり。認証系を守るための語だったが、本物の認証ルートは別の仕組みで拒否され続ける（/password_reset は所有者名にアンダースコアを許していないので文法で落ち、/login/* と /settings/* はそれぞれの語が一覧に残る）。外して新たに通るのは /devices/new・/password/new・/user/emails だが、いずれも github.com で 404",
+      "evidence": "gh api users/password → User / 公開1件; curl -L https://github.com/password/python-code-shifter → 200"
     }
   ]
 }

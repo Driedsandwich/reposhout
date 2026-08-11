@@ -17,7 +17,20 @@ RepoShout never posts on your behalf, and never stores what it sends.
 
 ### Information we process
 
-When — and only when — you activate the extension (by clicking the in-page **Share** button, clicking the toolbar icon, or pressing the keyboard shortcut), RepoShout reads **one thing** from the tab you are currently viewing:
+RepoShout processes information at **two different moments**, and they are not the same.
+
+**1. While a GitHub page is open — placing the Share button.** The in-page part of the
+extension looks for the small toolbar that GitHub draws next to a repository, issue or pull
+request heading, so it can put its own **Share** button there. It does this when the page
+loads, again about once a second, and again when you switch back to the tab (GitHub swaps
+pages without a full reload, so the button can otherwise disappear). This check reads
+**only whether a few specific layout elements exist, and how tall the neighbouring button
+is**. It does not read the page text, the URL, the page title, form fields, or anything you
+type. The result of this check is never stored, and never leaves your browser.
+
+**2. When you activate the extension** (by clicking the in-page **Share** button, clicking the
+toolbar icon, or pressing the keyboard shortcut) — and only then — RepoShout reads **one
+thing** from the tab you are currently viewing:
 
 - the page URL
 
@@ -107,7 +120,17 @@ RepoShout が代わりに投稿することはなく、送ったものを保存�
 
 ### 処理する情報
 
-拡張を操作したとき（画面内の **Share** ボタン、ツールバーアイコン、キーボードショートカットのいずれか）**に限り**、現在開いているタブから読み取るのは**1つだけ**です。
+RepoShout が情報を扱う場面は**2つ**あり、内容が違います。
+
+**1. GitHubのページを開いている間 — Share ボタンを置くため。** 拡張の画面側は、GitHubが
+リポジトリ名やIssueの見出しの横に描く小さな操作列を探して、そこへ自分の **Share** ボタンを
+置きます。ページを開いたとき・**約1秒ごと**・タブを表示に戻したときに確認します
+（GitHubはページ全体を読み込み直さずに画面を切り替えるため、放っておくとボタンが消えるからです）。
+このとき見るのは**決まった数個の要素があるかどうかと、隣のボタンの高さだけ**です。
+ページの本文も、入力欄の値も、URLも、タイトルも読みません。この確認の結果は、保存されることも、ブラウザの外へ出ることもありません。
+
+**2. 拡張を操作したとき**（画面内の **Share** ボタン、ツールバーアイコン、キーボード
+ショートカットのいずれか）——**そのときに限り**、現在開いているタブから読み取るのは**1つだけ**です。
 
 - ページのURL
 

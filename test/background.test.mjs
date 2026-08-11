@@ -42,7 +42,9 @@ function mount({ queryResult = null, contentScript = true,
   };
   const chrome = {
     action: {
-      onClicked: { addListener() {} },
+      /* 第20回監査 R20-005。ツールバーのリスナーを実際に呼べるようにする
+         （それまで捨てていたので、リスナーが例外を握り潰す経路を試せなかった） */
+      onClicked: { addListener(fn) { log.onClicked = fn; } },
       async setBadgeText(o) { log.badges.push(o); },
       async setBadgeBackgroundColor() {},
       async setTitle(o) { log.titles.push(o); }
@@ -505,4 +507,71 @@ test('開かずに終わる出口が、すべて refuse を通っている（R19
   });
   assert.deepEqual(strays, [],
     'refuse() の外から announceRefusal を呼んでいる（二重通知と数え漏れの元）:\n' + strays.join('\n'));
+});
+
+/* ============================================================
+ * 第20回監査 R20-005 — 内部例外でも「押しても何も起きない」にしない
+ * ============================================================
+ *
+ * 第19回で fallback の null と例外は塞いだが、**Xのアドレスを組み立てる
+ * ところ（intentUrlFor）は try の外**に残っていた。さらに、ツールバーと
+ * ショートカットのリスナーは shareTab の Promise を捨てていたので、
+ * そこまで漏れた例外は未処理の rejection になって消えていた（実測）。
+ */
+
+test('アドレスの組み立てが例外を投げても、黙って終わらない（R20-005）', async () => {
+  const { bg, log } = mount({
+    fault: (G) => {
+      G.buildShareResult = () => { throw new Error('boom'); };   // フォールバックへ倒す
+      G.intentUrlFor = () => { throw new Error('intent boom'); }; // その先で投げる
+    }
+  });
+  let ret, threw = null;
+  try { ret = await bg.shareTab(TAB_OK); } catch (e) { threw = e.message; }
+  assert.equal(threw, null, `例外が外へ抜けた: ${threw}`);
+  assert.equal(log.opened.length, 0, '開いてはいけない');
+  assert.equal(announced(log), 1, `案内が1回でない: ${JSON.stringify(log.notified)}`);
+  assert.equal(ret.opened, false);
+});
+
+test('ツールバーの押下でも、予期しない例外を握り潰さない（R20-005）', async () => {
+  /*
+   * `tab.url` を読むだけで投げるタブを渡し、shareTab の中で拒否へ倒せない
+   * 状態を作る。リスナーが Promise を捨てていると、ここで無反応になる。
+   */
+  const { log } = mount({});
+  const hostile = { id: 9, get url() { throw new Error('unexpected internal error'); } };
+  assert.ok(log.onClicked, 'ツールバーのリスナーが登録されていない');
+  log.onClicked(hostile);
+  await new Promise((r) => setTimeout(r, 60));
+  assert.ok(announced(log) >= 1,
+    `例外がリスナーで消えている（無反応）: notice=${log.notified.length} badge=${log.badges.length}`);
+});
+
+test('ツールバーの押下が、ふつうのタブでは普通に開く（R20-005の対照）', async () => {
+  const { log } = mount({});
+  log.onClicked({ id: 9, url: 'https://github.com/o/r' });
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(log.opened.length, 1, '対照が成立していない＝この検査は何でも通る');
+  assert.equal(announced(log), 0, '普通に開いたのに案内を出している');
+});
+
+test('画面内ボタンの応答が、案内を出せたかどうかを伝える（R20-005）', async () => {
+  /* service worker が案内を出せたなら notified:true。画面側は二重に出さない */
+  const { log, send } = mount({ contentScript: true });
+  const res = await send({ type: 'gxs:request-share' },
+    { tab: { id: 5, url: 'https://github.com/search?q=a' } });   // 共有できないルート
+  assert.equal(res.ok, false);
+  assert.equal(res.notified, true, '案内を出せたことを応答で伝えていない');
+  assert.equal(log.notified.length, 1, '案内が1回でない');
+});
+
+test('画面側は、service worker が案内を出せたときは黙る（R20-005・二重通知の防止）', () => {
+  /*
+   * content script の分岐そのものを見る。`notified !== true` のときだけ出す形で
+   * なければ、service worker の案内と画面側の案内が二重になる。
+   */
+  const src = stripComments(readFileSync(join(ROOT, 'src/content.js'), 'utf8'));
+  assert.match(src, /res\.ok === false && res\.notified !== true/,
+    '画面側が notified を見ずに案内を出している（二重通知）');
 });
