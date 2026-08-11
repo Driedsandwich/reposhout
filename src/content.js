@@ -183,7 +183,14 @@
          * 更新後も古い方針の共有が生き続けた。開かずに再読み込みを促す。
          * 断った理由の案内は service worker が別に送ってくる。
          */
-        if (chrome.runtime.lastError || !res) showNotice('reload_required');
+        if (chrome.runtime.lastError || !res) { showNotice('reload_required'); return; }
+        /*
+         * 第20回監査 R20-005。**service worker が案内を出せなかったときだけ**、
+         * ここで定型の案内を出す（`notified` が true なら出さない＝二重にしない）。
+         * それまでは `{ok:false}` を受け取っても画面側は何もせず、
+         * service worker 側でも例外で案内が出ないと、押しても無反応に見えた。
+         */
+        if (res.ok === false && res.notified !== true) showNotice(res.reason || 'unsupported');
       });
     } catch (e) {
       showNotice('reload_required');
