@@ -102,6 +102,20 @@ jobs:
       - name: 実拡張E2E
         run: npm run test:e2e
 
+      # 第21回監査 R21-004。検査が「落ちるべきときに落ちる」ことを毎回確かめる。
+      # ⚠️ 変異が当たらなかったものは「素通り」と区別して**失敗**にする
+      #    （第20回に、当たっていない変異15件を素通りと読み違えた）。
+      - name: 変異対照（検査が効いていることの確認）
+        run: npm run test:mutations -- --receipt mutation-receipt.json
+
+      - name: 変異対照の証跡を残す
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutation-receipt-${{ github.sha }}
+          path: mutation-receipt.json
+          if-no-files-found: warn
+
       # PRのときは GITHUB_SHA が「PR検証用の一時マージコミット」を指す。
       # release-manifest.json にそのまま入ると、main由来の提出候補と見分けがつかない。
       # PRの head / base は環境変数に既定では入らないので、ここで明示的に渡す。

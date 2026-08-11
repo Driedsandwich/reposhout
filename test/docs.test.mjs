@@ -1602,3 +1602,44 @@ test('提出候補の note に、可変な事実を書き写していない（R2
     }
   }
 });
+
+test('変異の定義が、対象ファイルの実物と一致している（R21-004）', () => {
+  const spec = JSON.parse(read('test/mutations.json'));
+  assert.ok(spec.mutations.length >= 40, `変異が少なすぎる: ${spec.mutations.length}`);
+  const seen = new Set();
+  for (const m of spec.mutations) {
+    assert.ok(!seen.has(m.id), `変異IDが重複している: ${m.id}`);
+    seen.add(m.id);
+    for (const k of ['file', 'test', 'desc', 'find', 'replace']) {
+      assert.ok(k in m, `${m.id}: ${k} が無い`);
+    }
+    /* find が、期待した回数だけ実在すること＝**変異が当たることの事前証明** */
+    const body = read(m.file);
+    const n = body.split(m.find).length - 1;
+    const expected = m.expectMatches === undefined ? 1 : m.expectMatches;
+    assert.equal(n, expected,
+      `${m.id} (${m.file}): find の一致数が ${n}、期待は ${expected}。` +
+      `当たらない変異は「素通り」と見分けがつかない`);
+    /* 置換で中身が実際に変わること */
+    assert.notEqual(body.replace(m.find, m.replace), body,
+      `${m.id}: 置換しても中身が変わらない`);
+  }
+});
+
+test('変異ランナーが、当たらなかった変異を素通りと数えない（R21-004の対照）', () => {
+  /*
+   * ランナーの分類そのものを見る。`not_applied` を `survived` へ寄せる書き方に
+   * 戻すと、第20回と同じ読み違いがまた起きる。
+   */
+  const src = stripComments(read('scripts/run-mutations.mjs'));
+  for (const outcome of ['applied_and_killed', 'applied_but_survived', 'not_applied', 'runner_error']) {
+    assert.ok(src.includes(outcome), `ランナーが ${outcome} を区別していない`);
+  }
+  /* 一致数とハッシュで適用を証明していること */
+  assert.match(src, /actualMatches/, 'ランナーが一致数を数えていない');
+  assert.match(src, /beforeSha256[\s\S]{0,200}afterSha256/, 'ランナーが前後のハッシュを記録していない');
+  assert.match(src, /restore/, 'ランナーが復旧していない');
+  /* 素通り・不適用・ランナー失敗のどれかがあれば、終了コードが0にならないこと */
+  assert.match(src, /survived\.length === 0[\s\S]{0,160}notApplied\.length === 0/,
+    'ランナーが、当たらなかった変異を成功として終えている');
+});

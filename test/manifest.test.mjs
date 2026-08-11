@@ -204,7 +204,16 @@ test('PRのCIは提出候補の成果物を残さない', () => {
   const uploads = steps.filter((s) => /uses:\s*actions\/upload-artifact@/.test(s));
   assert.ok(uploads.length >= 1, 'upload-artifact のステップが無い');
 
-  for (const step of uploads) {
+  /*
+   * **提出候補になりうる成果物**（`reposhout-package-…`）と、それ以外を分ける
+   * （第21回監査 R21-004 で変異対照の証跡を残すようにしたため）。
+   * 守りたいことは変わらない——**PRやfeatureブランチから作った物が、
+   * 提出候補と見分けのつかない名前で残らないこと**。
+   */
+  const candidateUploads = uploads.filter((s) => /name:\s*reposhout-package-/.test(s));
+  assert.ok(candidateUploads.length >= 1, '提出候補を残すステップが無い');
+
+  for (const step of candidateUploads) {
     /*
      * 「PRでなければ残す」では緩い。workflow_dispatch は実行するブランチを選べるので、
      * feature ブランチやタグから回した成果物まで提出候補の名前で残りえた（R6-001）。
@@ -214,6 +223,19 @@ test('PRのCIは提出候補の成果物を残さない', () => {
       'upload-artifact の条件が「main への push」に限定されていない');
     assert.match(step, /name:\s*reposhout-package-\$\{\{\s*github\.sha\s*\}\}/,
       '成果物の名前にコミットが入っていない（どのコミット由来か辿れない）');
+  }
+
+  /*
+   * 提出候補以外の成果物（証跡など）は、**提出候補の名前を名乗ってはいけない**。
+   * ここを外すと、PRから作った物が候補と同じ名前で残せるようになる。
+   */
+  for (const step of uploads.filter((s) => !/name:\s*reposhout-package-/.test(s))) {
+    /* ステップ自身の name: ではなく、with: の中の成果物名を見る */
+    const name = (step.match(/with:[\s\S]*?\bname:\s*([^\n]+)/) || [])[1] || '';
+    assert.ok(!/^reposhout-package/.test(name.trim()),
+      `提出候補でない成果物が候補の名前を使っている: ${name.trim()}`);
+    assert.ok(name.includes('${{ github.sha }}'),
+      `成果物の名前にコミットが入っていない: ${name.trim()}`);
   }
 
   // PRでも package は走らせる（作れることは確かめる）

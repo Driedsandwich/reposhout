@@ -18,7 +18,8 @@
     "verify:store-preflight": "node scripts/verify-store-readiness.mjs",
     "verify:submission-ready": "node scripts/verify-store-readiness.mjs --strict",
     "package": "node scripts/package.mjs",
-    "package:dry": "node scripts/package.mjs --dry-run"
+    "package:dry": "node scripts/package.mjs --dry-run",
+    "test:mutations": "node scripts/run-mutations.mjs"
   },
   "dependencies": {},
   "devDependencies": {

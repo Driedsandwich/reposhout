@@ -1,0 +1,338 @@
+{
+  "_about": [
+    "変異対照の定義（第21回監査 R21-004）。",
+    "scripts/run-mutations.mjs が読む。npm run test:mutations で全件。",
+    "★ 変異が当たったことは、一致数とハッシュで証明する。",
+    "  当たらなかったものを「素通り」と数えない（第20回に一度やった）。"
+  ],
+  "mutations": [
+    {
+      "id": "M01",
+      "file": "PRIVACY.md",
+      "test": "test/docs.test.mjs",
+      "desc": "現在の版を「まで」の境界に戻す",
+      "find": "**The page title is not read at all.** <!-- HISTORICAL_CLAIM:start",
+      "replace": "**The page title is not read at all** (it was until 1.1.8). <!-- HISTORICAL_CLAIM:start"
+    },
+    {
+      "id": "M02",
+      "file": "PRIVACY.md",
+      "test": "test/docs.test.mjs",
+      "desc": "日本語のactive文をタイトル送信の旧文へ戻す",
+      "find": "**ページのタイトルは読みません。**",
+      "replace": "**ページのタイトルとURLを読み取ります。**"
+    },
+    {
+      "id": "M03",
+      "file": "store/LISTING.md",
+      "test": "test/docs.test.mjs",
+      "desc": "PIIの理由を「入る場合がある」へ戻す",
+      "find": "共有できるページでは、GitHubの所有者名とリポジトリ名が**必ず**共有URLと投稿本文に入る",
+      "replace": "共有するURL・タイトルに、GitHubのユーザー名または組織名が入る場合がある"
+    },
+    {
+      "id": "M04",
+      "file": "store/STORE_DASHBOARD_CHANGES.md",
+      "test": "test/docs.test.mjs",
+      "desc": "事実表を旧文へ戻す",
+      "find": "**渡る**。ルートから生成した1行と、検査済みパーツから組み直したURLが",
+      "replace": "**渡る**。ページのタイトルと正規化済みURLが"
+    },
+    {
+      "id": "M05",
+      "file": "store/LISTING.md",
+      "test": "test/docs.test.mjs",
+      "desc": "中黒で区切った旧表現（第18回が見落とした形）",
+      "find": "The page title is not read or sent.",
+      "replace": "The page title・URL are sent."
+    },
+    {
+      "id": "M06",
+      "file": "PRIVACY.md",
+      "test": "test/docs.test.mjs",
+      "desc": "履歴の囲いから reason を外す",
+      "find": "<!-- HISTORICAL_CLAIM:start reason=\"1.1.8より前の版の挙動。現在の仕様ではない\" -->(Versions",
+      "replace": "<!-- HISTORICAL_CLAIM:start -->(Versions"
+    },
+    {
+      "id": "M07",
+      "file": "PRIVACY.md",
+      "test": "test/docs.test.mjs",
+      "desc": "履歴の囲いを閉じ忘れる",
+      "find": "(Versions before 1.1.8 did read it.)<!-- HISTORICAL_CLAIM:end -->",
+      "replace": "(Versions before 1.1.8 did read it.)"
+    },
+    {
+      "id": "M08",
+      "file": "store/STORE_DASHBOARD_CHANGES.md",
+      "test": "test/docs.test.mjs",
+      "desc": "現在の段落を履歴で囲って黙らせる",
+      "find": "これを踏まえた答えが次の表です。",
+      "replace": "<!-- HISTORICAL_CLAIM:start reason=\"ごまかしのための囲い\" -->\nこれを踏まえた答えが次の表です。\n<!-- HISTORICAL_CLAIM:end -->\n"
+    },
+    {
+      "id": "M09",
+      "file": "store/STORE_DASHBOARD_CHANGES.md",
+      "test": "test/docs.test.mjs",
+      "desc": "既存の囲いを、別の現在の文へ移す（第21回監査 R21-004）",
+      "find": "<!-- HISTORICAL_CLAIM:start reason=\"第5回監査より前の文書構成。現在の運用ではない\" -->以前はこの表と `LISTING.md` で PII の答えが割れていて、どちらを見るかで申告が変わる状態でした（第5回監査 R5-001）。<!-- HISTORICAL_CLAIM:end -->",
+      "replace": "<!-- HISTORICAL_CLAIM:start reason=\"第5回監査より前の文書構成。現在の運用ではない\" -->**① Authentication information**<!-- HISTORICAL_CLAIM:end -->"
+    },
+    {
+      "id": "M10",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "test": "test/docs.test.mjs",
+      "desc": "正本だけ「タイトルを読む」と言う",
+      "find": "\"titleRead\": false",
+      "replace": "\"titleRead\": true"
+    },
+    {
+      "id": "M12",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "test": "test/docs.test.mjs",
+      "desc": "正本だけ保留状態を食い違わせる",
+      "find": "\"webIntentStatus\": \"pending\"",
+      "replace": "\"webIntentStatus\": \"confirmed_allowed\""
+    },
+    {
+      "id": "M14",
+      "file": "src/content.js",
+      "test": "test/docs.test.mjs",
+      "desc": "コードだけ間隔を変える（正本は1秒のまま）",
+      "find": "setInterval(inject, 1000)",
+      "replace": "setInterval(inject, 5000)"
+    },
+    {
+      "id": "M20",
+      "file": "src/share.js",
+      "test": "test/docs.test.mjs",
+      "desc": "runtime だけ古い（台帳にある語を落とす）",
+      "find": "'trust-center'",
+      "replace": "'trust-center-REMOVED'"
+    },
+    {
+      "id": "M21",
+      "file": "store/GITHUB_NAMESPACE_INVENTORY.json",
+      "test": "test/docs.test.mjs",
+      "desc": "台帳だけ user を deny のままにする",
+      "find": "\"namespace\": \"user\",",
+      "replace": "\"namespace\": \"user-STALE\","
+    },
+    {
+      "id": "M22",
+      "file": "src/share.js",
+      "test": "test/share.test.mjs",
+      "desc": "実在repoの所有者を拒否へ戻す（陽性対照）",
+      "find": "    'signup', 'join', 'password_reset'",
+      "replace": "    'user', 'signup', 'join', 'password_reset'"
+    },
+    {
+      "id": "M23",
+      "file": "src/share.js",
+      "test": "test/share.test.mjs",
+      "desc": "login を一覧から落とす（本物の認証ルートが漏れる）",
+      "find": "    'login', 'logout', 'session'",
+      "replace": "    'logout', 'session'"
+    },
+    {
+      "id": "M24",
+      "file": "src/share.js",
+      "test": "test/docs.test.mjs",
+      "desc": "slug型のコメントを復活",
+      "find": "   *   enum  決めた語のどれか",
+      "replace": "   *   enum  決めた語のどれか\n   *   slug  英数と . _ - / , : だけの短い識別子"
+    },
+    {
+      "id": "M25",
+      "file": "src/share.js",
+      "test": "test/docs.test.mjs",
+      "desc": "fragmentを残すというコメントを復活",
+      "find": "   *  - **フラグメント（#…）は種類を問わず、すべて落とす**",
+      "replace": "   *  - #L10-L20 や #issuecomment-123 は共有したい情報そのものなので残す\n   *  - **フラグメント（#…）は種類を問わず、すべて落とす**"
+    },
+    {
+      "id": "M26",
+      "file": "src/background.js",
+      "test": "test/background.test.mjs",
+      "desc": "例外経路の案内を消す",
+      "find": "    if (!share || !share.intentUrl) return refuse(tab, 'unsupported');",
+      "replace": "    if (!share || !share.intentUrl) return { opened: false, reason: 'unsupported' };"
+    },
+    {
+      "id": "M27",
+      "file": "src/background.js",
+      "test": "test/background.test.mjs",
+      "desc": "リスナーが Promise を捨てる形へ戻す",
+      "find": "chrome.action.onClicked.addListener(function (tab) {\n  runShare(tab);\n});",
+      "replace": "chrome.action.onClicked.addListener(function (tab) {\n  shareTab(tab);\n});"
+    },
+    {
+      "id": "M28",
+      "file": "src/background.js",
+      "test": "test/background.test.mjs",
+      "desc": "二重通知を許す",
+      "find": "  var how = await announceRefusal(tab && tab.id, why);",
+      "replace": "  await announceRefusal(tab && tab.id, why);\n  var how = await announceRefusal(tab && tab.id, why);"
+    },
+    {
+      "id": "M29",
+      "file": "src/content.js",
+      "test": "test/background.test.mjs",
+      "desc": "画面側が notified を見ずに出す（二重通知）",
+      "find": "if (res.ok === false && res.notified !== true) showNotice(res.reason || 'unsupported');",
+      "replace": "if (res.ok === false) showNotice(res.reason || 'unsupported');"
+    },
+    {
+      "id": "M30",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "Redirection の scope を要求しなくする",
+      "find": "'redirection_policy'",
+      "replace": "'redirection_policy_TYPO'"
+    },
+    {
+      "id": "M31",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "pending でも strict を通す",
+      "find": "        wi.status === 'confirmed_allowed',\n        `ストアの回答が未確認",
+      "replace": "        true,\n        `ストアの回答が未確認"
+    },
+    {
+      "id": "S01",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "面を1つ落とす: README.md",
+      "find": "  'README.md', 'README.ja.md', 'PRIVACY.md', 'SECURITY.md',\n",
+      "replace": "  'README.ja.md', 'PRIVACY.md', 'SECURITY.md',\n"
+    },
+    {
+      "id": "S02",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "面を1つ落とす: README.ja.md",
+      "find": "  'README.md', 'README.ja.md', 'PRIVACY.md', 'SECURITY.md',\n",
+      "replace": "  'README.md', 'PRIVACY.md', 'SECURITY.md',\n"
+    },
+    {
+      "id": "S03",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "面を1つ落とす: PRIVACY.md",
+      "find": "  'README.md', 'README.ja.md', 'PRIVACY.md', 'SECURITY.md',\n",
+      "replace": "  'README.md', 'README.ja.md', 'SECURITY.md',\n"
+    },
+    {
+      "id": "S04",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "面を1つ落とす: SECURITY.md",
+      "find": "  'README.md', 'README.ja.md', 'PRIVACY.md', 'SECURITY.md',\n",
+      "replace": "  'README.md', 'README.ja.md', 'PRIVACY.md',\n"
+    },
+    {
+      "id": "S05",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "面を1つ落とす: store/LISTING.md",
+      "find": "  'store/LISTING.md', 'store/STORE_DASHBOARD_CHANGES.md',\n",
+      "replace": "  'store/STORE_DASHBOARD_CHANGES.md',\n"
+    },
+    {
+      "id": "S06",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "面を1つ落とす: store/STORE_DASHBOARD_CHANGES.md",
+      "find": "  'store/LISTING.md', 'store/STORE_DASHBOARD_CHANGES.md',\n",
+      "replace": "  'store/LISTING.md',\n"
+    },
+    {
+      "id": "S07",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "面を1つ落とす: store/DATA_DISCLOSURE.json",
+      "find": "  'store/DATA_DISCLOSURE.json', 'store/WEB_INTENT_POLICY_DECISION.json',\n",
+      "replace": "  'store/WEB_INTENT_POLICY_DECISION.json',\n"
+    },
+    {
+      "id": "S08",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "面を1つ落とす: store/WEB_INTENT_POLICY_DECISION.json",
+      "find": "  'store/DATA_DISCLOSURE.json', 'store/WEB_INTENT_POLICY_DECISION.json',\n",
+      "replace": "  'store/DATA_DISCLOSURE.json',\n"
+    },
+    {
+      "id": "S09",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "面を1つ落とす: store/DATA_FLOW_CLAIMS.json",
+      "find": "  'store/DATA_FLOW_CLAIMS.json',\n",
+      "replace": ""
+    },
+    {
+      "id": "S10",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "面を1つ落とす: _locales/en/messages.json",
+      "find": "  '_locales/en/messages.json', '_locales/ja/messages.json',\n",
+      "replace": "  '_locales/ja/messages.json',\n"
+    },
+    {
+      "id": "S11",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "面を1つ落とす: _locales/ja/messages.json",
+      "find": "  '_locales/en/messages.json', '_locales/ja/messages.json',\n",
+      "replace": "  '_locales/en/messages.json',\n"
+    },
+    {
+      "id": "S12",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "面を1つ落とす: src/share.js",
+      "find": "  'src/share.js', 'src/content.js', 'src/background.js',\n",
+      "replace": "  'src/content.js', 'src/background.js',\n"
+    },
+    {
+      "id": "S13",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "面を1つ落とす: src/content.js",
+      "find": "  'src/share.js', 'src/content.js', 'src/background.js',\n",
+      "replace": "  'src/share.js', 'src/background.js',\n"
+    },
+    {
+      "id": "S14",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "面を1つ落とす: src/background.js",
+      "find": "  'src/share.js', 'src/content.js', 'src/background.js',\n",
+      "replace": "  'src/share.js', 'src/content.js',\n"
+    },
+    {
+      "id": "S15",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "面を1つ落とす: manifest.json",
+      "find": "  'manifest.json'\n",
+      "replace": ""
+    },
+    {
+      "id": "M32",
+      "file": ".github/workflows/ci.yml",
+      "test": "test/manifest.test.mjs",
+      "desc": "提出候補でない成果物に、候補の名前を付ける（供給網の対照）",
+      "find": "          name: mutation-receipt-${{ github.sha }}",
+      "replace": "          name: reposhout-package-${{ github.sha }}"
+    },
+    {
+      "id": "M33",
+      "file": ".github/workflows/ci.yml",
+      "test": "test/manifest.test.mjs",
+      "desc": "action の pin を可変タグへ戻す",
+      "find": "        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1\n        with:\n          name: mutation-receipt",
+      "replace": "        uses: actions/upload-artifact@v4\n        with:\n          name: mutation-receipt"
+    }
+  ]
+}
