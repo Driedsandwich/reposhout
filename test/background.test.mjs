@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import vm from 'node:vm';
-import { ROOT } from './helpers/load.mjs';
+import { ROOT, stripComments } from './helpers/load.mjs';
 
 const SHARE = readFileSync(join(ROOT, 'src/share.js'), 'utf8');
 const BG = readFileSync(join(ROOT, 'src/background.js'), 'utf8');
@@ -283,15 +283,8 @@ test('タブIDが数でなければ、案内もバッジも試さない（R14-00
 
 const GH_SENDER = { tab: { id: 11, url: 'https://github.com/a/repo', title: 'GitHub - a/repo · GitHub' } };
 
-/*
- * 「もう書いていない」を確かめる検査は、**コードだけ**に当てる。
- * 注釈まで見ると「以前は window.open で開いていた」と経緯を書いた行で落ちる——
- * 落ちる理由が実装と関係なくなり、経緯を書けなくなる。
- * 消しすぎ・消せなさすぎに気づけるよう、この関数自身も下で検査する。
- */
-function stripComments(src) {
-  return src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
-}
+/* stripComments は test/helpers/load.mjs が唯一の定義（第19回監査で共通化）。
+   消しすぎ・消せなさすぎは、すぐ下の検査が実物で確かめる */
 
 test('注釈を外す処理そのものが、正しく動いている（上の検査の土台）', () => {
   const sample = [

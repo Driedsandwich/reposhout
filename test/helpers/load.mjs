@@ -20,3 +20,16 @@ export function loadShare() {
   loadScript('test/fixtures.js');
   return { GXS: globalThis.GXS, FIX: globalThis.GXS_FIXTURES };
 }
+
+/*
+ * 「もう書いていない」を確かめる検査は、**コードだけ**に当てる。
+ * 注釈まで見ると「以前は window.open で開いていた」と経緯を書いた行で落ちる——
+ * 落ちる理由が実装と関係なくなり、経緯を書けなくなる。
+ *
+ * **ここが唯一の定義**（第19回監査で共通化）。docs と background の両方が使う。
+ * 2つ持つと、片方だけ直る形——第18回に直したばかりの誤りをもう一度作ることになる。
+ * 消しすぎ・消せなさすぎは test/background.test.mjs が実物で検査している。
+ */
+export function stripComments(src) {
+  return src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+}

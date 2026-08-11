@@ -10,8 +10,9 @@
 初回提出と更新提出の両方でこの文書を使います。
 
 > **⚠️ 今回（1.0.1 → 1.1.8）の更新では、§0 事前確認・§1 パッケージ・§2 Store listing・§3 Privacy practices を
-> すべて完了させてください（第10回監査 R10-004）。** 以前ここには「更新なら §1 と §2 だけで足りる」と
-> 書いていましたが、今回は §3 も必ず直す必要があります。掲載中の 1.0.1 は9項目を**すべて No** で申告して
+> すべて完了させてください（第10回監査 R10-004）。**
+> <!-- HISTORICAL_CLAIM:start reason="第10回監査より前の、この手順書自身の記述。製品仕様の説明ではない" -->以前ここには「更新なら §1 と §2 だけで足りる」と書いていました。<!-- HISTORICAL_CLAIM:end -->
+> 今回は §3 も必ず直す必要があります。掲載中の 1.0.1 は9項目を**すべて No** で申告して
 > おり、そのままにすると事実と違う申告を残したまま提出することになります。§3 で直すのは次の4つです。
 >
 > - データの取り扱い（すべて No → PII / Web history / Website content を Yes へ。残り2欄は本人確認待ち）
@@ -364,13 +365,12 @@ the popup (for example to /i/flow/login when the user is signed out).
 
 ### Data usage
 
-**この欄の答えは [DATA_DISCLOSURE.json](DATA_DISCLOSURE.json) が正本です。** 以前はこの表と
-[STORE_DASHBOARD_CHANGES.md](STORE_DASHBOARD_CHANGES.md) で答えが食い違っていて、どちらを見るかで
-申告が変わる状態でした（第5回監査 R5-001）。いまは正本から写した表で、ずれるとテストが落ちます。
+**この欄の答えは [DATA_DISCLOSURE.json](DATA_DISCLOSURE.json) が正本です。** いまは正本から写した表で、ずれるとテストが落ちます。
+<!-- HISTORICAL_CLAIM:start reason="第5回監査より前の文書構成。現在の運用ではない" -->以前はこの表と [STORE_DASHBOARD_CHANGES.md](STORE_DASHBOARD_CHANGES.md) で答えが食い違っていて、どちらを見るかで申告が変わる状態でした（第5回監査 R5-001）。<!-- HISTORICAL_CLAIM:end -->
 
 | 質問 | 回答 | 理由 |
 |---|---|---|
-| Personally identifiable information | **Yes** | 共有するURL・タイトルに、GitHubのユーザー名または組織名が入る場合がある（公式FAQはPIIの例に username を挙げている） |
+| Personally identifiable information | **Yes** | 共有できるページでは、GitHubの所有者名とリポジトリ名が**必ず**共有URLと投稿本文に入る（公式FAQはPIIの例に username を挙げている）。ページのタイトルは読まず送らない |
 | Health information | No | 扱わない |
 | Financial and payment information | No | 扱わない |
 | Authentication information | **要確認**（案: No） | 資格情報そのものは扱わないが、操作時に現在のタブのURL全体をいったん受け取る。設問文を読んで本人が確定する |
