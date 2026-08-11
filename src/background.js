@@ -209,6 +209,25 @@ async function announceRefusal(tabId, reason) {
 }
 
 /*
+ * **開かずに終わるときの、唯一の出口**（第19回監査 R19-004）。
+ *
+ * それまでは、拒否の理由が言える経路だけが案内を出し、
+ *   ・buildShareResult が例外を投げ、かつ fallbackUrl が null を返した
+ *   ・fallbackUrl 自体が例外を投げた（GXS が読み込めていない等）
+ * という重なりのときだけ、**案内もバッジも出さずに終わって**いた（実測）。
+ * 利用者からは「押しても何も起きない」と見える。
+ *
+ * false を返す経路は必ずここを通す。ここを通らない `opened: false` を
+ * 書かないこと——test/background.test.mjs が経路を数えて落とす。
+ * 案内は1回だけ（announceRefusal の中で notice → badge の順に1つ選ぶ）。
+ */
+async function refuse(tab, reason) {
+  var why = reason || 'unsupported';
+  var how = await announceRefusal(tab && tab.id, why);
+  return { opened: false, reason: why, notified: how !== 'none' };
+}
+
+/*
  * ツールバーの押下・ショートカットは、Chrome が**そのとき対象になったタブ**を
  * 渡してくる。第13回監査 R13-003 まではそれを捨てて chrome.tabs.query で
  * 引き直していたので、
@@ -230,14 +249,19 @@ async function shareTab(tab) {
     if (!tab.url) {
       /* activeTab はユーザー操作で付くが、それでも取れないことはある。
          別のタブで代替せず、そのタブへ理由を伝えて終わる */
-      await announceRefusal(tab.id, 'unsupported');
-      return;
+      return refuse(tab, 'unsupported');
     }
     return shareResolvedTab(tab);
   }
 
+  /*
+   * タブが渡されなかったときだけ引き直す。ここで何も取れなければ、
+   * **案内を届ける先が無い**（タブIDが無いので画面にもバッジにも出せない）。
+   * refuse を通して notified:false を返し、「黙って終わった」ことを
+   * 呼び出し側と試験から見えるようにする（第19回監査 R19-004）。
+   */
   var fallback = await queryActiveTab();
-  if (!fallback || !fallback.url) return;
+  if (!fallback || !fallback.url) return refuse(fallback, 'unsupported');
   return shareResolvedTab(fallback);
 }
 
@@ -271,14 +295,23 @@ async function shareResolvedTab(tab) {
      * ページなど content script がいない）は、ツールバーのバッジで伝える
      * （第14回監査 R14-003。以前はここで黙って終わっていた）。
      */
-    await announceRefusal(tab.id, reason);
-    return { opened: false, reason: reason };
+    return refuse(tab, reason);
   }
   if (!share) {
-    // フォールバックも本体と同じURL方針を使う（別実装を残さない）。
-    // null が返るのは機微なページなので、その場合も何も開かない。
-    var bare = self.GXS.fallbackUrl(tab.url);
-    if (!bare) return { opened: false, reason: 'unsupported' };
+    /*
+     * ここへ来るのは buildShareResult が例外を投げたときだけ。
+     * フォールバックも本体と同じURL方針を使う（別実装を残さない）。
+     * null が返るのは機微なページなので、その場合も何も開かない。
+     * **fallbackUrl 自体が投げることもある**（share.js を読み込めていない等）。
+     * 投げたまま抜けると案内も出ないので、ここで受けて拒否へ倒す（R19-004）。
+     */
+    var bare = null;
+    try {
+      bare = self.GXS.fallbackUrl(tab.url);
+    } catch (e) {
+      bare = null;
+    }
+    if (!bare) return refuse(tab, 'unsupported');
     share = { intentUrl: self.GXS.intentUrlFor('', bare) };
   }
 
@@ -287,10 +320,7 @@ async function shareResolvedTab(tab) {
    * とき（どちらの API も例外）に、**何も起きないまま終わって**いた。
    */
   var opened = await openShareWindow(share.intentUrl);
-  if (!opened || opened.opened === 'none') {
-    await announceRefusal(tab.id, 'open_failed');
-    return { opened: false, reason: 'open_failed' };
-  }
+  if (!opened || opened.opened === 'none') return refuse(tab, 'open_failed');
   return { opened: true };
 }
 
@@ -368,7 +398,9 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
       try { sendResponse({ ok: true, opened: 'none', legacy: true }); } catch (e) {}
     };
     if (legacyTab && typeof legacyTab.id === 'number') {
-      announceRefusal(legacyTab.id, 'reload_required').then(answer, answer);
+      /* 案内を出す口は refuse ひとつに寄せる（第19回監査 R19-004）。
+         戻り値は使わない——ここでの返事は上の answer が持つ */
+      refuse(legacyTab, 'reload_required').then(answer, answer);
       return true; // 非同期応答
     }
     answer();
