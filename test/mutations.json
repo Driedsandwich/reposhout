@@ -151,6 +151,14 @@
       "replace": "After 12 hours the record is deleted"
     },
     {
+      "id": "M19",
+      "file": "store/SUBMISSION_CANDIDATE.json",
+      "test": "test/docs.test.mjs",
+      "desc": "findingIds から R20-001 を落とす",
+      "find": "\"R20-001\",\n        ",
+      "replace": ""
+    },
+    {
       "id": "M20",
       "file": "src/share.js",
       "test": "test/docs.test.mjs",
