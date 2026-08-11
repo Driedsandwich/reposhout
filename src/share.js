@@ -1,9 +1,12 @@
 /*
  * share.js — 共有テキストとX投稿URLの組み立て
  *
- * 設計方針: DOMを一切見ない。URL と document.title だけで動く。
- * これにより GitHub のUI改修・ログイン状態の違いの影響を受けない。
- * content script と service worker の両方から同じ実装を使う。
+ * 設計方針: DOMを一切見ない。**URLだけで動く**（ページのタイトルは読まない・
+ * 第15回監査 R15-001）。これにより GitHub のUI改修・ログイン状態の違いの影響を受けない。
+ *
+ * **読み込むのは service worker だけ**（第16回監査 R16-003）。
+ * 画面内の content script には入れていない——ページ側の世界に方針を置かないため
+ * （`manifest.json` の content_scripts に share.js は無い）。
  */
 (function (root) {
   'use strict';
@@ -917,7 +920,7 @@
   /*
    * 共有するURLを整える。
    *
-   * 方針（QUERY_ALLOW が正本）:
+   * 方針（QUERY_RULES が正本）:
    *  - 各ページ種別で「意味を持つクエリ」だけ残す。知らないクエリは落とす
    *  - 認証・設定系はクエリもハッシュも落とす
    *  - リポジトリトップはクエリ・ハッシュとも落として正規形にする

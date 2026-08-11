@@ -203,11 +203,11 @@
   function noticeTextFor(reason) {
     if (reason === 'credential_like') {
       /*
-       * 予備の文言も翻訳ファイルと同じにしておく（第15回監査の確認中に、
-       * ここだけ「このURLには」の旧文のまま残っているのを見つけた）。
+       * 予備の文言も翻訳ファイルと同じにしておく。**ずれると、言語ファイルを
+       * 読めなかったときだけ古い説明が利用者に出る**（第18回監査 R18-005）。
        */
       return t('noticeCredential',
-        "This page's title or URL may contain sensitive authentication information, " +
+        "This page's address may contain sensitive authentication information, " +
         'so the X composer was not opened. Nothing was sent to X.');
     }
     if (reason === 'open_failed') {
@@ -279,7 +279,7 @@
     var btn = document.createElement('button');
     btn.id = BTN_ID;
     btn.type = 'button';
-    btn.title = t('shareButtonTooltip', 'Post this page to X');
+    btn.title = t('shareButtonTooltip', "Send this page's link to X's composer");
     btn.setAttribute('aria-label', t('shareButtonAria', 'Share on X'));
     btn.innerHTML = X_ICON + '<span></span>';
     // 文字は textContent で入れる（言語ファイルの中身をHTMLとして解釈させない）

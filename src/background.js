@@ -316,7 +316,9 @@ chrome.commands.onCommand.addListener(function (command, tab) {
 
 /*
  * メッセージの入口。
- *  gxs:open-share       … 画面内Shareボタン（content script）からの依頼
+ *  gxs:request-share    … 画面内Shareボタンからの依頼（データを持たない合図だけ）
+ *  gxs:open-share       … **1.1.8以前の古い content script** が送ってくる形。
+ *                         渡されたURLは使わず、再読み込みを促す（第16回監査 R16-003）
  *  gxs:is-share-window  … x.com の esc-close.js からの照会
  *  gxs:close-share-window … window.close() が拒否されたときのフォールバック
  *
