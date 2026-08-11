@@ -1384,3 +1384,97 @@ test('言うべきことを、言っている（主張の裏返し）', () => {
     }
   }
 });
+
+/* ============================================================
+ * 第19回監査 R19-002 — 名前空間の台帳を、実測とコードへ縛る
+ * ============================================================ */
+
+test('拒否する語の一覧と、台帳の deny が1語も違わない（R19-002）', () => {
+  const inv = JSON.parse(read('store/GITHUB_NAMESPACE_INVENTORY.json'));
+  const { GXS } = loadShare();
+  const runtime = [...GXS.NON_REPOSITORY_TOP_LEVEL].sort();
+  const ledger = inv.namespaces.filter((e) => e.decision === 'deny')
+    .map((e) => e.namespace).sort();
+  assert.deepEqual(ledger, runtime,
+    '台帳とコードがずれている。片方だけ直すと、次に見た人はどちらを信じるか分からなくなる');
+  assert.equal(inv.runtimeDenylistCount, runtime.length, '台帳が数えている語数が違う');
+
+  /* allow と決めた語が、拒否の一覧に紛れていないこと */
+  for (const e of inv.namespaces.filter((x) => x.decision === 'allow')) {
+    assert.ok(!runtime.includes(e.namespace),
+      `${e.namespace} は allow と決めたのに拒否している（実在のリポジトリを巻き込む）`);
+  }
+});
+
+test('台帳が、APIで見た事実と browser で見た事実を分けている（R19-002）', () => {
+  const inv = JSON.parse(read('store/GITHUB_NAMESPACE_INVENTORY.json'));
+  const REQUIRED = ['namespace', 'measuredAt', 'discoverySource', 'accountApi',
+    'repositoryProbe', 'browserPathProbe', 'redirectChain', 'routeShadow',
+    'decision', 'reason', 'evidence'];
+  for (const e of inv.namespaces) {
+    for (const k of REQUIRED) {
+      assert.ok(k in e, `${e.namespace}: ${k} が無い`);
+    }
+    assert.ok(e.reason && e.reason.length >= 20, `${e.namespace}: 理由が短すぎる`);
+
+    /*
+     * **アカウントの有無だけで「案内ページが覆っている」と断定しない**
+     * （第19回監査 R19-002 の核心）。shadow と言うなら、
+     * browser で実際にリポジトリを開こうとした記録が要る。
+     */
+    if (e.routeShadow === true) {
+      assert.equal(e.accountApi.present, true,
+        `${e.namespace}: アカウントが無いのに「覆っている」と書いている`);
+      assert.ok(e.repositoryProbe && 'repositoryUiRendered' in e.repositoryProbe,
+        `${e.namespace}: browser でリポジトリを開いた記録が無いのに shadow と断定している`);
+      assert.equal(e.repositoryProbe.repositoryUiRendered, false,
+        `${e.namespace}: リポジトリUIが出ているのに shadow と書いている`);
+    }
+    /* allow は、実際に開けることを見てから決めている */
+    if (e.decision === 'allow') {
+      assert.equal(e.repositoryProbe.repositoryUiRendered, true,
+        `${e.namespace}: 開けることを確かめずに allow にしている`);
+    }
+  }
+});
+
+test('実在のリポジトリを巻き込む拒否が、台帳に明記してある（R19-002）', () => {
+  /*
+   * 第19回で初めて測って分かったこと——認証系を守るための3語が、
+   * **実在して browser でも開けるリポジトリ**を拒否している。
+   * 落とすほうへ倒す判断は変えないが、代償を数えずに済ませない。
+   */
+  const inv = JSON.parse(read('store/GITHUB_NAMESPACE_INVENTORY.json'));
+  const suppressing = inv.namespaces
+    .filter((e) => e.decision === 'deny' && e.suppressesReachableRepo)
+    .map((e) => e.namespace).sort();
+  assert.deepEqual(suppressing, ['devices', 'password', 'user'],
+    '巻き込んでいる語が変わった。増えたなら、それが本当に必要か確かめてからここを直す');
+  for (const n of suppressing) {
+    const e = inv.namespaces.find((x) => x.namespace === n);
+    assert.match(e.reason, /実在|巻き込/, `${n}: 代償が理由に書かれていない`);
+    assert.equal(e.repositoryProbe.repositoryUiRendered, true);
+  }
+  /* 経緯の文書からも、この代償が読めること */
+  const md = read('store/NAMESPACE_INVENTORY.md');
+  for (const n of suppressing) {
+    assert.ok(md.includes(n), `NAMESPACE_INVENTORY.md に ${n} の代償が書かれていない`);
+  }
+});
+
+test('台帳の説明が、名前と判定を書き写していない（R19-002）', () => {
+  /*
+   * 同じ境界を2つの一覧で持たない。Markdown 側へ表を戻すと、
+   * 片方だけ直る形ができる（第18回 R18-002 で直したばかりの型）。
+   */
+  const md = read('store/NAMESPACE_INVENTORY.md');
+  assert.ok(md.includes('GITHUB_NAMESPACE_INVENTORY.json'),
+    '経緯の文書が、正本のJSONを指していない');
+  const { GXS } = loadShare();
+  /* 説明のために出てよい語だけを許す。それ以外の拒否語が並んでいたら表が戻っている */
+  const ALLOWED_IN_PROSE = new Set(['customer-stories', 'trust-center', 'user', 'devices', 'password']);
+  const listed = GXS.NON_REPOSITORY_TOP_LEVEL.filter(
+    (n) => !ALLOWED_IN_PROSE.has(n) && new RegExp(`\`${n}\`|\\| *${n} *\\|`).test(md));
+  assert.deepEqual(listed, [],
+    `経緯の文書へ一覧が書き戻されている: ${listed.join(' / ')}`);
+});

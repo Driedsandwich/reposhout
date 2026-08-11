@@ -1,7 +1,11 @@
-# GitHub の機能ページ名前空間 — 判定の台帳
+# GitHub の機能ページ名前空間 — 判断の経緯
 
-`src/share.js` の `NON_REPOSITORY_TOP_LEVEL` へ「足す／足さない」をどう決めたかの記録。
-**一覧そのものの正本はコード**で、この文書は**判断の根拠と日付**を残すためのもの。
+`src/share.js` の `NON_REPOSITORY_TOP_LEVEL` へ「足す／足さない」をどう決めたかの説明。
+
+> **1件ごとの記録は [GITHUB_NAMESPACE_INVENTORY.json](GITHUB_NAMESPACE_INVENTORY.json) が正本です。**
+> この文書は**考え方だけ**を書きます。名前と判定をここへ書き写しません——
+> 同じ境界を2つの一覧で持つと、片方だけ直る形ができるためです（第18回監査 R18-002 の再発防止）。
+> 一覧そのものの正本はコードで、JSON はコードと `npm test` で突き合わせています。
 
 ## なぜ台帳が要るのか（第18回監査 R18-002）
 
@@ -12,64 +16,69 @@
 
 **基準は候補を分類する道具であって、候補を見つける道具ではない。**
 
-## 判定の基準（第17回 R17-002 で決定・第18回も維持）
+## なぜ機械可読にしたのか（第19回監査 R19-002）
+
+第18回の台帳は Markdown の表で、**API で見た事実と browser で見た事実が1つの欄に混ざっていた。**
+
+第19回の監査で `customer-stories` について「GitHub の REST API は
+`customer-stories/test` を公開リポジトリとして返す」と指摘された。
+再測定すると、**どちらも真**だった。
+
+| 軸 | 実測（2026-08-11） |
+|---|---|
+| users API | アカウントあり（User・公開1件） |
+| repos API | `customer-stories/test` は公開リポジトリとして返る |
+| browser `/customer-stories/test` | **404**（存在しないパスと同じ応答。リポジトリUIは出ない） |
+| browser `/customer-stories` | 200（GitHubの顧客事例ページ） |
+
+つまり **API には在るが、ブラウザでは開けない**。GitHubの案内ページが名前空間を覆っている。
+拡張が見るのは利用者がブラウザで開いているURLなので、開けないページを拒否しても
+実在のリポジトリを巻き込まない——という判断は変えていない。
+変えたのは**根拠の書き方**で、軸を分けて別々の欄に記録するようにした。
+
+**アカウントの有無だけで「案内ページが覆っている」と断定しない。** 両方を測る。
+
+## 判定の基準
 
 ```
-① github.com/<名前> が HTTP 200 で開ける
-② その 200 が github.com 上のページである（他ホストへ転送されていない）
-③ users API に <名前> のアカウントが無い
-    → その名前ではリポジトリを作れない
-    → 拒否しても、実在のリポジトリを巻き込まない
+① アカウントが無い           → 拒否してよい（その名前ではリポジトリを作れない）
+② アカウントは在るが、
+   browser でリポジトリUIが出ない → 拒否してよい（案内ページが覆っている）
+③ アカウントが在り、
+   browser でも開ける          → 原則 allow。拒否すると実在のリポジトリを巻き込む
 ```
 
-③を満たさない（アカウントがある）名前は、原則として**足さない**。
-例外は「GitHubの案内ページが同じ名前空間を覆っていて、実際にはリポジトリを開けない」
-と実測できた場合だけ（現時点では `customer-stories` のみ）。
+③の例外は、認証・アカウント系の入口を守るための語だけ。その場合は JSON の
+`suppressesReachableRepo` を `true` にして、**代償を明示的に記録する**。
 
-## 候補の集め方（第18回 R18-002 で追加）
+## 候補の集め方
 
 **記憶で列挙しない。** 次の順で機械的に集めてから、上の基準で分類する。
 
-1. `curl -sL https://github.com/` を取得
+1. `curl -sL https://github.com/` を Chrome の User-Agent で取得
 2. `href="/<第1セグメント>"` を正規表現で全部拾う（ドットを含むものは静的ファイルとして除外）
 3. 既に一覧にある語を引き、残りだけを基準で分類する
 
-2026-08-11 の実行では26語が集まり、一覧に無かったのは4語だった。
+GitHubのトップページは出し分けがあるため、**実行ごとに集まる語は変わる**
+（2026-08-10 は26語・2026-08-11 は20語）。集まった語数と、その日に新しく出た語は
+JSON の `discoveryMethod` に記録している。
 
-## 判定の記録
+## いま分かっている代償（第19回監査で実測）
 
-### 足した（2026-08-11 実測・第18回 R18-002）
+拒否する語のうち **3つは、実在して browser でも開けるリポジトリを巻き込んでいる。**
 
-| 名前 | 見つけ方 | web | 転送 | アカウント | 判定 |
-|---|---|---|---|---|---|
-| `trust-center` | 監査の指摘＋ナビ | 200 | なし | 無し | 足す |
-| `mcp` | ナビ | 200 | なし | 無し | 足す |
-| `newsletter` | ナビ | 200 | なし | 無し | 足す |
-| `sitemap` | ナビ | 200 | なし | 無し | 足す |
+```
+user/bitmap-fonts                          200・リポジトリUIあり
+devices/submit-site-to-marginalia-search   200・リポジトリUIあり
+password/python-code-shifter               200・リポジトリUIあり
+```
 
-### 足さないと判定した（2026-08-11 実測）
+`user` `devices` `password` は認証・アカウント系の入口を守るための語で、
+外すと `github.com/<この語>/…` の形をしたURLが「所有者名／リポジトリ名」として通る。
+**落とすほうへ倒す**判断を続けているが、代償があることは隠さずここと JSON に書く。
+これは第19回で初めて測って分かったことで、それまで誰も数えていなかった。
 
-| 名前 | アカウント | 判定の理由 |
-|---|---|---|
-| `github` | Organization・公開 **557** | **実在の組織。**`github/docs` は普通に開ける |
-| `skills` | Organization・公開 **52** | 実在の組織（`skills/introduction-to-github` は公開リポジトリ） |
-| `accessibility` | Organization・公開 **16** | 実在の組織 |
-| `security-lab` | Organization・公開 **6** | 実在の組織 |
-| `careers` `shop` `startups` `industries` `government` `healthcare` `case-studies` | いずれもアカウントあり | 実在の所有者を巻き込むため |
-| `nonprofit` | — | github.com の外へ転送（socialimpact.github.com） |
-| `learn` | — | 同（resources.github.com） |
-| `blog` | — | 同（github.blog） |
-
-### 足した（2026-08-10・第17回 R17-002）
-
-`customer-stories` `resources` `education` `solutions` `readme` `git-guides`
-`why-github` `newsroom` `partners` `mobile` `team` `open-source` `social-impact`
-`premium-support` `press`
-
-`customer-stories` はアカウントが在る（公開1件）が、`github.com/customer-stories/test`
-が 404 で、GitHubの案内ページが名前空間を覆っている。実測して足した。
-
-## この方式の限界（文書にも書いてある）
+## この方式の限界
 
 - これは**拒否する名前の一覧**であって、「その名前が実在の所有者だ」と示すものではない
 - **GitHubが新しい機能ページを増やせば、その名前は次に測るまで素通りする**
