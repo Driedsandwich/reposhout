@@ -136,14 +136,14 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 今回出すもの:
 
 ```
-成果物 : reposhout-package-cf3358ed162e3050569d4dd4aa1d7d5553cd3a8f
-中のZIP : reposhout-1.1.8.zip
-大きさ : 39,117 B / 11ファイル
-SHA-256 : 6980b87aa9f2d6662e56f5c529c12ad5106d852fe5699e16f8cbff1906304f5e
+status : pending_main_ci
 ```
 
+**いま出せる成果物はありません。** 第18回監査で直前の候補（`reposhout-package-cf3358ed…` /
+39,117 B / SHA-256 `6980b87a…`）を `rejected_by_R18` として外しました。
+
 正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) です。
-第12回〜第17回で却下した成果物は提出しません（理由も同ファイルにあります）。
+第12回〜第18回で却下した成果物は提出しません（理由も同ファイルにあります）。
 **「最新の main」では選ばず、上の成果物名とSHA-256 で選んでください**（第10回監査 R10-006）。
 
 ---
