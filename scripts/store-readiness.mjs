@@ -514,9 +514,31 @@ export function validateStoreReadiness(input) {
         check('Web Intent の判断に、回答日と回答がある',
           isRealDate(wi.responseOn || '') && !blank(wi.response),
           `responseOn=${wi.responseOn} / response=${blank(wi.response) ? '空欄' : 'あり'}`);
+        /*
+         * 第18回監査 R18-003。日付は「回答日が未来でない」しか見ておらず、
+         * **聞いた日が未来**でも、**聞く前に回答が来た**ことになっていても通った。
+         * ticket も decision も空のまま「確認済み」と書けた。
+         * 順番（聞いた ≤ 返ってきた ≤ 今日）と、証跡の実体を要求する。
+         */
+        check('Web Intent の聞いた日が未来でない',
+          !isRealDate(today) || !isRealDate(wi.askedOn || '') || wi.askedOn <= today,
+          `${wi.askedOn} が今日 ${today} より後`);
         check('Web Intent の回答が未来の日付でない',
           !isRealDate(today) || !isRealDate(wi.responseOn || '') || wi.responseOn <= today,
           `${wi.responseOn} が今日 ${today} より後`);
+        check('Web Intent の日付の前後が合っている',
+          !isRealDate(wi.askedOn || '') || !isRealDate(wi.responseOn || '') ||
+          wi.askedOn <= wi.responseOn,
+          `聞いた日 ${wi.askedOn} が回答日 ${wi.responseOn} より後`);
+        check('Web Intent の問い合わせ番号',
+          !blank(wi.ticket),
+          '空欄（番号が出ない問い合わせなら、その旨を書いてください）');
+        check('Web Intent の最終判断',
+          wi.decision === 'proceed' || wi.decision === 'redesign',
+          `proceed / redesign のどちらでもない: ${wi.decision}`);
+        check('Web Intent の判断と状態が食い違っていない',
+          wi.decision === 'proceed',
+          `許容された（confirmed_allowed）のに判断が ${wi.decision}`);
         check('Web Intent の判断を誰がしたか', !blank(wi.decidedBy), '空欄');
         check('Web Intent の判断が、この版のものである',
           wi.appliesToVersion === candidate.version,

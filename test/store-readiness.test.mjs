@@ -875,3 +875,32 @@ test('リポジトリの Web Intent の正本は、まだ本人の回答が入�
   }
   assert.equal(wi.appliesToVersion, JSON.parse(read('manifest.json')).version, '版がずれている');
 });
+
+test('strict: 確認済みと書いても、証跡が欠けていれば通らない（R18-003）', () => {
+  /*
+   * 第18回監査 R18-003。日付は「回答日が未来でない」しか見ていなかったので、
+   * **聞いた日が未来**でも、**聞く前に回答が来た**ことになっていても通った。
+   * ticket も decision も空のまま「確認済み」と書けた。
+   */
+  const cand = readyCandidate();
+  const holes = [
+    { askedOn: '2099-01-01' },                        // 聞いた日が未来
+    { askedOn: '2026-08-06', responseOn: '2026-08-05' }, // 聞く前に返ってきた
+    { ticket: null }, { ticket: '   ' },
+    { decision: null }, { decision: '' }, { decision: 'maybe' }
+  ];
+  for (const hole of holes) {
+    const r = validateStoreReadiness(strictInputs({
+      webIntentDecision: goodWebIntent(cand, hole)
+    }));
+    assert.ok(r.problems.some((p) => p.includes('Web Intent')),
+      `${JSON.stringify(hole)} で通っている: ${r.problems.join(' / ')}`);
+  }
+});
+
+test('strict: 証跡がそろっていれば Web Intent は止めない（R18-003の対照）', () => {
+  /* 上の検査が「何を入れても落ちる」ものになっていないこと */
+  const r = validateStoreReadiness(strictInputs());
+  assert.ok(!r.problems.some((p) => p.includes('Web Intent')),
+    `そろっているのに止めている: ${r.problems.filter((p) => p.includes('Web Intent')).join(' / ')}`);
+});
