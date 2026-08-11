@@ -202,6 +202,9 @@ function goodWebIntent(cand, over = {}) {
     decision: 'proceed',
     decidedBy: 'owner',
     appliesToVersion: cand.version,
+    /* 第19回監査 R19-005。聞くべき論点は2つある */
+    questionScope: ['secure_query_transport', 'redirection_policy'],
+    responseCoversBoth: true,
     ...over
   };
 }
@@ -903,4 +906,48 @@ test('strict: 証跡がそろっていれば Web Intent は止めない（R18-00
   const r = validateStoreReadiness(strictInputs());
   assert.ok(!r.problems.some((p) => p.includes('Web Intent')),
     `そろっているのに止めている: ${r.problems.filter((p) => p.includes('Web Intent')).join(' / ')}`);
+});
+
+/* ============================================================
+ * 第19回監査 R19-005 — 聞くべき論点が2つあることを、関門で要求する
+ * ============================================================ */
+
+test('strict: クエリの論点だけ答えても通らない（R19-005）', () => {
+  /*
+   * Chrome ウェブストアには、クエリでの受け渡し（secure transmission）とは別に
+   * **「唯一の機能が別ページを開くこと」を違反の例に挙げる項目（Redirection）** がある。
+   * 片方だけの回答で「確認できた」としない。
+   */
+  const cand = readyCandidate();
+  const holes = [
+    { questionScope: ['secure_query_transport'] },                 // Redirection を聞いていない
+    { questionScope: ['redirection_policy'] },                     // クエリを聞いていない
+    { questionScope: [] },
+    { questionScope: null },
+    { responseCoversBoth: null },                                  // 両方に触れた回答か不明
+    { responseCoversBoth: false }
+  ];
+  for (const hole of holes) {
+    const r = validateStoreReadiness(strictInputs({
+      webIntentDecision: goodWebIntent(cand, hole)
+    }));
+    assert.ok(r.problems.some((p) => p.includes('Web Intent')),
+      `${JSON.stringify(hole)} で通っている: ${r.problems.join(' / ')}`);
+  }
+});
+
+test('リポジトリの正本が、聞くべき2つの論点を宣言している（R19-005）', () => {
+  /*
+   * 本人が問い合わせるときに何を聞けばよいか、正本を見れば分かる状態にする。
+   * **回答はこちらで作らない。** status は pending のまま。
+   */
+  const wi = JSON.parse(
+    readFileSync(join(ROOT, 'store/WEB_INTENT_POLICY_DECISION.json'), 'utf8'));
+  assert.equal(wi.status, 'pending', '正本の状態を勝手に変えている');
+  assert.deepEqual(wi.questionScope, ['secure_query_transport', 'redirection_policy'],
+    '聞くべき論点が正本に宣言されていない');
+  assert.equal(wi.responseCoversBoth, null, '回答をこちらで作っている');
+  for (const k of ['askedOn', 'question', 'responseOn', 'response', 'ticket', 'decision', 'decidedBy']) {
+    assert.equal(wi[k], null, `${k} に値が入っている（本人が入れる欄）`);
+  }
 });

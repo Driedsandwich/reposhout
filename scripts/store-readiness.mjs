@@ -26,6 +26,21 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const blank = (v) => typeof v !== 'string' || v.trim() === '';
 
 /*
+ * Web Intent について Developer Support へ聞くべき論点（第19回監査 R19-005）。
+ *
+ * それまでは①だけを想定していたが、Chrome ウェブストアの現行の案内には
+ * **「唯一の機能が別のページを開くこと」** を Redirection 違反の例に挙げる項目もある。
+ * RepoShout は GitHub のUIへボタンを足し、ルートを検査し、URLを組み直し、
+ * 共有できないページを拒否するので、単なるリンクではない。だが Single purpose は
+ * 「Xの投稿画面を開く」なので、①だけ確認しても②が残る。
+ *
+ * **両方に触れた回答**を得るまで confirmed_allowed にしない。
+ *   ① secure_query_transport … クエリに値を載せてよいか
+ *   ② redirection_policy     … 別ページを開く拡張として問題ないか
+ */
+const REQUIRED_WEB_INTENT_SCOPES = ['secure_query_transport', 'redirection_policy'];
+
+/*
  * その時間帯での「今日」を YYYY-MM-DD で返す（第11回監査 R11-005）。
  * UTC で見ると、JSTの 00:30 に確認した当日を「未来の日付」として弾く。
  */
@@ -543,6 +558,21 @@ export function validateStoreReadiness(input) {
         check('Web Intent の判断が、この版のものである',
           wi.appliesToVersion === candidate.version,
           `${wi.appliesToVersion} ≠ ${candidate.version}`);
+        /*
+         * 第19回監査 R19-005。聞くべきことが**2つ**ある。
+         *   ① クエリで値を渡してよいか（User data policy - secure transmission）
+         *   ② 「別のページを開くだけの拡張」に当たらないか（Redirection）
+         * 片方だけの回答で「確認できた」としない。
+         */
+        const scope = Array.isArray(wi.questionScope) ? wi.questionScope : [];
+        for (const need of REQUIRED_WEB_INTENT_SCOPES) {
+          check(`Web Intent の質問に ${need} が入っている`,
+            scope.includes(need),
+            `questionScope に ${need} が無い（聞いた範囲: ${scope.join(' / ') || '空'}）`);
+        }
+        check('Web Intent の回答が、2つの論点の両方を覆っている',
+          wi.responseCoversBoth === true,
+          `responseCoversBoth=${wi.responseCoversBoth}（両方に触れた回答を得てから true にする）`);
       }
     }
   }
