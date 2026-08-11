@@ -643,13 +643,20 @@ test('ストアへ貼る github.com の権限説明が、実装と揃ってい�
   assert.ok(i > 0, 'github.com の権限説明が無い');
   const section = body.slice(i, body.indexOf('**Host permission: x.com**', i));
 
+  /*
+   * 第18回監査 R18-001。この検査は `location.href` と `document.title` が
+   * **書いてあること**を求めていた。第16回で画面側がどちらも読まなくなったあとも
+   * 要求が残っていたので、**事実でないことを書き続けるよう強制していた**
+   * （第14回の noticeCredential、第16回の R16-006 と同じ型で、これで3件目）。
+   * いま求めるのは、実装どおりの説明が書いてあること。
+   */
   const must = {
     'action row': 'どこを探すのか',
     '<style>': '足す style 要素',
     'wrapper': 'ボタンを包む要素',
     '<li> or a <div>': 'コンテナによって li か div になること',
-    'location.href': '読む値（URL）',
-    'document.title': '読む値（タイトル）',
+    'carries no data': '押しても画面側は何も読まないこと',
+    'service worker': '外へ出すものを決めるのは service worker であること',
     'event.isTrusted': '合成クリックを拒否すること',
     'activeTab': 'ツールバー/ショートカットは別経路であること'
   };
@@ -658,14 +665,15 @@ test('ストアへ貼る github.com の権限説明が、実装と揃ってい�
   }
 
   // 旧文の言い回しが残っていないこと
-  for (const stale of ['adds a single <li> element', 'reads\nthe page only to locate']) {
+  for (const stale of ['adds a single <li> element', 'reads\nthe page only to locate',
+                       'location.href', 'document.title']) {
     assert.ok(!section.includes(stale), `旧い説明が残っている: ${stale}`);
   }
 });
 
 test('権限説明の検査が効いているかの対照', () => {
-  const old = "The content script reads the page only to locate the button row, and adds a single <li> element.";
-  for (const needle of ['<style>', 'location.href', 'document.title', 'event.isTrusted']) {
+  const old = "The content script reads location.href and document.title in order to build the X Web Intent.";
+  for (const needle of ['<style>', 'carries no data', 'service worker', 'event.isTrusted']) {
     assert.ok(!old.includes(needle), `対照が成立していない＝旧文でも通ってしまう: ${needle}`);
   }
 });
@@ -922,5 +930,137 @@ test('README の表が、E2Eの件数を固定の数で書いていない（R14-
     assert.ok(m, `${file}: 実拡張E2Eの行が見つからない`);
     assert.ok(!/\d+\s*(tests|テスト)/.test(m[1]),
       `${file}: 表に固定の件数が書いてある: ${m[1].trim().slice(0, 60)}`);
+  }
+});
+
+/* ============================================================
+ * 主張の一覧表（第18回監査 R18-001）
+ * ============================================================
+ *
+ * 第16回・第17回・第18回と、**同じ誤りが別のファイルに残っている**指摘が3回続いた。
+ * 第16回で `_locales` と README を、第17回でストア文書の一部を直したが、
+ * PRIVACY・Single purpose・権限説明・申告の理由・コードのコメントが別々に残った。
+ *
+ * 原因は2つある。
+ *   ① 直す場所を**記憶で列挙**していた（最近見たファイルに偏る）
+ *   ② 検査を**1行ずつ**当てていたので、`the title\nand URL` のように
+ *      改行をまたいだ旧表現を見つけられなかった
+ *
+ * そこで「主張」を一覧にし、**すべての面へ、空白をつぶしてから**当てる。
+ * ここが増えるたびに、次から全面が守られる。
+ */
+
+/* 過去を引用している塊は対象外にする（経緯を書けなくなるため） */
+const HISTORY_MARKER =
+  /以前|旧文|旧い説明|書いてありました|書いていました|【履歴|履歴・現在の仕様ではありません|until 1\.1\.8|was until|until the |までは|第\d+回監査で(?:指摘|直した)|対照が成立/i;
+
+/* 空白（改行を含む）をすべて1つの空白へつぶす＝改行で検査を迂回できなくする */
+const squash = (s) => s.replace(/\s+/g, ' ');
+
+/* ファイルを「空行で区切った塊」に分け、履歴の塊を落として返す */
+function activeBlocks(file) {
+  return read(file).split(/\n\s*\n/)
+    .filter((b) => !HISTORY_MARKER.test(b))
+    .map(squash);
+}
+
+/*
+ * 主張ごとの「書いてはいけない言い回し」。
+ * すべて**実際に残っていたもの**で、思いついた例ではない。
+ */
+const CLAIMS = [
+  { id: 'title_read_or_sent',
+    why: 'ページのタイトルは読みも送りもしない（第15回監査 R15-001）',
+    stale: [/title and URL/i, /URL and title/i, /title and link/i,
+            /title or URL/i,                         // 予備の案内文に残っていた
+            /location\.href and document\.title/i,
+            /タイトルとURL/, /URLとタイトル/, /タイトルまたはURL/,
+            /ページのタイトルを読み/, /ページのタイトルが[^。]{0,12}Xへ渡る/,
+            /reads two things/i, /次の2つを読み取ります/] },
+  { id: 'source_never_touches_title',
+    why: '出荷するコードは document.title に触れない（コメントの説明も含めて）',
+    only: ['src/share.js', 'src/content.js', 'src/background.js'],
+    stale: [/document\.title/] },
+  { id: 'post_text_shape',
+    why: '本文はルートから生成する（タイトル入りの旧形式を書かない）',
+    stale: [/Title \(Issue #/, /Title \(PR #/, /Title \(Discussion #/,
+            /owner\/repo: description/, /タイトル \(Issue #/] },
+  { id: 'content_script_has_no_policy',
+    why: '画面側は合図を送るだけで、URLも投稿文も組み立てない（第16回監査 R16-003）',
+    stale: [/Post this page to X/, /QUERY_ALLOW/] },
+  { id: 'routes_are_typed_only',
+    why: '検索・explore・topics・プロフィールは共有できない（第15回監査 R15-001）',
+    stale: [/プロフィールページを共有した場合/,
+            /github\.com\/explore[^)]{0,40}は共有でき/,
+            /github\.com\/topics[^)]{0,40}は共有でき/] }
+];
+
+/* 主張を当てる面。ストアへ貼る原稿と Privacy を必ず含める（第18回で漏れていた） */
+const SURFACES = [
+  'README.md', 'README.ja.md', 'PRIVACY.md', 'SECURITY.md',
+  'store/LISTING.md', 'store/STORE_DASHBOARD_CHANGES.md',
+  'store/DATA_DISCLOSURE.json',
+  '_locales/en/messages.json', '_locales/ja/messages.json',
+  'src/share.js', 'src/content.js', 'src/background.js'
+];
+
+test('主張の一覧が、すべての面で守られている（R18-001）', () => {
+  const found = [];
+  for (const file of SURFACES) {
+    for (const block of activeBlocks(file)) {
+      for (const claim of CLAIMS) {
+        if (claim.only && !claim.only.includes(file)) continue;
+        for (const re of claim.stale) {
+          if (re.test(block)) {
+            found.push(`${file} [${claim.id}] ${re} → ${block.slice(0, 100)}`);
+          }
+        }
+      }
+    }
+  }
+  assert.deepEqual(found, [], '古い主張が残っている:\n' + found.join('\n'));
+});
+
+test('主張の検査そのものが効いている（対照）', () => {
+  /* ① 改行をまたいだ旧表現を、いまは捕まえられること（第17回の検査は素通りした） */
+  const across = squash("pre-filled with the title\nand URL of the GitHub page");
+  assert.ok(CLAIMS[0].stale.some((re) => re.test(across)),
+    '改行をまたいだ旧表現を捕まえられない＝第17回と同じ穴が残っている');
+  /* ② 1行に収まっている旧表現も、もちろん捕まえること */
+  const anyClaimCatches = (sample) =>
+    CLAIMS.some((c) => c.stale.some((re) => re.test(squash(sample))));
+  for (const sample of [
+    '    Issue        →  Title (Issue #123 · owner/repo)',
+    "btn.title = t('shareButtonTooltip', 'Post this page to X');",
+    'プロフィールページを共有した場合、そのユーザー名は本人を指します',
+    /* 変異で素通りした2つ（第18回の自己検証で見つけた） */
+    "This page's title or URL may contain sensitive authentication information",
+    ' * 設計方針: DOMを一切見ない。URL と document.title だけで動く。'
+  ]) {
+    assert.ok(anyClaimCatches(sample), `検査が空振りしている: ${sample.slice(0, 60)}`);
+  }
+  /* ③ 履歴の除外が、全部を素通しにしていないこと */
+  assert.ok(HISTORY_MARKER.test('以前ここには「…」と書いていました'), '履歴の目印が効いていない');
+  assert.ok(!HISTORY_MARKER.test('RepoShout reads the page URL.'),
+    '履歴の除外が広すぎる＝ふつうの文まで検査を免れる');
+  /* ④ 面の一覧に、今回漏れていた2つが入っていること */
+  for (const f of ['PRIVACY.md', 'store/STORE_DASHBOARD_CHANGES.md', 'store/LISTING.md']) {
+    assert.ok(SURFACES.includes(f), `面の一覧に ${f} が無い`);
+  }
+});
+
+test('言うべきことを、言っている（主張の裏返し）', () => {
+  /* 「書いてはいけない」だけだと、何も書かなければ通ってしまう */
+  const must = {
+    'PRIVACY.md': ['The page title is not read at all', 'ページのタイトルは読みません'],
+    'store/LISTING.md': ['carries no data', 'The page title is not read or sent'],
+    'README.md': ['never its title'],
+    'README.ja.md': ['タイトルではありません']
+  };
+  for (const [file, phrases] of Object.entries(must)) {
+    const body = read(file);
+    for (const p of phrases) {
+      assert.ok(body.includes(p), `${file} に「${p}」が無い`);
+    }
   }
 });

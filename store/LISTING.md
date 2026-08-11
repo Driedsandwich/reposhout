@@ -259,8 +259,9 @@ English (United States)
 ### Single purpose
 
 ```
-RepoShout has one purpose: to open X's post composer pre-filled with the title
-and URL of the GitHub page the user is currently viewing.
+RepoShout has one purpose: to open X's post composer pre-filled with a one-line
+description generated from the route of the GitHub page the user is currently
+viewing, together with that page's link. The page title is not read or sent.
 ```
 
 ### Permission justification
@@ -321,7 +322,9 @@ What the content script does on github.com:
   existing GitHub element, and it does nothing at all if the expected container
   is not found.
 - When -- and only when -- the user activates that button with a real click, it
-  reads location.href and document.title in order to build the X Web Intent
+  reads nothing from the page in order to build the X Web Intent: pressing the
+  button sends the background service worker a message that carries no data, and
+  the service worker builds the link from the tab's URL
   link. A click synthesised by page JavaScript is refused (event.isTrusted).
 - It does not read cookies or form fields, runs no analytics, and makes no
   network request of its own.
