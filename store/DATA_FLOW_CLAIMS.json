@@ -8,7 +8,7 @@
     "",
     "ここを唯一の正本にして、両側から縛る:",
     "  ① この正本 ←→ 実際のコード   test/docs.test.mjs が実測して突き合わせる",
-    "  ② この正本 ←→ 全部の文書     14面へ、空白をつぶしてから当てる",
+    "  ② この正本 ←→ 全部の文書     claimSurfaces の全面へ、空白をつぶしてから当てる",
     "",
     "**片側だけでは足りない。** ①が無ければ、この正本自身が古くなっても誰も気づかない",
     "（第18回で学んだ——正本の外へ出した値は誰も直さない）。",
@@ -24,12 +24,39 @@
     "説明のために書いた目印を、検査は本物の囲いとして数えてしまうため。",
     "JSONは常に全体が現行の主張として検査される。"
   ],
+
   "measuredOn": "2026-08-11",
   "appliesToVersion": "1.1.8",
+
+  "_claimSurfacesAbout": [
+    "主張を当てる面の**正本**（第20回監査 R20-003）。",
+    "それまでテスト側は `SURFACES.length >= 14` としか見ておらず、",
+    "**15面のうち1面を外しても14面で通った**。その面へのclaim検査が黙って止まる。",
+    "ここへ exact list を置き、テストは並べ替えたうえで完全一致を要求する。"
+  ],
+  "claimSurfaces": [
+    "README.md",
+    "README.ja.md",
+    "PRIVACY.md",
+    "SECURITY.md",
+    "_locales/en/messages.json",
+    "_locales/ja/messages.json",
+    "manifest.json",
+    "src/background.js",
+    "src/content.js",
+    "src/share.js",
+    "store/DATA_DISCLOSURE.json",
+    "store/DATA_FLOW_CLAIMS.json",
+    "store/LISTING.md",
+    "store/STORE_DASHBOARD_CHANGES.md",
+    "store/WEB_INTENT_POLICY_DECISION.json"
+  ],
+
   "titleRead": false,
   "titleSent": false,
   "contentScriptReadsUrl": false,
   "contentScriptSendsData": false,
+
   "contentScriptReadsDom": true,
   "domReadTiming": "GitHubのページを開いている間。読み込み時・約1秒ごと（setInterval 1000）・タブが表示に戻ったとき（visibilitychange）",
   "domReadPurpose": "GitHubが描く操作列を見つけて Share ボタンを置き、隣のボタンと高さを揃えるため",
@@ -39,43 +66,34 @@
   "domReadLeavesBrowser": false,
   "serviceWorkerReadsUrl": true,
   "serviceWorkerBuildsIntent": true,
+
   "outboundText": "ルートから生成した1行（例: Issue #12 · owner/repo）。ページの中身は入らない",
   "outboundUrl": "検査済みパーツから組み直した https://github.com/… のURL。元の pathname は使わない",
   "ownerRepoAlwaysTransferred": true,
+
   "supportedRoutes": [
-    "repo",
-    "issue-list",
-    "pr-list",
-    "discussion-list",
-    "releases",
-    "issue",
-    "pr",
-    "discussion",
-    "commit"
+    "repo", "issue-list", "pr-list", "discussion-list", "releases",
+    "issue", "pr", "discussion", "commit"
   ],
   "unsupportedRoutes": [
-    "blob",
-    "tree",
-    "compare",
-    "commits/<ref>",
-    "search",
-    "wiki",
-    "actions",
-    "profile",
-    "root",
-    "pull/<n>/files"
+    "blob", "tree", "compare", "commits/<ref>", "search", "wiki",
+    "actions", "profile", "root", "pull/<n>/files"
   ],
+
   "fragmentPolicy": "drop_all",
   "queryPolicy": "int / bool / enum の値だけを、名前ごとに1回だけ残す。同じ名前が2回以上あればURLごと拒否する。自由文（q / query / discussions_q / title / body）は落とす",
+
   "recipient": "x.com（X Corp.）— 拡張の開発者のサーバーは存在しない",
   "transferTiming": "利用者が共有を操作し、Xの投稿画面が開いた時点。Postを押す前",
   "storage": "chrome.storage.session にウィンドウIDと時刻だけ。URLも投稿本文もタイトルも保存しない",
+
   "webIntentStatus": "pending",
   "ownerConfirmationStatus": {
     "authentication_information": "pending",
     "user_activity": "pending",
     "website_content": "Yes"
   },
+
   "_boundToCode": [
     "次は test/docs.test.mjs が実測して、この正本と食い違えば落とす:",
     "  titleRead / titleSent          → src/*.js（コメントを外した本体）に document.title が無い",

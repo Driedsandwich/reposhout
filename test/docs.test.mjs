@@ -1064,8 +1064,12 @@ const CLAIMS = [
 ];
 
 /*
- * 主張を当てる面。**14面**（第19回監査 R19-001 で manifest.json と
- * WEB_INTENT_POLICY_DECISION.json を追加）。
+ * 主張を当てる面。**正本は store/DATA_FLOW_CLAIMS.json の claimSurfaces**
+ * （第20回監査 R20-003）。ここは実際に検査へ渡す一覧で、下のテストが
+ * 正本と**並べ替えたうえで完全一致**することを要求する。
+ *
+ * それまでは `SURFACES.length >= 14` としか見ていなかったので、
+ * **15面のうち1面を外しても14面で通り**、その面のclaim検査が黙って止まった。
  * ストアへ貼る原稿と Privacy は第18回で漏れていたので、必ず入れる。
  */
 const SURFACES = [
@@ -1270,12 +1274,18 @@ test('主張の検査そのものが効いている（対照）', () => {
   assert.ok(new RegExp(HISTORY_RE.source).test(noReason) === false,
     '理由の無い目印で検査を外せている');
 
-  /* ⑤ 面の一覧に、これまで漏れていた物が入っていること */
+  /*
+   * ⑥ 面の一覧が、正本と**1つ残らず**一致すること（第20回監査 R20-003）。
+   * `>= 14` で見ていたので、15面のうち1面を外しても通った——
+   * その面へのclaim検査が黙って止まり、誰も気づかない。
+   */
+  const claims = JSON.parse(read('store/DATA_FLOW_CLAIMS.json'));
+  assert.deepEqual([...SURFACES].sort(), [...claims.claimSurfaces].sort(),
+    '検査する面と、正本の claimSurfaces がずれている');
   for (const f of ['PRIVACY.md', 'store/STORE_DASHBOARD_CHANGES.md', 'store/LISTING.md',
                    'manifest.json', 'store/WEB_INTENT_POLICY_DECISION.json']) {
     assert.ok(SURFACES.includes(f), `面の一覧に ${f} が無い`);
   }
-  assert.ok(SURFACES.length >= 14, `面が ${SURFACES.length} しかない`);
 });
 
 /* ------------------------------------------------------------
