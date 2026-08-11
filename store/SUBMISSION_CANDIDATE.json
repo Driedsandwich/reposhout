@@ -27,7 +27,7 @@
   "innerSha256": "ae64474c718af3eb3546d4a19762bce3da76638e7e820947ce3c660b8922e7ca",
   "privacyPolicyUrl": "https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md",
   "confirmationTimeZone": "Asia/Tokyo",
-  "note": "main への push で走った CI（run 31456006836）が作ったもの。ダウンロードして SHA-256・バイト数・収録数を実測した（外側は 40,621 B で、GitHub の API が申告する digest と一致）。タグはまだ打っていないので、選ぶ基準はこの成果物名とハッシュ。第12回〜第18回で却下した成果物は提出しない",
+  "note": "選ぶ基準は、上の構造化された欄（artifactName / innerSha256 / innerBytes / innerFiles）だけ。ここに run 番号・バイト数・ハッシュ・監査の回次を書き写さない（第20回監査 R20-004。写した値は成果物を差し替えても取り残され、どちらが正しいか分からなくなる）。タグは外部監査に合格するまで打たない。却下した成果物は history にある。",
   "history": [
     {
       "version": "1.1.8",

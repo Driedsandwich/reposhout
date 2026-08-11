@@ -1566,3 +1566,39 @@ test('Privacy が、操作していない間のDOM確認も説明している（
     assert.ok(body.includes(phrase), `PRIVACY.md に「${phrase}」が無い`);
   }
 });
+
+test('提出候補の note に、可変な事実を書き写していない（R20-004）', () => {
+  /*
+   * 第20回監査 R20-004。構造化された欄は正しく差し替わっていたのに、
+   * `note` だけ前回の run 番号・外側のバイト数・「第12回〜第18回」という
+   * 古い範囲を抱えたまま残っていた。**同じ事実を2か所に書けば、片方が必ず古くなる。**
+   * 数える対象を「一致するか」ではなく「いくつ書いてあるか」にする。
+   */
+  const cand = JSON.parse(read('store/SUBMISSION_CANDIDATE.json'));
+  const note = String(cand.note || '');
+  const MUTABLE = [
+    [/\b\d{9,}\b/, 'run 番号のような長い数字'],
+    [/\b[0-9a-f]{7,}\b/i, 'コミットSHAやハッシュ'],
+    [/\b\d{1,3}(,\d{3})+\s*B\b/, 'バイト数'],
+    [/\b\d{4,}\s*B\b/, 'バイト数'],
+    [/第\d+回〜第\d+回/, '監査の回次の範囲（増えるたびに古くなる）'],
+    [/reposhout-(package|1\.)/, '成果物の名前']
+  ];
+  const found = MUTABLE.filter(([re]) => re.test(note)).map(([, label]) => label);
+  assert.deepEqual(found, [],
+    `note に可変な事実が書き写されている: ${found.join(' / ')}\n  note: ${note.slice(0, 160)}`);
+
+  /* 対照: この検査が本当に効くこと（実際に残っていた旧 note で確かめる） */
+  const stale = 'main への push で走った CI（run 31456006836）が作ったもの。外側は 40,621 B で、'
+    + 'digest と一致。第12回〜第18回で却下した成果物は提出しない';
+  const caught = MUTABLE.filter(([re]) => re.test(stale)).length;
+  assert.ok(caught >= 3,
+    `対照が成立していない＝この検査は旧 note を捕まえられない（${caught} 件しか当たらない）`);
+
+  /* 構造化された欄のほうは、空でないこと（note を消しただけにしない） */
+  if (cand.status === 'ready') {
+    for (const k of ['artifactName', 'innerSha256', 'innerBytes', 'innerFiles']) {
+      assert.ok(cand[k], `${k} が空。note を消した代わりが無い`);
+    }
+  }
+});
