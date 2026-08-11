@@ -464,6 +464,68 @@ test('同じクエリを繰り返しても、任意長の列を運べない（R1
   }
 });
 
+test('重複の判定は、値が型に合うかより先に行う（R17-001）', () => {
+  /*
+   * 第17回監査 R17-001。「同じ名前が2回以上あればURLごと拒否」と書いていたのに、
+   * 実装は**型に合う値を数えてから**重複を見ていた。そのため片方の値が型に合わないと、
+   * 2回書いてあるのに1回として通り、残った側を黙って共有していた（配布ZIPで再現）。
+   *
+   *   ?state=open&state=invalid → state=open を共有（本来は拒否）
+   *   ?page=1&page=1000000      → page=1 を共有（1000000 は桁数超過で落ちていた）
+   *
+   * 漏えいではないが、**利用者が見ている画面と共有URLの意味が黙って変わる**。
+   */
+  const dup = [
+    'https://github.com/o/r/issues?state=open&state=closed',   // 有効＋有効（前から拒否）
+    'https://github.com/o/r/issues?state=open&state=invalid',  // 有効＋無効
+    'https://github.com/o/r/issues?state=invalid&state=open',  // 無効＋有効（順序を逆に）
+    'https://github.com/o/r/issues?state=invalid&state=bogus', // 無効＋無効
+    'https://github.com/o/r/issues?page=1&page=1000000',       // 有効＋範囲外
+    'https://github.com/o/r/issues?page=1&page=',              // 有効＋空
+    'https://github.com/o/r/issues?page=&page=2'               // 空＋有効
+  ];
+  for (const u of dup) {
+    const r = GXS.canonicalResult(u);
+    assert.equal(r.ok, false, `重複を通している: ${u}`);
+    assert.equal(r.reason, 'ambiguous_query', `理由が違う: ${u} → ${r.reason}`);
+  }
+  /* 対照1: 1回しか書いていなければ、値が型に合わなくても落とすだけで拒否はしない */
+  assert.equal(GXS.canonicalUrl('https://github.com/o/r/issues?state=invalid', null),
+    'https://github.com/o/r/issues', '1回だけの不正値でページごと拒否している');
+  /* 対照2: 表に無い名前は、重複していても「拒否」ではなく「落とす」 */
+  assert.equal(GXS.canonicalUrl('https://github.com/o/r/issues?utm_source=a&utm_source=b', null),
+    'https://github.com/o/r/issues', '表に無い名前の重複でページごと拒否している');
+  assert.equal(GXS.canonicalUrl('https://github.com/o/r/issues?q=x&q=y', null),
+    'https://github.com/o/r/issues', '自由文の重複でページごと拒否している');
+  /* 対照3: 普通の1回ずつは今までどおり共有できる */
+  assert.equal(GXS.canonicalUrl('https://github.com/o/r/issues?state=open&page=2', null),
+    'https://github.com/o/r/issues?page=2&state=open');
+});
+
+test('GitHub の機能ページを、あとから見つけたぶんも拒否する（R17-002）', () => {
+  /*
+   * 第17回監査 R17-002。単一正本にした形は正しかったが、**中身に漏れ**があった。
+   * 実際に github.com 上で運営されている機能ページが、リポジトリとして共有できていた。
+   *
+   * 追加の基準は実測した: `github.com/<名前>` が github.com 上で開けて、
+   * かつ users API にアカウントが**無い**もの（＝そこにリポジトリは作れない＝
+   * 拒否しても実在のリポジトリを巻き込まない）。
+   */
+  for (const ns of ['customer-stories', 'resources', 'education', 'solutions']) {
+    assert.equal(GXS.buildShare(`https://github.com/${ns}/anything`), null,
+      `リポジトリとして共有してしまう: ${ns}`);
+  }
+  /*
+   * 対照: **実在する組織**は巻き込まない。どれも github.com/<名前> は開くが、
+   * アカウントがあり公開リポジトリを持っている（実測: skills 52 / accessibility 16 /
+   * security-lab 6）。ここを一緒に消すと、普通のリポジトリが共有できなくなる。
+   */
+  for (const org of ['skills', 'accessibility', 'security-lab', 'github', 'octocat']) {
+    assert.ok(GXS.buildShare(`https://github.com/${org}/some-repo`),
+      `実在する所有者まで拒否している: ${org}`);
+  }
+});
+
 test('クエリの出力は、入力の並び順で変わらない（R16-002）', () => {
   const a = GXS.canonicalUrl('https://github.com/o/r/issues?page=2&state=open', null);
   const b = GXS.canonicalUrl('https://github.com/o/r/issues?state=open&page=2', null);

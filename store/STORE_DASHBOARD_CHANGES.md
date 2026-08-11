@@ -14,7 +14,7 @@
 
 ## 0. なぜ直すのか（1行）
 
-掲載中の説明文に「**sends nothing anywhere**（どこにも送らない）」と書いてありますが、これは事実と違います。Shareを押すと、ページのタイトルとURLは**Xの投稿画面を開いた時点でXへ渡ります**。開発者には何も送っていないので「開発者に送らない」は正しく、そこと混ざった書き方になっていました。
+掲載中の説明文に「**sends nothing anywhere**（どこにも送らない）」と書いてありますが、これは事実と違います。Shareを押すと、ページのルートから生成した1行と組み直したURLが**Xの投稿画面を開いた時点でXへ渡ります**（1.1.8 以降、ページのタイトルは送りません）。開発者には何も送っていないので「開発者に送らない」は正しく、そこと混ざった書き方になっていました。
 
 ---
 
@@ -26,14 +26,14 @@
 |---|---|
 | Privacy の段落 | 「no network requests of its own and sends nothing anywhere」→ 開発者には送らないことと、Xへは機能上渡ることを分けて書く |
 | 機能の箇条書き | 「認証・設定・組織管理のページは共有しない」を追加 |
-| 機能の箇条書き | 「タイトルを切り詰めても Issue / PR 番号は残る」を追加 |
+| 機能の箇条書き | 「ページのタイトルは送らない。本文はルートから生成する」を追加（第15回監査 R15-001） |
 | 機能の箇条書き | 「検索語や作成中の本文など、自由に書ける欄は共有URLに含めない」を追加（第12回監査 R12-001） |
 
 貼る文面（英語・そのままコピー）:
 
 ```
 Nothing is sent to the developer, and there is no analytics or tracking. The page
-title and URL are sent to X, because that is what the extension does: they are
+generated line and URL are sent to X, because that is what the extension does: they are
 placed in X's own composer link and reach X when the composer opens, before you
 decide whether to post. Authentication, account, settings and organisation
 admin pages are refused outright and are never shared.
@@ -82,7 +82,7 @@ and URL of the GitHub page the user is currently viewing.
 | Location | No | No | 扱わない |
 | Web history | No | **Yes へ変更** | 利用者が見ているページのURLが、第三者（X）へ渡る |
 | User activity | No | **要確認**（案: No） | クリック・スクロール・マウス位置・入力内容は読まない。keydown を1つ見て Escape かだけ判定する |
-| Website content | No | **Yes へ変更** | ページのタイトルが、第三者（X）へ渡る |
+| Website content | No | **Yes へ変更** | ボタンの位置を探すためにDOMを端末内で読む（タイトルは読まず、Xへも送らない） |
 
 **個人を識別できる情報（PII）を Yes にする理由**（第5回監査 R5-001）: 公式の User Data FAQ は、PIIの例に **username を明記**しています。RepoShout が共有するURLは `github.com/<ユーザー名>/<リポジトリ名>` の形で、タイトルや `(Issue #12 · owner/repo)` というサフィックスにもユーザー名・組織名が入ります。プロフィールページを共有した場合、そのユーザー名は本人を指します。**handle には transmit が含まれ**、これらはXへ渡ります。
 
@@ -132,14 +132,15 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 今回出すもの:
 
 ```
-成果物 : reposhout-package-4bffebddee99b61ad63f56ab83da596d3f8f4ed3
-中のZIP : reposhout-1.1.8.zip
-大きさ : 38,319 B / 11ファイル
-SHA-256 : e628aaedaa699ac924ae5dd89d9e12d0fc988c5f5a7bae72b4519577b6e2cd50
+status : pending_main_ci
 ```
 
+**いま出せる成果物はありません。** 第17回監査で直前の候補（`reposhout-package-4bffebdd…` /
+38,319 B / SHA-256 `e628aaed…`）を `rejected_by_R17` として外しました。R17の修正が main に
+入って CI が通ったあと、その成果物を実測してから正本へ書きます。
+
 正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) です。
-第12回〜第16回で却下した成果物は提出しません（理由も同ファイルにあります）。
+第12回〜第17回で却下した成果物は提出しません（理由も同ファイルにあります）。
 **「最新の main」では選ばず、上の成果物名とSHA-256 で選んでください**（第10回監査 R10-006）。
 
 ---

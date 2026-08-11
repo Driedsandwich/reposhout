@@ -95,7 +95,23 @@
   var NON_REPOSITORY_TOP_LEVEL = (function () {
     var extra = [
       'advisories', 'security-advisories', 'copilot', 'github-copilot',
-      'contact', 'signin', 'sign_in', 'sign_up'
+      'contact', 'signin', 'sign_in', 'sign_up',
+      /*
+       * 第17回監査 R17-002。上の一覧に**漏れ**があり、GitHubが運営している
+       * 案内ページを「リポジトリ」として共有していた（配布ZIP `e628aaed…` で再現。
+       * 例: `customer-stories/ey` `resources/articles` `education/schools`）。
+       *
+       * 足す基準は実測した——`github.com/<名前>` が github.com 上で開けて、
+       * かつ users API に**アカウントが無い**もの。アカウントが無ければ、
+       * そこにリポジトリは作れない＝拒否しても実在のリポジトリを巻き込まない。
+       * この基準で `skills`（52）`accessibility`（16）`security-lab`（6）は
+       * **足していない**——実在する組織で、公開リポジトリを持っているため。
+       * `customer-stories` だけはアカウントがあるが、`github.com/customer-stories/test`
+       * が 404 になる（GitHubの案内ページが同じ名前空間を覆っている）ので足した。
+       */
+      'customer-stories', 'resources', 'education', 'solutions', 'readme',
+      'git-guides', 'why-github', 'newsroom', 'partners', 'mobile', 'team',
+      'open-source', 'social-impact', 'premium-support', 'press'
     ];
     var all = RESERVED_OWNERS.concat(SENSITIVE_FIRST_SEGMENTS).concat(extra);
     var out = [];
@@ -553,13 +569,27 @@
     return routeOf(u) === 'sensitive';
   }
 
-  function keepParam(route, name, value) {
+  /*
+   * 判定を「**名前**を載せてよいか」と「**値**が型に合うか」の2段に分ける
+   * （第17回監査 R17-001）。
+   *
+   * 分ける理由は、**重複を数えるのが名前の側の仕事**だから。まとめて見ていたときは
+   * 「型に合う値が2回」しか重複と数えられず、`?state=open&state=invalid` は
+   * 1回として通って `state=open` を共有していた（配布ZIP `e628aaed…` で再現）。
+   * 2回書いてあるのに1回として扱うと、利用者が見ている画面と共有URLの意味が
+   * 黙って変わる。
+   */
+  function paramNameAllowed(route, name) {
     var rules = QUERY_RULES[route];
     if (!rules) return false;                                   // null（機微）と未定義は全落とし
     if (SENSITIVE_PARAM_RE.test(name)) return false;            // 多重防御
     if (TRACKING_PARAMS.indexOf(name.toLowerCase()) !== -1 && route !== 'user') return false;
-    if (!Object.prototype.hasOwnProperty.call(rules, name)) return false;
-    return valueFitsRule(rules[name], value);                   // 値の形も見る
+    return Object.prototype.hasOwnProperty.call(rules, name);
+  }
+
+  function keepParam(route, name, value) {
+    if (!paramNameAllowed(route, name)) return false;
+    return valueFitsRule(QUERY_RULES[route][name], value);      // 値の形も見る
   }
 
   /* ------------------------------------------------------------
@@ -947,9 +977,18 @@
     var kept = Object.create(null);
     var ambiguous = false;
     if (rules) {
+      var seen = Object.create(null);
       u.searchParams.forEach(function (value, name) {
-        if (!keepParam(info.route, name, value)) return;      // 表に無い・型に合わないものは落とす
-        if (name in kept) { ambiguous = true; return; }
+        /*
+         * 順番が大事（第17回監査 R17-001）。
+         * ①表に無い名前は落とす（重複していても数えない＝拒否しない）
+         * ②**値を見る前に**、同じ名前が2回目かを数える
+         * ③そのうえで、値が型に合わなければ落とす
+         */
+        if (!paramNameAllowed(info.route, name)) return;
+        if (name in seen) { ambiguous = true; return; }
+        seen[name] = true;
+        if (!valueFitsRule(rules[name], value)) return;       // 名前は表にあるが値が型に合わない
         kept[name] = canonicalValue(rules[name], value);
       });
     }

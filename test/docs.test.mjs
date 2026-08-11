@@ -856,6 +856,37 @@ test('拡張自身のUIが、送らないもの（タイトル）を送ると言
   assert.ok(/title and URL/i.test(old), '検査そのものが効いていない');
 });
 
+test('ストアへ貼る文面が、送らないタイトルを「送る」と言っていない（R17・自己発見）', () => {
+  /*
+   * 第16回では `_locales` だけを直し、**ストアへ貼る文面を見ていなかった**。
+   * 第17回の作業中に見つけた: store/LISTING.md と STORE_DASHBOARD_CHANGES.md には
+   * 「タイトルとリンクが入力済みで開く」「Title (Issue #123 · owner/repo)」
+   * 「URL and title を読む」が残っていて、**同じファイルの数行下で
+   * 「The page title is never sent」と書いていた**。
+   *
+   * ここはダッシュボードへ貼る原稿で、審査で読まれる場所なので、
+   * 実装より広い申告をそのまま出すことになる。
+   */
+  const stale = [
+    /title and URL/i, /URL and title/i, /title and link/i,
+    /Title \(Issue #/, /Title \(PR #/, /owner\/repo: description/,
+    /タイトルとURL/, /ページのタイトルが、?(同じく)?第?三?者?.{0,4}Xへ渡る/
+  ];
+  for (const f of ['store/LISTING.md', 'store/STORE_DASHBOARD_CHANGES.md']) {
+    const body = read(f);
+    for (const line of body.split('\n')) {
+      /* 「昔こう書いていた」と引用している行は対象外（履歴を書けなくなるため） */
+      if (/以前|旧文|書いてありました|書いていました|1\.0\.1 は|掲載中の説明文に/.test(line)) continue;
+      for (const re of stale) {
+        assert.ok(!re.test(line), `${f} が送らないタイトルを送ると言っている: ${line.trim().slice(0, 90)}`);
+      }
+    }
+  }
+  /* 対照: 旧文はこの検査を通らない */
+  assert.ok(stale.some((re) => re.test('    Issue        →  Title (Issue #123 · owner/repo)')),
+    '対照が成立していない＝旧文でも通ってしまう');
+});
+
 test('README が、機微なページで「何も起きない」と書いていない（R14-003）', () => {
   /*
    * 実装は理由の語を送って案内を出し、届かなければバッジを出す。
