@@ -141,7 +141,8 @@ npm run verify:submission-ready -- --artifact <ダウンロードした成果物
 RepoShout adds a Share button to GitHub, so you can post a repository, issue,
 or pull request to X without copying and pasting.
 
-Click it and X's post composer opens with the title and link already filled in.
+Click it and X's post composer opens with a one-line description of the page and
+its link already filled in.
 Edit it however you like, then press Post yourself. RepoShout never posts for you.
 Changed your mind? Press Escape in the share window to dismiss it.
 
@@ -151,10 +152,10 @@ Changed your mind? Press Escape in the share window to dismiss it.
 • A Share button on issues and pull requests, placed to the left of New issue / Code
 • A toolbar icon and a keyboard shortcut (Alt+Shift+X, or Option+Shift+X on macOS)
   that work on other shareable GitHub pages too
-• Post text tailored to the page:
-    Repository   →  owner/repo: description
-    Issue        →  Title (Issue #123 · owner/repo)
-    Pull request →  Title (PR #123 · owner/repo)
+• Post text generated from the page's route:
+    Repository   →  owner/repo
+    Issue        →  Issue #123 · owner/repo
+    Pull request →  PR #123 · owner/repo
 • Authentication, account, settings and organisation admin pages are never shared
 • The page title is never sent. The post text is generated from the route:
   owner/repo, Issue #123 · owner/repo, PR #123 · owner/repo, Issues · owner/repo,
@@ -174,8 +175,8 @@ Changed your mind? Press Escape in the share window to dismiss it.
 ── Privacy ──
 
 RepoShout requests two API permissions: activeTab and storage. activeTab lets it
-read the current tab's URL and title, only at the moment you invoke it, purely to
-build the post text. storage holds one thing: the identifiers of the windows the
+read the current tab's URL, only at the moment you invoke it, purely to
+build the post text. The page title is not read at all. storage holds one thing: the identifiers of the windows the
 extension itself opened, kept in memory and cleared when you quit the browser.
 
 Nothing is sent to the developer, and there is no analytics or tracking. The page
@@ -267,9 +268,9 @@ and URL of the GitHub page the user is currently viewing.
 **activeTab**
 
 ```
-RepoShout needs the URL and title of the tab the user is currently viewing in
-order to compose the post text (for example "owner/repo: description" or
-"Title (Issue #123 · owner/repo)") and to build the x.com share link.
+RepoShout needs the URL of the tab the user is currently viewing in order to
+compose the post text (for example "owner/repo" or "Issue #123 · owner/repo")
+and to build the x.com share link. The page title is not read.
 
 activeTab was chosen deliberately over host permissions or the "tabs" permission
 because it grants access only at the moment the user explicitly invokes the
@@ -277,9 +278,10 @@ extension -- by clicking the toolbar icon or pressing the keyboard shortcut --
 and only for that one tab. It cannot be used to observe browsing in the
 background.
 
-The URL and title are used solely to construct the share URL. The extension does
-not store them, does not log them, and does not send them to the developer or to
-any server the developer operates. They are placed in X's own Web Intent link, so
+The URL is used solely to decide whether the page may be shared and to construct
+the share link from its validated parts. The extension does not store it, does
+not log it, and does not send it to the developer or to any server the developer
+operates. They are placed in X's own Web Intent link, so
 they reach X when the composer opens -- that is the function the user asked for.
 ```
 
@@ -325,7 +327,7 @@ What the content script does on github.com:
   network request of its own.
 
 The toolbar icon and the keyboard shortcut are a separate path: they do not use
-this content script at all. They read the current tab's URL and title through
+this content script at all. They read the current tab's URL through
 the activeTab permission, which is granted only at the moment the user invokes
 the extension, and only for that one tab.
 ```
@@ -373,7 +375,7 @@ the popup (for example to /i/flow/login when the user is signed out).
 | Location | No | 扱わない |
 | Web history | **Yes** | 利用者が見ているページのURLが、第三者であるXへ渡るため |
 | User activity | **要確認**（案: No） | クリック・スクロール・入力内容は読まない。x.com で keydown を1つ見て Escape かどうかだけ判定する（保存も送信もしない）。設問文を読んで本人が確定する |
-| Website content | **Yes** | ページのタイトルが、同じくXへ渡るため |
+| Website content | **Yes** | ボタンを差し込む位置を探すためにページのDOMを端末内で読むため（ページのタイトルは読まず、Xへも送らない） |
 
 3つの証明にすべてチェック（該当なし・遵守）:
 
