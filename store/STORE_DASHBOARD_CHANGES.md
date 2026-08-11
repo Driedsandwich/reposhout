@@ -132,12 +132,11 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 今回出すもの:
 
 ```
-status : pending_main_ci
+成果物 : reposhout-package-cf3358ed162e3050569d4dd4aa1d7d5553cd3a8f
+中のZIP : reposhout-1.1.8.zip
+大きさ : 39,117 B / 11ファイル
+SHA-256 : 6980b87aa9f2d6662e56f5c529c12ad5106d852fe5699e16f8cbff1906304f5e
 ```
-
-**いま出せる成果物はありません。** 第17回監査で直前の候補（`reposhout-package-4bffebdd…` /
-38,319 B / SHA-256 `e628aaed…`）を `rejected_by_R17` として外しました。R17の修正が main に
-入って CI が通ったあと、その成果物を実測してから正本へ書きます。
 
 正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) です。
 第12回〜第17回で却下した成果物は提出しません（理由も同ファイルにあります）。
