@@ -95,7 +95,23 @@
   var NON_REPOSITORY_TOP_LEVEL = (function () {
     var extra = [
       'advisories', 'security-advisories', 'copilot', 'github-copilot',
-      'contact', 'signin', 'sign_in', 'sign_up'
+      'contact', 'signin', 'sign_in', 'sign_up',
+      /*
+       * 第17回監査 R17-002。上の一覧に**漏れ**があり、GitHubが運営している
+       * 案内ページを「リポジトリ」として共有していた（配布ZIP `e628aaed…` で再現。
+       * 例: `customer-stories/ey` `resources/articles` `education/schools`）。
+       *
+       * 足す基準は実測した——`github.com/<名前>` が github.com 上で開けて、
+       * かつ users API に**アカウントが無い**もの。アカウントが無ければ、
+       * そこにリポジトリは作れない＝拒否しても実在のリポジトリを巻き込まない。
+       * この基準で `skills`（52）`accessibility`（16）`security-lab`（6）は
+       * **足していない**——実在する組織で、公開リポジトリを持っているため。
+       * `customer-stories` だけはアカウントがあるが、`github.com/customer-stories/test`
+       * が 404 になる（GitHubの案内ページが同じ名前空間を覆っている）ので足した。
+       */
+      'customer-stories', 'resources', 'education', 'solutions', 'readme',
+      'git-guides', 'why-github', 'newsroom', 'partners', 'mobile', 'team',
+      'open-source', 'social-impact', 'premium-support', 'press'
     ];
     var all = RESERVED_OWNERS.concat(SENSITIVE_FIRST_SEGMENTS).concat(extra);
     var out = [];

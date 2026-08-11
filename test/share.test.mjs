@@ -502,6 +502,30 @@ test('重複の判定は、値が型に合うかより先に行う（R17-001）'
     'https://github.com/o/r/issues?page=2&state=open');
 });
 
+test('GitHub の機能ページを、あとから見つけたぶんも拒否する（R17-002）', () => {
+  /*
+   * 第17回監査 R17-002。単一正本にした形は正しかったが、**中身に漏れ**があった。
+   * 実際に github.com 上で運営されている機能ページが、リポジトリとして共有できていた。
+   *
+   * 追加の基準は実測した: `github.com/<名前>` が github.com 上で開けて、
+   * かつ users API にアカウントが**無い**もの（＝そこにリポジトリは作れない＝
+   * 拒否しても実在のリポジトリを巻き込まない）。
+   */
+  for (const ns of ['customer-stories', 'resources', 'education', 'solutions']) {
+    assert.equal(GXS.buildShare(`https://github.com/${ns}/anything`), null,
+      `リポジトリとして共有してしまう: ${ns}`);
+  }
+  /*
+   * 対照: **実在する組織**は巻き込まない。どれも github.com/<名前> は開くが、
+   * アカウントがあり公開リポジトリを持っている（実測: skills 52 / accessibility 16 /
+   * security-lab 6）。ここを一緒に消すと、普通のリポジトリが共有できなくなる。
+   */
+  for (const org of ['skills', 'accessibility', 'security-lab', 'github', 'octocat']) {
+    assert.ok(GXS.buildShare(`https://github.com/${org}/some-repo`),
+      `実在する所有者まで拒否している: ${org}`);
+  }
+});
+
 test('クエリの出力は、入力の並び順で変わらない（R16-002）', () => {
   const a = GXS.canonicalUrl('https://github.com/o/r/issues?page=2&state=open', null);
   const b = GXS.canonicalUrl('https://github.com/o/r/issues?state=open&page=2', null);
