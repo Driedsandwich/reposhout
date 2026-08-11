@@ -40,7 +40,22 @@ var POPUP_HEIGHT = 640;
  * content script からは読めない。setAccessLevel は呼ばない。
  */
 var STORE_KEY = 'shareWindows';
-var MAX_AGE_MS = 12 * 60 * 60 * 1000; // 12時間で失効（消し忘れ・ID再利用への保険）
+/*
+ * 12時間で**失効**させる（第21回監査 R21-002 で根拠を書き直した）。
+ *
+ * ⚠️ これは「12時間で消える」という意味ではない。**物理的に消えるのは**
+ *   ・その窓を閉じたとき（windows.onRemoved）
+ *   ・Chrome が session storage を消したとき
+ *     （ブラウザ終了／拡張の無効化・再読み込み・更新。公式仕様）
+ *   ・失効した記録を、次に誰かが読んだとき（isShareWindow / prune）
+ * の3つだけで、**12時間の時点で起きて消すタイマーは置いていない**。
+ *
+ * 以前ここには「ID再利用への保険」と書いていたが、これは根拠として誤り。
+ * ウィンドウIDは同じブラウザセッション内で一意で、session storage は
+ * ブラウザを再起動すれば消えるので、再利用と衝突する場面が作れない。
+ * **正しい根拠は「古い記録を、いつまでも Esc の許可として使わない」こと。**
+ */
+var MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 /* 直列化して read-modify-write の競合を避ける */
 var queue = Promise.resolve();
@@ -466,7 +481,7 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
   return false;
 });
 
-// 閉じられたウィンドウの記録を捨てる（IDは再利用されうるため放置しない）
+// 閉じられたウィンドウの記録を捨てる（古い記録を Esc の許可として残さない・R21-002）
 chrome.windows.onRemoved.addListener(function (windowId) {
   forgetShareWindow(windowId);
 });

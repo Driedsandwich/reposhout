@@ -143,6 +143,14 @@
       "replace": "It modifies nothing else."
     },
     {
+      "id": "M18",
+      "file": "PRIVACY.md",
+      "test": "test/docs.test.mjs",
+      "desc": "12時間を物理削除として書き戻す",
+      "find": "After 12 hours the record **stops counting**",
+      "replace": "After 12 hours the record is deleted"
+    },
+    {
       "id": "M20",
       "file": "src/share.js",
       "test": "test/docs.test.mjs",

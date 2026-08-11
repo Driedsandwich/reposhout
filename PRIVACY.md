@@ -50,10 +50,10 @@ From version 1.1.0 RepoShout stores one thing: **the identifiers of the windows 
 
 | | |
 |---|---|
-| What is stored | Chrome's internal window ID (a number) and a timestamp |
-| What is **not** stored | URLs, page titles, page content, browsing history, anything about you |
+| What is stored | Chrome's internal window ID (a number) and the time the extension opened it |
+| What is **not** stored | The URL, the page title, the page content, the owner or repository name, the post text, your browsing history |
 | Where | `chrome.storage.session` — held in memory, never written to disk |
-| How long | Until the window is closed, until you quit the browser, or 12 hours, whichever comes first |
+| How long | The record is deleted when that window closes. It is also lost whenever Chrome clears session storage: when you quit the browser, and when this extension is disabled, reloaded or updated. After 12 hours the record **stops counting** as one of the extension's own windows even if it is still in memory, and it is deleted the next time the extension looks at it. **There is no timer that wakes the extension at the 12-hour mark to delete it**, so a record may sit unused in memory until then |
 | Who can read it | The extension's own service worker. Content scripts cannot read it (Chrome's default access level for session storage, which this extension does not change) |
 | Sent anywhere | No |
 
@@ -150,10 +150,10 @@ RepoShout はバックグラウンドでの通信を行わず、独自のサー�
 
 | | |
 |---|---|
-| 保存するもの | Chrome内部のウィンドウID（数値）と時刻 |
-| 保存**しない**もの | URL・ページタイトル・ページの中身・閲覧履歴・利用者に関する情報 |
+| 保存するもの | Chrome内部のウィンドウID（数値）と、拡張がその窓を開いた時刻 |
+| 保存**しない**もの | URL・ページタイトル・ページの中身・所有者名やリポジトリ名・投稿本文・閲覧履歴 |
 | 保存先 | `chrome.storage.session`（メモリ上のみ・ディスクには書きません） |
-| 保存期間 | そのウィンドウを閉じるまで／ブラウザを終了するまで／12時間、のいずれか早い方 |
+| 保存期間 | その窓を閉じた時点で消します。Chromeがセッション保存領域を消すとき——ブラウザの終了時、およびこの拡張を無効化・再読み込み・更新したとき——にも消えます。12時間を過ぎた記録は、メモリに残っていても**「拡張が開いた窓」として数えなくなり**、次に拡張がその記録を見た時点で削除します。**12時間の時点で拡張を起こして消すタイマーはありません**ので、それまでは使われないままメモリに残ることがあります |
 | 読める相手 | この拡張の service worker のみ。コンテンツスクリプトからは読めません（Chromeのセッションストレージの既定設定で、本拡張はこれを変更していません） |
 | 外部送信 | しません |
 
