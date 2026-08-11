@@ -1388,6 +1388,42 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
     '正本は入力欄を読まないと言うが、読んでいる');
   assert.equal(C.domReadLeavesBrowser, false);
 
+  /*
+   * 第21回監査 R21-001。**読む範囲は「有無と高さだけ」ではなかった。**
+   * 子構造・要素の種別・computed style・寸法も読み、拒否のときは
+   * 画面へ通知要素を1つ足す。正本に書いた以上、実物と合っていることを測る。
+   */
+  const domReads = {
+    'children': /children/, 'tagName': /\.tagName/, 'computed style': /getComputedStyle/,
+    'cssFloat': /cssFloat/, 'marginRight': /marginRight/, 'display': /\.display/,
+    '寸法': /getBoundingClientRect/
+  };
+  for (const [what, re] of Object.entries(domReads)) {
+    assert.ok(re.test(content), `content.js が ${what} を読んでいない（正本の説明が古い）`);
+  }
+  /* 正本の説明が、その読み取りを覆っていること */
+  for (const word of ['children', 'tagName', 'display', 'cssFloat', 'marginRight']) {
+    assert.ok(C.domReadScope.includes(word),
+      `正本の domReadScope が ${word} を説明していない`);
+  }
+  /* 再測定のタイミングも、コードの値と合っていること */
+  const delays = [...content.matchAll(/\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]\.forEach/g)][0];
+  assert.ok(delays, 'ボタン挿入後の再測定が見つからない');
+  for (const d of delays.slice(1)) {
+    assert.ok(C.domReadTiming.includes(d),
+      `正本の domReadTiming に ${d}ms の再測定が書かれていない`);
+  }
+
+  /* 通知要素を足すことを、正本が認めていること */
+  assert.equal(C.contentScriptMayInsertNotice, true);
+  assert.match(content, /createElement\('div'\)/, 'content.js が要素を作っていない');
+  assert.match(content, /body\.appendChild/, 'content.js が body へ足していない');
+  assert.ok(C.contentScriptInsertsInto.includes('gxs-notice'),
+    '正本が、足す通知要素を説明していない');
+  for (const k of ['noticePurpose', 'noticeData', 'noticeLifetime']) {
+    assert.ok(C[k] && C[k].length >= 10, `正本に ${k} が無い`);
+  }
+
   /* 保留中の判断は、それぞれの正本と一致している */
   const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
   assert.equal(C.webIntentStatus, wi.status, 'Web Intent の状態が2か所で食い違っている');
@@ -1643,3 +1679,60 @@ test('変異ランナーが、当たらなかった変異を素通りと数え�
   assert.match(src, /survived\.length === 0[\s\S]{0,160}notApplied\.length === 0/,
     'ランナーが、当たらなかった変異を成功として終えている');
 });
+
+test('「それ以外は変更しない」という全称が撤回されている（R21-001）', () => {
+  /*
+   * 第21回監査 R21-001。Privacy とストア原稿は
+   * 「`<style>` 1つとボタンの入れ物1つ**以外は何も変更しない**」と書いていたが、
+   * 共有できないときは **body へ通知要素をもう1つ足す**（実測）。
+   * 全称の言い切りをやめ、足すものを数え上げる。
+   */
+  const priv = activeText('PRIVACY.md');
+  const listing = activeText('store/LISTING.md');
+  for (const [file, body, stale] of [
+    ['PRIVACY.md', priv, [/and modifies nothing else/i, /以外は何も変更しません/]],
+    ['store/LISTING.md', listing, [/and modifies nothing else/i]]
+  ]) {
+    for (const re of stale) {
+      assert.ok(!re.test(body), `${file} に「それ以外は変更しない」が残っている: ${re}`);
+    }
+  }
+  /* 代わりに、通知要素を足すことが書いてあること */
+  for (const [file, body, phrases] of [
+    ['PRIVACY.md', priv, ['status message', '画面の隅に小さな案内']],
+    ['store/LISTING.md', listing, ['status message near the corner']]
+  ]) {
+    for (const p of phrases) {
+      assert.ok(body.includes(p), `${file} に通知要素の説明が無い: ${p}`);
+    }
+  }
+  /* 「GitHubの要素は消さない」は事実なので、残っていること */
+  assert.ok(/deletes and replaces nothing/i.test(priv), 'PRIVACY.md から事実の記述まで消えている');
+  assert.ok(/消しも置き換えもしません/.test(priv), 'PRIVACY.md（日本語）から事実の記述まで消えている');
+});
+
+test('通知は、操作列が無いページでも出る（R21-001の再現）', () => {
+  /*
+   * ストア原稿は「expected container が無ければ何もしない」と書いていたが、
+   * 通知は container の有無と関係なく body へ足される。
+   * ここでは content.js の構造から、通知が container を必要としないことを見る。
+   */
+  const src = stripComments(read('src/content.js'));
+  const notice = src.match(/function showNotice\([\s\S]*?\n  \}/);
+  assert.ok(notice, 'showNotice が見つからない');
+  assert.ok(!/findContainer|CONTAINERS/.test(notice[0]),
+    '通知が操作列の有無に依存している（実装が変わったなら文書も直す）');
+  assert.match(notice[0], /body\.appendChild/, '通知が body へ足されていない');
+  /* 通知に値が入らないこと（定型文だけ） */
+  assert.ok(!/location\.href|document\.title|tab\.url/.test(notice[0]),
+    '通知にURLや値が入っている');
+});
+
+/* ============================================================
+ * 第21回監査 R21-004 — 変異ランナー自身の検査
+ * ============================================================
+ *
+ * 第20回に、変異15件が全件「素通り」と表示されたが、実は**一度も適用されて
+ * いなかった**。ランナーが壊れていると、検査の結果そのものが読めなくなる。
+ * ランナーをリポジトリへ置いたうえで、**ランナーが正しく区別すること**を測る。
+ */

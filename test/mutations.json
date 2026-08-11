@@ -87,6 +87,14 @@
       "replace": "\"titleRead\": true"
     },
     {
+      "id": "M11",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "test": "test/docs.test.mjs",
+      "desc": "正本だけルート一覧を欠く",
+      "find": "    \"blob\",\n",
+      "replace": ""
+    },
+    {
       "id": "M12",
       "file": "store/DATA_FLOW_CLAIMS.json",
       "test": "test/docs.test.mjs",
@@ -95,12 +103,44 @@
       "replace": "\"webIntentStatus\": \"confirmed_allowed\""
     },
     {
+      "id": "M13",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "test": "test/docs.test.mjs",
+      "desc": "正本だけ「DOMを見ない」と言う",
+      "find": "\"contentScriptReadsDom\": true",
+      "replace": "\"contentScriptReadsDom\": false"
+    },
+    {
       "id": "M14",
       "file": "src/content.js",
       "test": "test/docs.test.mjs",
       "desc": "コードだけ間隔を変える（正本は1秒のまま）",
       "find": "setInterval(inject, 1000)",
       "replace": "setInterval(inject, 5000)"
+    },
+    {
+      "id": "M15",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "test": "test/docs.test.mjs",
+      "desc": "通知要素を足すことを正本から隠す",
+      "find": "\"contentScriptMayInsertNotice\": true",
+      "replace": "\"contentScriptMayInsertNotice\": false"
+    },
+    {
+      "id": "M16",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "test": "test/docs.test.mjs",
+      "desc": "読む範囲から computed style を落とす",
+      "find": "display / cssFloat / marginRight",
+      "replace": "（省略）"
+    },
+    {
+      "id": "M17",
+      "file": "PRIVACY.md",
+      "test": "test/docs.test.mjs",
+      "desc": "「それ以外は変更しない」を書き戻す",
+      "find": "When a page cannot be shared it also adds one small status message near the corner of the window, which removes itself after a few seconds and contains no URL, parameter name or value.",
+      "replace": "It modifies nothing else."
     },
     {
       "id": "M20",
@@ -333,6 +373,14 @@
       "desc": "action の pin を可変タグへ戻す",
       "find": "        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1\n        with:\n          name: mutation-receipt",
       "replace": "        uses: actions/upload-artifact@v4\n        with:\n          name: mutation-receipt"
+    },
+    {
+      "id": "M34",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "test": "test/docs.test.mjs",
+      "desc": "再測定のタイミングを正本から落とす",
+      "find": "**ボタンを入れた後の 100 / 500 / 1500 ms の再測定**・",
+      "replace": ""
     }
   ]
 }

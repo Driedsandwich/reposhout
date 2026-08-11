@@ -318,9 +318,17 @@ What the content script does on github.com:
   row, and it does not inspect the body content of the page.
 - It adds one <style> element to the document head, and one wrapper containing
   one Share button. The wrapper is an <li> or a <div>, depending on which
-  container GitHub uses on that page. It does not modify, delete, or replace any
-  existing GitHub element, and it does nothing at all if the expected container
-  is not found.
+  container GitHub uses on that page. To line the button up it also reads a
+  little of the surrounding layout: whether the row exists, how its first child
+  is built, and the computed display, float, margin and height of the
+  neighbouring button. It re-checks that shortly after insertion (about 100, 500
+  and 1500 ms), roughly once a second, and when you return to the tab.
+- When a page cannot be shared, it adds one small status message near the corner
+  of the window. It removes itself after a few seconds and contains no URL, no
+  parameter name and no value -- only a fixed sentence for the reason. This is
+  added even on pages where the expected container was never found.
+- It does not modify, delete, or replace any existing GitHub element. If the
+  expected container is not found, no button is added.
 - When -- and only when -- the user activates that button with a real click, it
   reads nothing from the page in order to build the X Web Intent: pressing the
   button sends the background service worker a message that carries no data, and
