@@ -114,7 +114,17 @@
        */
       'customer-stories', 'resources', 'education', 'solutions', 'readme',
       'git-guides', 'why-github', 'newsroom', 'partners', 'mobile', 'team',
-      'open-source', 'social-impact', 'premium-support', 'press'
+      'open-source', 'social-impact', 'premium-support', 'press',
+      /*
+       * 第18回監査 R18-002。**基準は正しかったが、候補の集め方が悪かった。**
+       * 前回は思いついた名前を1つずつ測っていたので、GitHubのナビゲーションに
+       * 出ている `trust-center` を候補にすら入れていなかった（配布ZIPで再現）。
+       * 今回は github.com のトップから第1セグメントを機械的に集めてから分類した。
+       * 集めた26語のうち一覧に無かったのは github / mcp / newsletter / sitemap で、
+       * `github` は公開557件を持つ実在の組織なので**足していない**。
+       * 経緯は store/NAMESPACE_INVENTORY.md に日付つきで残す。
+       */
+      'trust-center', 'mcp', 'newsletter', 'sitemap'
     ];
     var all = RESERVED_OWNERS.concat(SENSITIVE_FIRST_SEGMENTS).concat(extra);
     var out = [];
