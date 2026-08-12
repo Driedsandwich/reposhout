@@ -141,5 +141,101 @@
     "Chrome が session storage を消したとき（ブラウザの終了・拡張の無効化・再読み込み・更新）",
     "失効した記録を、次に誰かが読んだとき（isShareWindow / prune）"
   ],
-  "storageNoExpiryTimer": "12時間の時点で拡張を起こして消すタイマーは無い。それまでは使われないままメモリに残ることがある"
+  "storageNoExpiryTimer": "12時間の時点で拡張を起こして消すタイマーは無い。それまでは使われないままメモリに残ることがある",
+  "_documentedRouteExamplesAbout": [
+    "文書が挙げる具体的なURLの正本。README が拒否例として挙げていた /user/keys は、",
+    "実際には共有できる（`user` は実在する所有者名で、`user/keys` はリポジトリのルート）。",
+    "第20回で test の前提は直したのに、README の例はそのまま残っていた（第22回監査 R22-003）。",
+    "例を文章の中だけで持つと、実物と食い違っても誰も気づかない。",
+    "ここへ集め、docs テストが1件ずつ buildShare() へ渡して判定を突き合わせる。",
+    "appearsIn に挙げた文書に、そのURLが実際に載っていることも同時に検査する。",
+    "docToken は、その文書に**literal で載っていなければならない文字列**。「たぶん載っている」を推測で当てず、載せる形を宣言する。",
+    "拒否例の段落（refusedExampleAnchors）には、共有できるURLを混ぜない。文書のどこにも書けないようにするのではなく、**書いてよい場所と、いけない場所を分ける**。"
+  ],
+  "documentedRouteExamples": [
+    {
+      "url": "https://github.com/login/device",
+      "shareable": false,
+      "why": "本物の認証ルート（ログイン画面へ飛ぶ）",
+      "appearsIn": [
+        "README.md",
+        "README.ja.md"
+      ],
+      "docToken": "/login/device"
+    },
+    {
+      "url": "https://github.com/settings/keys",
+      "shareable": false,
+      "why": "本物の設定ルート",
+      "appearsIn": [
+        "README.md",
+        "README.ja.md"
+      ],
+      "docToken": "/settings/"
+    },
+    {
+      "url": "https://github.com/password_reset",
+      "shareable": false,
+      "why": "本物のパスワード再設定ルート（所有者名にアンダースコアを許していないので文法で落ちる）",
+      "appearsIn": [
+        "README.md",
+        "README.ja.md"
+      ],
+      "docToken": "/password_reset"
+    },
+    {
+      "url": "https://github.com/oauth/authorize",
+      "shareable": false,
+      "why": "本物の認可ルート",
+      "appearsIn": [
+        "README.md",
+        "README.ja.md"
+      ],
+      "docToken": "/oauth/authorize"
+    },
+    {
+      "url": "https://github.com/enterprises/acme",
+      "shareable": false,
+      "why": "GitHubの機能ページ。リポジトリではない",
+      "appearsIn": [
+        "README.md",
+        "README.ja.md"
+      ],
+      "docToken": "/enterprises/"
+    },
+    {
+      "url": "https://github.com/user/bitmap-fonts",
+      "shareable": true,
+      "why": "★対照。`user` は実在する所有者名で、これはリポジトリ",
+      "appearsIn": [
+        "README.md",
+        "README.ja.md"
+      ],
+      "docToken": "https://github.com/user/bitmap-fonts"
+    },
+    {
+      "url": "https://github.com/github/docs",
+      "shareable": true,
+      "why": "★対照。ふつうのリポジトリ",
+      "appearsIn": [
+        "README.md",
+        "README.ja.md"
+      ],
+      "docToken": "https://github.com/github/docs"
+    },
+    {
+      "url": "https://github.com/user/keys",
+      "shareable": true,
+      "why": "★第20回まで拒否例として挙げていたが誤り。`user` は実在する所有者名で、これはリポジトリのルート",
+      "appearsIn": [
+        "README.md",
+        "README.ja.md"
+      ],
+      "docToken": "https://github.com/user/keys"
+    }
+  ],
+  "refusedExampleAnchors": {
+    "README.md": "**GitHub's own function pages are not repositories.**",
+    "README.ja.md": "**GitHubの機能ページはリポジトリではありません。**"
+  }
 }

@@ -1198,6 +1198,8 @@ test('履歴で囲って検査を逃れていない——囲いの数と大き�
    */
   const EXPECTED = {
     'PRIVACY.md': 2,
+    'README.md': 1,
+    'README.ja.md': 1,
     'store/LISTING.md': 2,
     'store/STORE_DASHBOARD_CHANGES.md': 3,
     'src/share.js': 1
@@ -1568,6 +1570,77 @@ test('言うべきことを、言っている（主張の裏返し）', () => {
     const body = activeText(file);        // 履歴の中に書いて済ませられないようにする
     for (const p of phrases) {
       assert.ok(body.includes(p), `${file} に「${p}」が無い（履歴の囲いの外に書く）`);
+    }
+  }
+});
+
+/* ============================================================
+ * 第22回監査 R22-003 — 文書が挙げるURLを、実物へ通す
+ * ============================================================ */
+
+test('文書のルート例が、出荷するコードの判定と一致する（R22-003）', () => {
+  /*
+   * README は `/user/keys` を「拒否するGitHubの機能ページ」の例に挙げていた。
+   * だが `user` は**実在する所有者名**で、`github.com/user/keys` はふつうの
+   * リポジトリのルート——**共有できる**。第20回でテストの前提は直したのに、
+   * 文書の例だけが誤ったまま残っていた。
+   *
+   * 例を文章の中だけで持つと、実物と食い違っても誰も気づかない。
+   * 正本へ集め、1件ずつ実際に buildShare() へ通す。
+   */
+  const C = JSON.parse(read('store/DATA_FLOW_CLAIMS.json'));
+  const { GXS } = loadShare();
+  const examples = C.documentedRouteExamples;
+  assert.ok(Array.isArray(examples) && examples.length >= 6,
+    `文書のルート例が正本に無い（または少なすぎる）: ${examples && examples.length}`);
+
+  /* ★対照が入っていること。拒否例だけ並べても「全部拒否」の実装で通ってしまう */
+  assert.ok(examples.some((e) => e.shareable === true), '共有できる対照が1件も無い');
+  assert.ok(examples.some((e) => e.shareable === false), '拒否する例が1件も無い');
+
+  const wrong = [];
+  for (const e of examples) {
+    const got = GXS.buildShare(e.url) !== null;
+    if (got !== e.shareable) {
+      wrong.push(`${e.url}: 正本は ${e.shareable ? '共有できる' : '拒否'} と言うが、実物は ${got ? '共有できる' : '拒否'}`);
+    }
+  }
+  assert.deepEqual(wrong, [], '文書のルート例が実物と食い違っている:\n' + wrong.join('\n'));
+});
+
+test('文書のルート例が、挙げた文書に実際に載っている（R22-003）', () => {
+  /*
+   * 正本だけ直して文書を直し忘れる形を塞ぐ。**両方向**を縛る——
+   * ①正本の例は、appearsIn の文書に literal で載っている
+   * ②誤りと分かった `/user/keys` は、どの文書にも「拒否する例」として残っていない
+   */
+  const C = JSON.parse(read('store/DATA_FLOW_CLAIMS.json'));
+  for (const e of C.documentedRouteExamples) {
+    assert.ok(e.docToken, `${e.url}: 文書に載せる形（docToken）が宣言されていない`);
+    for (const file of e.appearsIn) {
+      assert.ok(read(file).includes(e.docToken),
+        `${file} に ${e.docToken} が無い（正本だけ直して文書を直し忘れている）`);
+    }
+  }
+  /*
+   * ⚠️ 「文書のどこにも書くな」にはしない。**共有できる**という現行の事実として
+   * 書くのは正しく、実際そう書いてある（上の突合が実物で確かめている）。
+   * 縛るのは**置き場所**——拒否例を並べた段落に混ざっていないこと。
+   * どの段落かは正本が名指しする（語句から推測しない）。
+   */
+  const anchors = C.refusedExampleAnchors;
+  assert.ok(anchors && Object.keys(anchors).length >= 2, '拒否例の段落が正本で名指しされていない');
+  for (const [file, anchor] of Object.entries(anchors)) {
+    const blocks = activeBlocks(file).filter((b) => b.includes(squash(anchor)));
+    assert.equal(blocks.length, 1,
+      `${file}: 拒否例の段落を1つに特定できない（${blocks.length}件）。正本の目印が古い`);
+    /* 対照: その段落が、本当に拒否例を並べた段落であること */
+    assert.ok(blocks[0].includes('/oauth/authorize'),
+      `${file}: 目印の段落に拒否例が無い＝この検査は空振りする`);
+    /* 共有できると分かっている例が、その段落に混ざっていないこと */
+    for (const e of C.documentedRouteExamples.filter((x) => x.shareable)) {
+      assert.ok(!blocks[0].includes(e.docToken),
+        `${file}: 共有できる ${e.docToken} が、拒否例の段落に並んでいる`);
     }
   }
 });

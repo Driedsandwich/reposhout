@@ -511,6 +511,38 @@
       "desc": "申告を「12時間で失効」へ戻す"
     },
     {
+      "id": "N15",
+      "file": "README.md",
+      "find": "`/enterprises/<slug>`, `/oauth/authorize`, `/login/device`,",
+      "replace": "`/enterprises/<slug>`, `/oauth/authorize`, `/user/keys`,",
+      "test": "test/docs.test.mjs",
+      "desc": "README(英)の拒否例へ /user/keys を戻す"
+    },
+    {
+      "id": "N16",
+      "file": "README.ja.md",
+      "find": "`/enterprises/<slug>`・`/oauth/authorize`・`/login/device`・",
+      "replace": "`/enterprises/<slug>`・`/oauth/authorize`・`/user/keys`・",
+      "test": "test/docs.test.mjs",
+      "desc": "README(日)の拒否例へ /user/keys を戻す"
+    },
+    {
+      "id": "N17",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "find": "\"url\": \"https://github.com/user/keys\",\n      \"shareable\": true,",
+      "replace": "\"url\": \"https://github.com/user/keys\",\n      \"shareable\": false,",
+      "test": "test/docs.test.mjs",
+      "desc": "実物と逆の判定を正本へ書く（共有できるものを拒否と宣言）"
+    },
+    {
+      "id": "N18",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "find": "\"url\": \"https://github.com/login/device\",\n      \"shareable\": false,",
+      "replace": "\"url\": \"https://github.com/login/device\",\n      \"shareable\": true,",
+      "test": "test/docs.test.mjs",
+      "desc": "実物と逆の判定を正本へ書く（拒否するものを共有できると宣言）"
+    },
+    {
       "id": "N19",
       "file": "scripts/run-mutations.mjs",
       "find": "  if (!existsSync(abs)) return `対象テストのファイルが無い: ${rel}`;",

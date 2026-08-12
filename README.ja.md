@@ -57,7 +57,9 @@ RepoShout が共有するのは、ページの**構造**であって、タイト
 
 第16回監査を受けて、1.1.8 でさらに2つ足しました。**同じ名前のクエリは1回まで**——`?state=open&state=closed` はどちらかを選ばず、URLごと共有しません。繰り返せる場所は任意長の通り道で、値の集合が有限でも、1,000回繰り返せば利用者が決めた並びを12,000文字ぶんXへ運べたためです。もう1つは、**出て行くクエリを表の順に固定し、値を決まった書き方へ直す**こと（`page=007` は `page=7`、`w=true` は `w=1`）。同じ画面からは必ず同じリンクが出ます。
 
-**GitHubの機能ページはリポジトリではありません。** `/enterprises/<slug>`・`/oauth/authorize`・`/user/keys`・`/settings/…`・`/customer-stories/…`・`/resources/…` などは、**既知の名前を集めた単一の一覧**で拒否します。ルートを決めるすべての経路が同じ一覧を見ます。第16回監査までは同じ境界を2つの配列で持ち、共有を組み立てる側は片方しか見ていなかったので、`github.com/enterprises/acme` を「`enterprises/acme` というリポジトリ」として共有していました。
+**GitHubの機能ページはリポジトリではありません。** `/enterprises/<slug>`・`/oauth/authorize`・`/login/device`・`/settings/…`・`/password_reset`・`/customer-stories/…`・`/resources/…` などは、**既知の名前を集めた単一の一覧**で拒否します。ルートを決めるすべての経路が同じ一覧を見ます。
+
+ここに挙げた例は文章ではなく `store/DATA_FLOW_CLAIMS.json` に置いてあり、**1件ずつ出荷するコードへ通して判定を突き合わせて**います。**共有できたままであるべき対照**も一緒に通します——`https://github.com/user/bitmap-fonts`、`https://github.com/github/docs`、そして `user` がGitHubに実在する所有者名であることから `https://github.com/user/keys`（ふつうのリポジトリのルートです）。<!-- HISTORICAL_CLAIM:start reason="第20回までこの一覧が挙げていた誤った例。現在は挙げていない" -->（第22回監査まで、拒否する側の一覧に最後の1つを挙げていました。）<!-- HISTORICAL_CLAIM:end -->第16回監査までは同じ境界を2つの配列で持ち、共有を組み立てる側は片方しか見ていなかったので、`github.com/enterprises/acme` を「`enterprises/acme` というリポジトリ」として共有していました。
 
 **これは「拒否する名前の一覧」であって、「その名前が実在の所有者だ」と示すものではありません。** GitHubが新しい機能ページを増やせば、その名前は一覧を直すまでリポジトリとして扱われます。一覧へ足すのは、`github.com/<名前>` がGitHubの側で開けて、**かつその名前のアカウントが無い**ことを確かめたものだけです（アカウントが無ければ、そこにリポジトリは作れない＝拒否しても実在のリポジトリを巻き込まない）。`skills`・`accessibility`・`security-lab` は機能ページのように見えますが、公開リポジトリを持つ実在の組織なので**わざと足していません**。
 
