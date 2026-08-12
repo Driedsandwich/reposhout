@@ -151,7 +151,16 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
 
   async function openShareWindowFromSw(url = INTENT) {
     const r = await evalInSw(`self.GXS_BG.openShareWindow(${JSON.stringify(url)})`);
-    assert.equal(r.opened, 'popup', 'ポップアップとして開かなかった');
+    /*
+     * 第23回監査 R23-003。結果を「開いた／開かない」へ畳まず、状態で返すようにした。
+     * 実拡張では、窓が開いて記録もできた状態（tracked）でなければならない
+     * ——untracked や creation_unknown で通してしまうと、Escが効かない状態を
+     * 「開いた」と読み替えることになる。
+     */
+    assert.equal(r.state, 'popup_confirmed_tracked',
+      `ポップアップとして開いて記録できていない: ${JSON.stringify(r)}`);
+    assert.equal(r.windowOpened, true);
+    assert.equal(r.escAvailable, true, 'Escで閉じられる状態になっていない');
     const t = await waitFor('共有ウィンドウのタブが出る', async () =>
       (await targets()).find((x) => x.type === 'page' && x.url.startsWith('https://x.com/intent/')));
     return { windowId: r.windowId, targetId: t.targetId };
@@ -186,7 +195,10 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
 
   it('共有ウィンドウを開くと windowId が session storage に記録される', async () => {
     const { windowId, targetId } = await openShareWindowFromSw();
-    const rec = await evalInSw('self.GXS_BG.readRecords()');
+    /* 第23回監査 R23-003 で、読めたかどうかと中身を分けて返すようにした */
+    const read = await evalInSw('self.GXS_BG.readRecords()');
+    assert.equal(read.ok, true, `台帳を読めていない: ${JSON.stringify(read)}`);
+    const rec = read.records;
     assert.ok(Object.prototype.hasOwnProperty.call(rec, String(windowId)),
       `記録が無い: ${JSON.stringify(rec)}`);
     assert.equal(await evalInSw(`self.GXS_BG.isShareWindow(${windowId})`), true);
@@ -257,7 +269,7 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
   it('画面内Shareボタンから開いた窓も記録される（content script 経路）', async () => {
     // クリック前のターゲットと記録を控える。前のテストの残りを拾って誤判定しないため
     const before = new Set((await targets()).map((t) => t.targetId));
-    const recBefore = await evalInSw('(async () => Object.keys(await self.GXS_BG.readRecords()))()');
+    const recBefore = await evalInSw('(async () => Object.keys((await self.GXS_BG.readRecords()).records))()');
 
     const { targetId: ghId } = await cdp.send('Target.createTarget', { url: 'https://github.com/octocat/Hello-World' });
     const sessionId = await attach(ghId);
@@ -342,7 +354,7 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
     assert.equal(opened.length, 1,
       `共有ウィンドウが ${opened.length} 個開いた（1個のはず）: ${opened.map((t) => t.url).join(' | ')}`);
 
-    const recAfter = await evalInSw('(async () => Object.keys(await self.GXS_BG.readRecords()))()');
+    const recAfter = await evalInSw('(async () => Object.keys((await self.GXS_BG.readRecords()).records))()');
     const added = recAfter.filter((id) => !recBefore.includes(id));
     assert.equal(added.length, 1,
       `service worker に記録された窓が ${added.length} 個（1個のはず）。0なら content script の`

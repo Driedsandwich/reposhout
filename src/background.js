@@ -65,23 +65,38 @@ function serialize(fn) {
   return next;
 }
 
+/*
+ * ⚠️ **読めたかどうかと、読めた中身を分けて返す。**（第23回監査 R23-003）
+ *
+ * 前は読み取りに失敗すると `{}` を返していた。すると呼び出し側から見て
+ * 「台帳が空だった」と区別がつかず、`rememberShareWindow` が
+ * **既にある記録を消して**新しい1件だけを書いていた（実測）。
+ * 読めなかったのなら、書いてはいけない。
+ */
 async function readRecords() {
   try {
     var got = await chrome.storage.session.get(STORE_KEY);
-    var rec = (got && got[STORE_KEY]) || {};
-    return typeof rec === 'object' && rec !== null ? rec : {};
+    var rec = got ? got[STORE_KEY] : undefined;
+    if (rec === undefined || rec === null) return { ok: true, records: {}, errorKind: null };
+    if (typeof rec !== 'object' || Array.isArray(rec)) {
+      /* 形が壊れている。読めてはいるので、空として扱い直す（誤爆側へ倒さない） */
+      return { ok: true, records: {}, errorKind: 'malformed' };
+    }
+    return { ok: true, records: rec, errorKind: null };
   } catch (e) {
-    return {};
+    return { ok: false, records: null, errorKind: 'read_failed' };
   }
 }
 
+/* 書けたかどうかを返す。握り潰すと、Escが効かないことに誰も気づけない */
 async function writeRecords(rec) {
   try {
     var obj = {};
     obj[STORE_KEY] = rec;
     await chrome.storage.session.set(obj);
+    return { ok: true, errorKind: null };
   } catch (e) {
-    // 保存できない場合、Escが効かなくなるだけで誤爆側には倒れない
+    return { ok: false, errorKind: 'write_failed' };
   }
 }
 
@@ -93,29 +108,45 @@ function prune(rec, now) {
   return out;
 }
 
+/* 覚えられたかどうかを返す（Escが使えるかは、これで決まる） */
 function rememberShareWindow(windowId) {
   return serialize(async function () {
     var now = Date.now();
-    var rec = prune(await readRecords(), now);
+    var read = await readRecords();
+    /*
+     * ⚠️ **読めなかったときは書かない。**（第23回監査 R23-003）
+     * 読み取り失敗を「空の台帳」に変えていたので、直後の書き込みが
+     * **他の共有ウィンドウの記録を消して**いた。消えた窓は Esc で閉じられなくなる。
+     */
+    if (!read.ok) return { ok: false, errorKind: read.errorKind };
+    var rec = prune(read.records, now);
     rec[String(windowId)] = now;
-    await writeRecords(rec);
+    var wrote = await writeRecords(rec);
+    return wrote.ok ? { ok: true, errorKind: null } : { ok: false, errorKind: wrote.errorKind };
   });
 }
 
 function forgetShareWindow(windowId) {
   return serialize(async function () {
-    var rec = await readRecords();
+    var read = await readRecords();
+    if (!read.ok) return { ok: false, errorKind: read.errorKind };
+    var rec = read.records;
     if (Object.prototype.hasOwnProperty.call(rec, String(windowId))) {
       delete rec[String(windowId)];
-      await writeRecords(rec);
+      var wrote = await writeRecords(rec);
+      return { ok: wrote.ok, errorKind: wrote.errorKind };
     }
+    return { ok: true, errorKind: null };
   });
 }
 
 function isShareWindow(windowId) {
   return serialize(async function () {
     var now = Date.now();
-    var rec = await readRecords();
+    var read = await readRecords();
+    /* 読めない＝「拡張が開いた窓だ」と言える根拠が無い＝閉じない */
+    if (!read.ok) return false;
+    var rec = read.records;
     var at = rec[String(windowId)];
     if (typeof at !== 'number') return false;
     if (now - at > MAX_AGE_MS) {
@@ -135,26 +166,56 @@ function isShareWindow(windowId) {
  * 出るものを、キー1つで閉じる対象にしないための線引き。
  */
 async function openShareWindow(intentUrl) {
+  /*
+   * ⚠️ **「開いた」と「Escで閉じられる」は別。**（第23回監査 R23-003）
+   *
+   * 前は3つの結果を `opened: 'popup' | 'tab' | 'none'` へ畳んでいたので:
+   *   ・`windows.create` が **undefined を返した**とき（公式仕様上ありうる）も
+   *     `opened: 'popup'` ＝成功として返していた。開いたかどうかも分からないのに
+   *   ・記録に失敗しても成功として返していたので、**Escが効かない**ことに
+   *     呼び出し側が気づけなかった（実測: isShareWindow が false）
+   *
+   * 状態を分けて返す:
+   * ⚠️ 「開かなかった」を表す `opened: false` は **refuse() の中だけ**に置く
+   *    （第19回監査 R19-004 で出口を1つに縛ってある）。ここは内部の状態なので
+   *    `windowOpened` という別の名前にしてある——同じ名前にすると、出口を
+   *    数える検査が「出口が増えた」と読んでしまう。
+   *
+   *   popup_confirmed_tracked    窓が開き、記録できた（Escで閉じられる）
+   *   popup_confirmed_untracked  窓は開いたが、記録できなかった（Escは効かない）
+   *   creation_unknown           開いたかどうか分からない（IDが返らなかった）
+   *   tab_confirmed              ポップアップを作れずタブで開いた（Esc対象外）
+   *   failed                     どちらも開けなかった
+   */
+  var win = null;
   try {
-    var win = await chrome.windows.create({
+    win = await chrome.windows.create({
       url: intentUrl,
       type: 'popup',
       width: POPUP_WIDTH,
       height: POPUP_HEIGHT
     });
-    if (win && typeof win.id === 'number') {
-      await rememberShareWindow(win.id);
-      return { opened: 'popup', windowId: win.id };
-    }
-    return { opened: 'popup', windowId: null };
   } catch (e) {
     try {
       await chrome.tabs.create({ url: intentUrl });
-      return { opened: 'tab', windowId: null };  // 記録しない＝Esc対象外
+      /* 記録しない＝Esc対象外。利用者が自分で開いたタブと見分けがつかないため */
+      return { state: 'tab_confirmed', windowOpened: true, escAvailable: false, windowId: null };
     } catch (e2) {
-      return { opened: 'none', windowId: null };
+      return { state: 'failed', windowOpened: false, escAvailable: false, windowId: null };
     }
   }
+  if (!win || typeof win.id !== 'number') {
+    /*
+     * ⚠️ ここでタブを開かない。窓が実際には開いていた場合、**二重に開く**。
+     * 開いたかどうかを言えないので、その通りに伝える（利用者へは案内を出す）。
+     */
+    return { state: 'creation_unknown', windowOpened: null, escAvailable: false, windowId: null };
+  }
+  var remembered = await rememberShareWindow(win.id);
+  return remembered.ok
+    ? { state: 'popup_confirmed_tracked', windowOpened: true, escAvailable: true, windowId: win.id }
+    : { state: 'popup_confirmed_untracked', windowOpened: true, escAvailable: false,
+        windowId: win.id, errorKind: remembered.errorKind };
 }
 
 /*
@@ -185,6 +246,7 @@ var badgeTimers = {};
 function titleFor(reason) {
   if (reason === 'credential_like') return chrome.i18n.getMessage('noticeCredential');
   if (reason === 'open_failed') return chrome.i18n.getMessage('noticeOpenFailed');
+  if (reason === 'open_unknown') return chrome.i18n.getMessage('noticeOpenUnknown');
   if (reason === 'reload_required') return chrome.i18n.getMessage('noticeReloadRequired');
   return chrome.i18n.getMessage('noticeUnsupported');
 }
@@ -369,8 +431,14 @@ async function shareResolvedTab(tab) {
    * とき（どちらの API も例外）に、**何も起きないまま終わって**いた。
    */
   var opened = await openShareWindow(share.intentUrl);
-  if (!opened || opened.opened === 'none') return refuse(tab, 'open_failed');
-  return { opened: true };
+  if (!opened || opened.state === 'failed') return refuse(tab, 'open_failed');
+  /*
+   * 開いたかどうかを言えないときは、そう伝える（第23回監査 R23-003）。
+   * ここで黙って成功を返すと、何も出ていない画面の前で利用者が待つことになる。
+   */
+  if (opened.state === 'creation_unknown') return refuse(tab, 'open_unknown');
+  /* 開いた。ただし Esc で閉じられるかは別（記録に失敗していることがある） */
+  return { opened: true, state: opened.state, escAvailable: opened.escAvailable === true };
 }
 
 /* 渡されなかったときだけ、いまのタブを引き直す */

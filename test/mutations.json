@@ -1094,6 +1094,72 @@
       "expectedFailure": {
         "testName": "期待した数だけ置換し、置換した数を証跡へ残す（R22-004）"
       }
+    },
+    {
+      "id": "P15",
+      "file": "src/background.js",
+      "find": "    if (!read.ok) return { ok: false, errorKind: read.errorKind };\n    var rec = prune(read.records, now);",
+      "replace": "    var rec = prune(read.ok ? read.records : {}, now);",
+      "test": "test/background.test.mjs",
+      "desc": "読めなくても空の台帳として書き進める",
+      "expectedFailure": {
+        "testName": "台帳を読めなかったときは、書かない（既にある記録を消さない）（R23-003）"
+      }
+    },
+    {
+      "id": "P16",
+      "file": "src/background.js",
+      "find": "    return { ok: false, records: null, errorKind: 'read_failed' };",
+      "replace": "    return { ok: true, records: {}, errorKind: 'read_failed' };",
+      "test": "test/background.test.mjs",
+      "desc": "読み取り失敗を「空だった」に変える",
+      "expectedFailure": {
+        "testName": "台帳を読めなかったときは、書かない（既にある記録を消さない）（R23-003）"
+      }
+    },
+    {
+      "id": "P17",
+      "file": "src/background.js",
+      "find": "  if (!win || typeof win.id !== 'number') {",
+      "replace": "  if (false) {",
+      "test": "test/background.test.mjs",
+      "desc": "IDが無くても開いたことにする",
+      "expectedFailure": {
+        "testName": "窓のIDが返らなければ、開いたことにしない（R23-003）"
+      }
+    },
+    {
+      "id": "P18",
+      "file": "src/background.js",
+      "find": "  if (opened.state === 'creation_unknown') return refuse(tab, 'open_unknown');",
+      "replace": "  if (false) return refuse(tab, 'open_unknown');",
+      "test": "test/background.test.mjs",
+      "desc": "開いたか分からないときに、何も伝えない",
+      "expectedFailure": {
+        "testName": "開いたか分からないときは、タブで開き直さず案内を1回出す（R23-003）"
+      }
+    },
+    {
+      "id": "P19",
+      "file": "src/background.js",
+      "find": "    : { state: 'popup_confirmed_untracked', windowOpened: true, escAvailable: false,",
+      "replace": "    : { state: 'popup_confirmed_tracked', windowOpened: true, escAvailable: true,",
+      "test": "test/background.test.mjs",
+      "desc": "記録できなくても「Escが使える」と返す",
+      "expectedFailure": {
+        "testName": "記録できなければ、開いたことは認めてもEscは使えないと返す（R23-003）"
+      }
+    },
+    {
+      "id": "P20",
+      "file": "src/background.js",
+      "find": "  var read = await readRecords();\n    /* 読めない＝「拡張が開いた窓だ」と言える根拠が無い＝閉じない */\n    if (!read.ok) return false;",
+      "replace": "  var read = await readRecords();\n    if (false) return false;",
+      "test": "test/background.test.mjs",
+      "desc": "読めなくても所有の判定を続ける",
+      "expectedFailure": {
+        "testName": "台帳を読めなければ、所有を認めない（R23-003）"
+      }
     }
   ]
 }
