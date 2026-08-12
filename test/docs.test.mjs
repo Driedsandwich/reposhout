@@ -11,9 +11,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { ROOT, loadShare, stripComments } from './helpers/load.mjs';
+
+const sha256 = (t) => createHash('sha256').update(t).digest('hex');
 
 /* 利用者が読む文書。ここに旧説明が残ってはいけない */
 const USER_FACING = ['README.md', 'README.ja.md', 'PRIVACY.md', 'store/LISTING.md'];
@@ -1070,7 +1073,12 @@ const CLAIMS = [
                /anchor element isn't found, it does nothing/i,
                /目印が見つからなければ何もしない/,
                /DOM を読み、要素を1つ足す/,
-               /追加する要素は1個/] },
+               /追加する要素は1個/,
+               /* 第23回監査 R23-001 の作業中に見つけた素通り。
+                  「変更しない」の**別の言い回し**が一覧に無く、M17 が
+                  帳簿係のテストだけで落ちていた（守りたい検査は無傷だった） */
+               /It modifies nothing else/i,
+               /modifies nothing else/i] },
 
   /*
    * 第22回監査 R22-002。保存の説明も同じ形で狭かった——
@@ -1225,6 +1233,38 @@ test('履歴で囲って検査を逃れていない——囲いの数と大き�
     assert.ok(hidden / raw.length <= 0.2,
       `${file}: 全体の ${Math.round(hidden / raw.length * 100)}% を履歴として外している`);
   }
+});
+
+test('履歴で外している範囲が、正本と1文字も違わない（R23-001）', () => {
+  /*
+   * ⚠️ **囲いの数と大きさだけでは、動かされたことに気づけない。**
+   *
+   * 既存の囲いを**別の現在の文へ移す**変異（M09）は、数も大きさも変わらないので
+   * 素通りしていた——落ちていたのは「変異の定義と実物が一致しているか」という
+   * **帳簿係のテストの副作用**だけで、守りたい検査は無傷だった
+   * （第23回監査 R23-001 の作業中に、失敗の理由を見るようにして初めて分かった）。
+   *
+   * 囲った範囲そのものをハッシュで固定する。動かす・広げる・別の文へ移すと落ちる。
+   */
+  const C = JSON.parse(read('store/DATA_FLOW_CLAIMS.json'));
+  const declared = C.historicalClaimSpans;
+  assert.ok(Array.isArray(declared) && declared.length >= 10,
+    `履歴の囲いが正本に無い（または少なすぎる）: ${declared && declared.length}`);
+
+  const actual = [];
+  for (const file of SURFACES) {
+    const raw = read(file);
+    for (const m of raw.matchAll(HISTORY_RE)) {
+      actual.push({ file, reason: m[1], chars: m[0].length, sha256: sha256(m[0]) });
+    }
+  }
+  /* 取りこぼしていないこと（start の数と、取れた数が合う） */
+  const starts = SURFACES.reduce((a, f) => a + (read(f).match(HISTORY_START) || []).length, 0);
+  assert.equal(actual.length, starts,
+    `囲いを取りこぼしている（start=${starts} / 取れた=${actual.length}）`);
+
+  assert.deepEqual(actual, declared,
+    '履歴で外している範囲が正本と違う。動かした・広げたなら、それが本当に履歴か確かめてから正本を直す');
 });
 
 test('主張の検査そのものが効いている（対照）', () => {
@@ -1498,6 +1538,16 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
     '正本はタイマーが無いと言うが、alarms を使っている');
   assert.ok(C.storageNoExpiryTimer && /タイマー/.test(C.storageNoExpiryTimer),
     '正本が「起こして消すタイマーは無い」と書いていない');
+  /*
+   * ⚠️ 第23回監査 R23-001 の作業中に見つけた素通り。
+   * `storageLogicalExpiry` の**中身**を誰も見ていなかったので、
+   * 「12時間で保存の上限に達して消える」と書き戻す変異（N13）が当たらなかった。
+   * 論理的な失効と物理的な削除を、また混ぜていないことを見る。
+   */
+  assert.ok(/根拠として/.test(C.storageLogicalExpiry),
+    '正本の storageLogicalExpiry が「根拠として数えない」と言っていない');
+  assert.ok(/保存の上限ではな/.test(C.storageLogicalExpiry),
+    '正本の storageLogicalExpiry が、保存の上限との違いを打ち消していない');
   assert.ok(Array.isArray(C.storagePhysicalDeletion) && C.storagePhysicalDeletion.length === 3,
     `正本の「実際に消える契機」が3つでない: ${(C.storagePhysicalDeletion || []).length}`);
   /* 3つの契機が、それぞれコードに実在すること */
@@ -1564,6 +1614,25 @@ test('言うべきことを、言っている（主張の裏返し）', () => {
     for (const p of phrases) {
       assert.ok(body.includes(p),
         `${file} に「${p}」が無い（全称を消しただけで、代わりの説明が無い）`);
+    }
+  }
+
+  /*
+   * ⚠️ **第23回監査 R23-001 の作業中に見つけた素通り。**
+   * 「保存するのはIDと**時刻**」「案内をもう1つ足す」を落とす変異が、
+   * どの検査にも当たらず、**帳簿係のテスト（変異の定義と実物の一致）が
+   * 副作用で落ちていただけ**だった。守りたいことを、面ごとに名指しで要求する。
+   */
+  const mustSay = {
+    'README.md': ['the time each was opened', 'status message'],
+    'README.ja.md': ['入るのはウィンドウIDと開いた時刻だけで', '一時的な案内'],
+    'PRIVACY.md': ['status message', 'the time the extension opened it', '開いた時刻'],
+    'store/LISTING.md': ['the time that window was opened', 'status message']
+  };
+  for (const [file, phrases] of Object.entries(mustSay)) {
+    const body = activeText(file);
+    for (const p of phrases) {
+      assert.ok(body.includes(p), `${file} に「${p}」が無い（第23回 R23-001）`);
     }
   }
   for (const [file, phrases] of Object.entries(must)) {
@@ -1921,6 +1990,41 @@ test('通知は、操作列が無いページでも出る（R21-001の再現）'
  * いなかった**。ランナーが壊れていると、検査の結果そのものが読めなくなる。
  * ランナーをリポジトリへ置いたうえで、**ランナーが正しく区別すること**を測る。
  */
+
+test('変異の定義が、落ちるはずのテストを宣言していて、それが実在する（R23-001）', () => {
+  /*
+   * 第23回監査 R23-001。落ちた理由を見ずに「検知」と数えていたので、
+   * 各変異へ「どのテストが落ちるはずか」を宣言させた。
+   * ⚠️ **宣言した名前が実在しないと、必ず `wrong_test_failure` になって止まる。**
+   * テストの名前を変えたときに気づけるよう、ここで突き合わせる
+   * （実際、ランナーの自己検査を書き直したとき9件がずれた）。
+   */
+  const spec = JSON.parse(read('test/mutations.json'));
+  const namesOf = (() => {
+    const cache = new Map();
+    return (file) => {
+      if (!cache.has(file)) {
+        const src = read(file);
+        cache.set(file, [...src.matchAll(/(?:^|\s)(?:it|test)\(\s*(['`])((?:\\.|(?!\1).)*)\1/gm)]
+          .map((m) => m[2]));
+      }
+      return cache.get(file);
+    };
+  })();
+  const bad = [];
+  for (const m of spec.mutations) {
+    const want = m.expectedFailure && m.expectedFailure.testName;
+    if (typeof want !== 'string' || !want.trim()) { bad.push(`${m.id}: 宣言が無い`); continue; }
+    if (!namesOf(m.test).includes(want)) bad.push(`${m.id}: 「${want}」が ${m.test} に無い`);
+  }
+  assert.deepEqual(bad, [], '変異の宣言と、実在するテスト名がずれている:\n' + bad.join('\n'));
+
+  /* 対照: この突合が空振りしていないこと（実在しない名前は必ず見つからない） */
+  assert.ok(!namesOf('test/docs.test.mjs').includes('この名前のテストは存在しない_R23'),
+    '対照が壊れている（何でも実在すると答えている）');
+  assert.ok(namesOf('test/docs.test.mjs').length >= 30,
+    `テスト名を取り出せていない: ${namesOf('test/docs.test.mjs').length} 件`);
+});
 
 test('変異の定義が、対象ファイルの実物と一致している（R21-004）', () => {
   const spec = JSON.parse(read('test/mutations.json'));
