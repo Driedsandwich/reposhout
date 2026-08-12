@@ -10,7 +10,7 @@
   },
   "scripts": {
     "test": "npm run test:unit && npm run test:e2e",
-    "test:unit": "node --test test/share.test.mjs test/esc-close.test.mjs test/background.test.mjs test/manifest.test.mjs test/oracle.test.mjs test/conformance.test.mjs test/package.test.mjs test/release-status.test.mjs test/docs.test.mjs test/store-readiness.test.mjs test/cli.test.mjs",
+    "test:unit": "node --test test/share.test.mjs test/esc-close.test.mjs test/background.test.mjs test/manifest.test.mjs test/oracle.test.mjs test/conformance.test.mjs test/package.test.mjs test/release-status.test.mjs test/docs.test.mjs test/store-readiness.test.mjs test/cli.test.mjs test/content.test.mjs test/mutation-runner.test.mjs",
     "test:e2e": "node --test test/extension.e2e.mjs",
     "test:conformance": "node --test test/conformance.test.mjs",
     "test:package": "node --test test/package.test.mjs",

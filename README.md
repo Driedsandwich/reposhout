@@ -57,7 +57,9 @@ Query strings on the pages that *are* shared are handled per route, and **only v
 
 Two further limits were added in 1.1.8 after the sixteenth audit. **A parameter may appear at most once**: `?state=open&state=closed` refuses the whole URL rather than picking one, because a repeated parameter is an arbitrary-length channel — a thousand repetitions of an enumerable value still carried twelve thousand characters of user-chosen ordering to X. And **the outgoing query is emitted in the table's own order with values normalised** (`page=007` becomes `page=7`, `w=true` becomes `w=1`), so the same page always produces the same link.
 
-**GitHub's own function pages are not repositories.** `/enterprises/<slug>`, `/oauth/authorize`, `/user/keys`, `/settings/…`, `/customer-stories/…`, `/resources/…` and the like are refused by a **single list of known namespaces**, consulted by every code path that decides a route. Until the sixteenth audit that boundary was kept in two separate arrays and only one of them was consulted when building a share, so `github.com/enterprises/acme` was shared as though `enterprises/acme` were a repository.
+**GitHub's own function pages are not repositories.** `/enterprises/<slug>`, `/oauth/authorize`, `/login/device`, `/settings/…`, `/password_reset`, `/customer-stories/…`, `/resources/…` and the like are refused by a **single list of known namespaces**, consulted by every code path that decides a route.
+
+Those examples are not prose. They live in `store/DATA_FLOW_CLAIMS.json` and every one of them is run through the shipped code by the test suite, together with controls that must stay **shareable**: `https://github.com/user/bitmap-fonts`, `https://github.com/github/docs`, and — because `user` is a real owner name on GitHub — `https://github.com/user/keys`, which is an ordinary repository route. <!-- HISTORICAL_CLAIM:start reason="第20回までこの一覧が挙げていた誤った例。現在は挙げていない" -->(Until the twenty-second audit the refusal list wrongly named that last one.)<!-- HISTORICAL_CLAIM:end --> Until the sixteenth audit that boundary was kept in two separate arrays and only one of them was consulted when building a share, so `github.com/enterprises/acme` was shared as though `enterprises/acme` were a repository.
 
 **This is a list of names to refuse, not proof that a name is a real owner** — if GitHub adds a new function page, that name will be treated as a repository until the list is updated. A name is added only after checking that `github.com/<name>` is served by GitHub *and* that no account holds it, so refusing it cannot take a real repository with it: `skills`, `accessibility` and `security-lab` all look like function pages but are genuine organisations with public repositories, and they are deliberately not on the list.
 
@@ -106,8 +108,9 @@ RepoShout is narrower than RepoCast on purpose (one destination, no side panel, 
 
 Browser extensions that inject UI into GitHub have a habit of dying when GitHub redesigns — as the abandoned predecessors listed above show. RepoShout is built to limit *how* it breaks rather than to pretend it won't.
 
-- **If the anchor element isn't found, it does nothing.** No error, no fallback DOM surgery, no broken GitHub page.
-- **GitHub's existing DOM is read, never modified.** The extension adds one `<style>` element in the document head and one wrapper holding one button — an `<li>` inside the repository page's `<ul>`, a `<div>` inside the flex row on issues and pull requests. It deletes and replaces nothing of GitHub's own.
+- **If the anchor element isn't found, no button is inserted.** No error, no fallback DOM surgery, no broken GitHub page. This covers the button only: the toolbar icon and the keyboard shortcut still work on that page, and if the page cannot be shared they still add the status message described below.
+- **GitHub's existing DOM is read, never modified.** The extension adds one `<style>` element in the document head and one wrapper holding one button — an `<li>` inside the repository page's `<ul>`, a `<div>` inside the flex row on issues and pull requests. When a page cannot be shared it also adds one `<div id="gxs-notice">` to `<body>`, which removes itself after a few seconds and carries a fixed sentence with no URL, parameter name or value — **and it adds that even where no button was inserted**. It deletes and replaces nothing of GitHub's own.
+- **What it reads to place the button is a fixed set.** Whether the container exists, how its first child is built (`children`, `tagName`), three computed style values used for alignment (`display`, `cssFloat`, `marginRight`), and the neighbouring button's height. Not the page text, not form values, not the URL, not the title.
 - **It never inspects which buttons are present.** Signed-in and signed-out GitHub show different button sets; prepending to the container works identically for both, and for whatever GitHub adds next.
 - **The toolbar icon and keyboard shortcut don't touch the DOM at all.** They work from the tab's URL alone, so they keep working even if the in-page button stops appearing.
 - Colours are read from GitHub's own theme variables (`--button-default-*`), so light and dark mode follow automatically.
@@ -119,22 +122,22 @@ RepoShout requests two API permissions.
 | Permission | Why |
 |---|---|
 | `activeTab` | Read the URL of the tab you are on (the title is not read at all since 1.1.8). Per Chrome's design it is granted only at the moment you explicitly invoke the extension (toolbar click or keyboard shortcut) and only for that tab. It does not allow background monitoring of browsing. |
-| `storage` | Remember which window the extension itself opened, so Esc closes that window and nothing else. Written to `chrome.storage.session`, which lives in memory, is cleared when you quit the browser, is never written to disk, and is not readable by content scripts. |
+| `storage` | Remember which window the extension itself opened — its window ID and the time it was opened — so Esc closes that window and not one of yours. Written to `chrome.storage.session`, which lives in memory, is never written to disk, and is not readable by content scripts. Chrome clears it when you quit the browser and when this extension is disabled, reloaded or updated. |
 
-The `storage` permission was added in 1.1.0. What it holds is a list of window IDs and the time each was opened — no URLs, no page content, no history. **That record** is never sent anywhere.
+The `storage` permission was added in 1.1.0. What it holds is a list of window IDs and the time each was opened — no URLs, no page titles, no page content, no owner or repository names, no post text, no history. **That record** is never sent anywhere. After 12 hours a record stops counting as one of the extension's own windows; that is a rule about what the record may still prove, not a delete timer, and the entry is removed the next time the extension looks at it.
 
 Content scripts run on two sites:
 
 | Site | Purpose |
 |---|---|
-| `github.com` | Add the Share button. Reads the page only to find the button row; adds one `<style>` element and one wrapper holding one button, and changes nothing else. |
+| `github.com` | Add the Share button. Reads the page to find the button row and to line the button up with its neighbour (a fixed set: existence, first child, three computed style values, one height); adds one `<style>` element and one wrapper holding one button, plus — when a page cannot be shared — one temporary status message in `<body>`. It deletes and replaces nothing of GitHub's own. |
 | `x.com` | **One `keydown` listener; `event.key` is checked on each press and anything other than an unmodified Escape is ignored immediately** — so you can dismiss a share window you didn't want. Field values and page content are never read. |
 
 The X script never reads page content. Before closing a window it asks the service worker one question: *is this window one you opened?* The answer comes from the window ID that `chrome.windows.create()` returned, and from nothing else. A page cannot read or forge that ID.
 
 Until 1.0.1 the script also accepted a window whose `window.name` was a fixed string. That string is written in this public repository, and any page can open a window with the same name, so it was never proof of anything; 1.1.0 removes it. **It cannot close your own X tabs** — and that is now checked by an end-to-end test that opens a window with the old forged name and asserts Esc leaves it alone.
 
-The extension makes no background network requests and contacts no server of its own. It does hand two values to X — a line generated from the page's route and the canonicalised URL travel to X inside the composer link, at the moment the composer opens, before you decide whether to post. That is the feature, not a side effect, but it is worth being explicit about: if a page is confidential, do not press Share on it. The only thing the extension itself stores is the list of window IDs described above, in memory, until you quit the browser. See [PRIVACY.md](PRIVACY.md).
+The extension makes no background network requests and contacts no server of its own. It does hand two values to X — a line generated from the page's route and the canonicalised URL travel to X inside the composer link, at the moment the composer opens, before you decide whether to post. That is the feature, not a side effect, but it is worth being explicit about: if a page is confidential, do not press Share on it. The only thing the extension itself stores is the window IDs and opening times described above, in memory. See [PRIVACY.md](PRIVACY.md).
 
 ## Layout
 

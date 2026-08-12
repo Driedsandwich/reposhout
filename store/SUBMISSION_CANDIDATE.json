@@ -13,21 +13,21 @@
     "",
     "history には、提出しないことにした成果物も理由つきで残す。"
   ],
-  "status": "ready",
+  "status": "pending_main_ci",
   "itemId": "joaipdjaiefbenoijcekdnjagiadikkd",
   "version": "1.1.8",
   "tag": null,
-  "sourceCommit": "ee4ca3d77da80c1d65c62846a4bcd939477aafb5",
-  "treeSha": "e4d4f19b55fd5501b09dbbffb29377a835eb1043",
-  "runId": "31497326274",
-  "artifactName": "reposhout-package-ee4ca3d77da80c1d65c62846a4bcd939477aafb5",
+  "sourceCommit": null,
+  "treeSha": null,
+  "runId": null,
+  "artifactName": null,
   "innerName": "reposhout-1.1.8.zip",
-  "innerBytes": 41819,
-  "innerFiles": 11,
-  "innerSha256": "0c16c326d4c34a1a132b0337c1da90a833ed250fea7c28e61944265e7846c8e0",
+  "innerBytes": null,
+  "innerFiles": null,
+  "innerSha256": null,
   "privacyPolicyUrl": "https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md",
   "confirmationTimeZone": "Asia/Tokyo",
-  "note": "選ぶ基準は、上の構造化された欄（artifactName / innerSha256 / innerBytes / innerFiles）だけ。ここに run 番号・バイト数・ハッシュ・監査の回次を書き写さない（第20回監査 R20-004。写した値は成果物を差し替えても取り残され、どちらが正しいか分からなくなる）。タグは外部監査に合格するまで打たない。却下した成果物は history にある。",
+  "note": "第22回監査（R22-001〜R22-005）で前回の候補を差し戻した。版は 1.1.8 のまま。新しい成果物は、この是正を main へ入れたあとの CI が作る。**未来の値を推測で書かない**——commit / tree / runId / ハッシュ / バイト数 / 収録数は、実際の成果物を測ってから埋める",
   "history": [
     {
       "version": "1.1.8",
@@ -239,6 +239,27 @@
       "innerFiles": 11,
       "innerSha256": "86e52fd07ea9f604e27ef228dc234651a99667a8e79dd08676f9692b7dfffc0c",
       "note": "未提出のまま 1.1.8 へ置き換わった。第11回監査 R11-001（許可したクエリの値に入った資格情報がXへ渡る）が見つかったため、この版は出さない。タグ v1.1.7 は動かさない"
+    },
+    {
+      "version": "1.1.8",
+      "sourceCommit": "ee4ca3d77da80c1d65c62846a4bcd939477aafb5",
+      "treeSha": "e4d4f19b55fd5501b09dbbffb29377a835eb1043",
+      "runId": "31497326274",
+      "artifactName": "reposhout-package-ee4ca3d77da80c1d65c62846a4bcd939477aafb5",
+      "innerName": "reposhout-1.1.8.zip",
+      "innerBytes": 41819,
+      "innerFiles": 11,
+      "innerSha256": "0c16c326d4c34a1a132b0337c1da90a833ed250fea7c28e61944265e7846c8e0",
+      "status": "rejected_by_R22",
+      "auditRound": 22,
+      "findingIds": [
+        "R22-001",
+        "R22-002",
+        "R22-003",
+        "R22-004",
+        "R22-005"
+      ],
+      "reason": "R22-001: DOM参照と足す要素の説明が実挙動より狭い全称のまま、複数の面に取り残されていた（権限の表だけ第21回で直し、Privacy冒頭・README英日・出荷する content.js のコメント・DATA_DISCLOSURE が古いまま）。操作列が無いページでも案内要素を足すことを実測で確認。R22-002: Store貼付用の storage 原稿に「nothing about the user」「いずれにせよ12時間で失効」が残り、README英日も保存対象を「ウィンドウIDだけ」「ブラウザ終了で消える」と要約していた。R22-003: 誤前提と判明した /user/keys が README英日の拒否例に残っていた（実物は共有できる）。R22-004: 変異ランナーが、変異と無関係な失敗（対象テストが元から落ちる／存在しない／終わらない）をすべて「検知」に分類し、証跡のアップロードも if-no-files-found: warn で欠落を許していた。R22-005: バッジの色や説明文だけが失敗すると、「!」を出したまま消去予約が入らず、呼び出し元には通知失敗を返していた"
     }
   ]
 }

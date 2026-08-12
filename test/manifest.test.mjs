@@ -311,6 +311,53 @@ test('決定論のステップが、2回目を作り直させている', () => {
     'upload-artifact が空でも成功する設定になっている');
 });
 
+test('成果物のアップロードは、1つ残らず「空なら失敗」になっている（R22-004）', () => {
+  /*
+   * ⚠️ 以前の検査は `wf.includes('if-no-files-found: error')` だけだった。
+   * **ファイルのどこか1箇所にあれば通る**ので、変異対照の証跡が `warn` の
+   * ままでも緑になっていた——証跡が1つも残らなくてもCIは成功していた。
+   * 検査の対象は「ファイル全体」ではなく「ステップ1つずつ」。
+   */
+  const wf = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8').replace(/\r\n/g, '\n');
+  const steps = wf.split(/\n      - /).slice(1);
+  const uploads = steps.filter((s) => /uses:\s*actions\/upload-artifact@/.test(s));
+  assert.ok(uploads.length >= 2, `アップロードのステップが少なすぎる: ${uploads.length}`);
+  for (const step of uploads) {
+    const name = (step.match(/with:[\s\S]*?\bname:\s*([^\n]+)/) || [])[1] || '(名前不明)';
+    assert.match(step, /if-no-files-found:\s*error/,
+      `空でも成功する成果物がある: ${name.trim()}`);
+  }
+});
+
+test('変異対照の証跡は、作った場所と拾う場所が同じ（R22-004）', () => {
+  /*
+   * ランナーが `--receipt A` へ書き、アップロードが `path: B` を拾っていたら、
+   * **どちらも単体では正しく見えるのに証跡は残らない**。
+   * 片方だけ直したときに落ちるよう、2つのステップを突き合わせる。
+   */
+  const wf = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8').replace(/\r\n/g, '\n');
+  const steps = wf.split(/\n      - /).slice(1);
+
+  const runStep = steps.find((s) => /run:\s*npm run test:mutations/.test(s));
+  assert.ok(runStep, '変異対照を走らせるステップが無い');
+  const written = (runStep.match(/--receipt\s+(\S+)/) || [])[1];
+  assert.ok(written, `ランナーに証跡の出力先を渡していない: ${runStep.split('\n')[0]}`);
+
+  const upStep = steps.find((s) => /uses:\s*actions\/upload-artifact@/.test(s)
+    && /name:\s*mutation-receipt-/.test(s));
+  assert.ok(upStep, '証跡を拾うアップロードのステップが無い');
+  const picked = (upStep.match(/\bpath:\s*([^\n]+)/) || [])[1];
+  assert.ok(picked, 'アップロードが拾う場所を書いていない');
+
+  assert.equal(picked.trim(), written.trim(),
+    `証跡を書く場所と拾う場所が違う: 書く=${written} / 拾う=${picked}`);
+  /* 走らせるステップが先、拾うステップが後 */
+  assert.ok(wf.indexOf(runStep) < wf.indexOf(upStep), '証跡を書く前に拾おうとしている');
+  /* 失敗しても拾う（部分的な証跡も残す）が、**証跡自体が無いのは異常** */
+  assert.match(upStep, /if:\s*always\(\)/, 'ランナーが落ちたとき証跡を拾わない');
+  assert.match(upStep, /if-no-files-found:\s*error/, '証跡が無くても成功する');
+});
+
 test('配布するファイルに CRLF が混ざっていない', () => {
   /*
    * 改行が混ざると、同じコミットでもOSによってZIPの中身が変わり、

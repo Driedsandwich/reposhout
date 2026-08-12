@@ -94,15 +94,16 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 **今回出す正本**（正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json)）:
 
 ```
-成果物 : reposhout-package-ee4ca3d77da80c1d65c62846a4bcd939477aafb5
-中のZIP : reposhout-1.1.8.zip
-大きさ : 41,819 B / 11ファイル
-SHA-256 : 0c16c326d4c34a1a132b0337c1da90a833ed250fea7c28e61944265e7846c8e0
+状態 : pending_main_ci — **出す成果物はまだ決まっていません**
+中のZIP : reposhout-1.1.8.zip（名前だけは版から決まる）
+成果物名 / 大きさ / SHA-256 : 未定
 ```
 
-main への push で走った CI（run 31497326274）が作ったものを、ダウンロードして実測した値です
-（外側の成果物のバイト数とハッシュも、GitHub の API が申告する digest と一致することを
-確かめました）。**タグはまだ打っていません**（外部監査に合格してから打ちます）。
+第22回監査の指摘が実在したため、**それまでの成果物は `rejected_by_R22` として提出候補から
+外しました。** 次の成果物は、是正を main へ入れたあとに走る CI が作ります。その実物を
+ダウンロードしてバイト数・SHA-256・収録数を実測してから、この欄と正本を埋めます。
+**まだ存在しない値をここへ書かないでください**（書けば必ず作り話になります）。
+**タグはまだ打っていません**（外部監査に合格してから打ちます）。
 却下した成果物は提出しません（理由は正本の `history` にあります）。
 
 **「最新の main」で成果物を選ばないでください。** 選ぶ基準は上の成果物名とSHA-256です
@@ -293,14 +294,21 @@ RepoShout opens the X composer in a window it creates itself, and lets the user
 dismiss that window with the Escape key. To do that safely it has to know which
 window it opened, so that Escape can never close a window the user opened.
 
-The only thing written to storage is the window identifier returned by
-chrome.windows.create(), together with the time it was opened. No URLs, no page
-content, no browsing history, nothing about the user.
+Two values are written: the window identifier returned by
+chrome.windows.create(), and the time that window was opened. No URLs, no page
+titles, no page content, no owner or repository names, no post text, no browsing
+history.
 
-It is written to chrome.storage.session, which is held in memory, is cleared when
-the browser closes, is never written to disk, and is not readable by content
-scripts. Entries are removed as soon as the window closes, and expire after 12
-hours in any case.
+It is written to chrome.storage.session, which is held in memory, is never
+written to disk, and is not readable by content scripts. An entry is removed
+when that window closes, and Chrome clears the whole area when the browser
+closes and when this extension is disabled, reloaded or updated.
+
+After 12 hours an entry stops counting as evidence that the extension opened
+that window, and it is deleted the next time the extension reads it. That is a
+rule about what an old entry may still prove, not a delete timer: no alarm wakes
+the extension at the 12-hour mark, so an unused entry can sit in memory until
+one of the events above clears it.
 
 This replaces the previous approach of identifying the window by a fixed name,
 which any web page could copy.

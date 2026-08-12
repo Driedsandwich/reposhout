@@ -114,7 +114,10 @@ jobs:
         with:
           name: mutation-receipt-${{ github.sha }}
           path: mutation-receipt.json
-          if-no-files-found: warn
+          # ⚠️ warn ではなく error（第22回監査 R22-004）。
+          # 証跡が1つも無くてもこのステップは緑になっていたので、
+          # 「毎回証跡が残っている」ことを誰も保証していなかった。
+          if-no-files-found: error
 
       # PRのときは GITHUB_SHA が「PR検証用の一時マージコミット」を指す。
       # release-manifest.json にそのまま入ると、main由来の提出候補と見分けがつかない。

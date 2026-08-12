@@ -23,10 +23,13 @@ RepoShout processes information at **two different moments**, and they are not t
 extension looks for the small toolbar that GitHub draws next to a repository, issue or pull
 request heading, so it can put its own **Share** button there. It does this when the page
 loads, again about once a second, and again when you switch back to the tab (GitHub swaps
-pages without a full reload, so the button can otherwise disappear). This check reads
-**only whether a few specific layout elements exist, and how tall the neighbouring button
-is**. It does not read the page text, the URL, the page title, form fields, or anything you
-type. The result of this check is never stored, and never leaves your browser.
+pages without a full reload, so the button can otherwise disappear). This check reads a
+**fixed, limited set of things**: whether a few specific layout elements exist; how the
+matching element's first child is built (`children`, `tagName`); a few computed style
+values used to line the button up (`display`, `cssFloat`, `marginRight`); and the height of
+the neighbouring button. It does not read the page text, the URL, the page title, form
+fields, or anything you type. The result of this check is never stored, and never leaves
+your browser.
 
 **2. When you activate the extension** (by clicking the in-page **Share** button, clicking the
 toolbar icon, or pressing the keyboard shortcut) — and only then — RepoShout reads **one
@@ -35,6 +38,8 @@ thing** from the tab you are currently viewing:
 - the page URL
 
 **The page title is not read at all.** <!-- HISTORICAL_CLAIM:start reason="1.1.8より前の版の挙動。現在の仕様ではない" -->(Versions before 1.1.8 did read it.)<!-- HISTORICAL_CLAIM:end --> The URL is read by the extension's background service worker, which decides whether the page may be shared and, if so, rebuilds a link from the validated parts of that URL. The in-page Share button reads nothing: pressing it sends the service worker a message that carries no data. The composing itself happens in your browser; the finished link is then opened on X, which is how the values reach X.
+
+**If the page cannot be shared, one short status message is added to the page** — a single `<div id="gxs-notice">` at the corner of the window, which removes itself after a few seconds. It carries a fixed sentence for the reason and never a URL, a parameter name or a value. **This is added even on pages where GitHub draws no toolbar and no Share button was inserted**, because the toolbar icon and the keyboard shortcut work there too.
 
 ### Where data goes
 
@@ -126,7 +131,9 @@ RepoShout が情報を扱う場面は**2つ**あり、内容が違います。
 リポジトリ名やIssueの見出しの横に描く小さな操作列を探して、そこへ自分の **Share** ボタンを
 置きます。ページを開いたとき・**約1秒ごと**・タブを表示に戻したときに確認します
 （GitHubはページ全体を読み込み直さずに画面を切り替えるため、放っておくとボタンが消えるからです）。
-このとき見るのは**決まった数個の要素があるかどうかと、隣のボタンの高さだけ**です。
+このとき見るのは**決まった範囲だけ**です——決まった数個の要素があるかどうかに加えて、
+一致した要素の先頭の子がどう作られているか（`children`・`tagName`）、ボタンの見た目をそろえるための
+表示値（`display`・`cssFloat`・`marginRight`）、隣のボタンの高さ。
 ページの本文も、入力欄の値も、URLも、タイトルも読みません。この確認の結果は、保存されることも、ブラウザの外へ出ることもありません。
 
 **2. 拡張を操作したとき**（画面内の **Share** ボタン、ツールバーアイコン、キーボード
@@ -135,6 +142,8 @@ RepoShout が情報を扱う場面は**2つ**あり、内容が違います。
 - ページのURL
 
 **ページのタイトルは読みません。**<!-- HISTORICAL_CLAIM:start reason="1.1.8より前の版の挙動。現在の仕様ではない" -->（1.1.7 までは読んでいました。）<!-- HISTORICAL_CLAIM:end -->URLを読むのは拡張のバックグラウンド（service worker）で、そのページを共有してよいかを判定し、共有できる場合は**URLの検査済みの部分からリンクを組み直します**。画面内の Share ボタンは何も読みません——押すと、データを持たないメッセージを service worker へ送るだけです。組み立て自体はブラウザ内で行われ、できあがったリンクをXで開くことで、値がXへ渡ります。
+
+**共有できなかったときは、画面へ短い案内を1つ足します**——画面の隅に出る `<div id="gxs-notice">` 1個で、数秒で自分から消えます。中身は理由ごとの定型文だけで、URL・パラメータ名・値は入りません。**GitHubが操作列を描かず、Share ボタンを置けなかったページでも足します**（ツールバーアイコンとショートカットはそこでも使えるためです）。
 
 ### 送信先
 

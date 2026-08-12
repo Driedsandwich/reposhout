@@ -189,20 +189,18 @@ function titleFor(reason) {
   return chrome.i18n.getMessage('noticeUnsupported');
 }
 
-async function flagTab(tabId, reason) {
-  if (typeof tabId !== 'number') return false;
+/*
+ * 出したバッジを消す予約を入れる（第22回監査 R22-005 で本体から切り出した）。
+ * 付け直したときは前の予約を捨てる——**前の予約が新しいバッジを消さない**ため。
+ */
+function scheduleBadgeCleanup(tabId) {
   var key = String(tabId);
-  try {
-    await chrome.action.setBadgeText({ tabId: tabId, text: '!' });
-    if (chrome.action.setBadgeBackgroundColor) {
-      await chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: '#B42318' });
-    }
-    await chrome.action.setTitle({ tabId: tabId, title: titleFor(reason) });
-  } catch (e) {
-    return false;                       // バッジも出せない相手なら、そこで終わり
-  }
   if (badgeTimers[key]) clearTimeout(badgeTimers[key]);
   badgeTimers[key] = setTimeout(function () {
+    /*
+     * 先に消す。**この後の API が失敗しても、次の付け直しが前の予約を
+     * 消し損ねない**（世代の管理は API の成否と切り離す）。
+     */
     delete badgeTimers[key];
     /*
      * 元へ戻す。**空文字ではなく既定の説明文を明示的に入れる**
@@ -213,6 +211,37 @@ async function flagTab(tabId, reason) {
       tabId: tabId, title: chrome.i18n.getMessage('actionTitle')
     })).catch(function () {});
   }, BADGE_MS);
+}
+
+async function flagTab(tabId, reason) {
+  if (typeof tabId !== 'number') return false;
+  /*
+   * ⚠️ **本体は「!」の文字だけ。色と説明文は見た目の補助。**（第22回監査 R22-005）
+   *
+   * 以前は3つを同じ try に入れ、消去の予約はその後ろに置いていた。すると
+   * **色か説明文が失敗したときだけ**、`!` は画面に出ているのに消す予約が
+   * 入らず、呼び出し元には「通知できなかった」と返っていた——
+   * バッジは残り続け、しかも別の案内がもう1つ出る。
+   *
+   * 直し方は「本体が成功したか」で判定を分けること:
+   *   ① `!` を出す。ここが失敗したときだけ通知の失敗とする
+   *   ② 出せたら**その場で**消去を予約する（後続の失敗に巻き込まれない）
+   *   ③ 色と説明文は個別に試し、失敗しても握って先へ進む
+   */
+  try {
+    await chrome.action.setBadgeText({ tabId: tabId, text: '!' });
+  } catch (e) {
+    return false;                       // バッジも出せない相手なら、そこで終わり
+  }
+  scheduleBadgeCleanup(tabId);          // ★ 出した直後。色/説明文より前
+  if (chrome.action.setBadgeBackgroundColor) {
+    try {
+      await chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: '#B42318' });
+    } catch (e) { /* 色が付かないだけ。通知は成立している */ }
+  }
+  try {
+    await chrome.action.setTitle({ tabId: tabId, title: titleFor(reason) });
+  } catch (e) { /* 説明文が既定のままなだけ。通知は成立している */ }
   return true;
 }
 

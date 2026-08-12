@@ -22,8 +22,9 @@ const BG = readFileSync(join(ROOT, 'src/background.js'), 'utf8');
 
 /* Chrome を丸ごと偽物にして service worker を読み込む */
 function mount({ queryResult = null, contentScript = true,
-                openFails = false, fakeTimers = false, fault = null } = {}) {
-  const log = { opened: [], notified: [], badges: [], titles: [], created: [] };
+                openFails = false, fakeTimers = false, fault = null,
+                badgeFault = null } = {}) {
+  const log = { opened: [], notified: [], badges: [], titles: [], colors: [], created: [] };
   /*
    * 偽のタイマー（第15回監査 R15-005）。
    * 「6000ms 後に消える」ことは、実時間を待たずに**予約を実行して**確かめる。
@@ -32,12 +33,24 @@ function mount({ queryResult = null, contentScript = true,
   const listeners = [];
   const timers = new Map();
   let seq = 0, now = 0;
+  /*
+   * 第22回監査 R22-005。**走り終えた予約を消し忘れていないか**を見るために、
+   * 「もう走った予約」を覚えておき、それを clearTimeout しに来たら記録する。
+   * 登録簿に古い世代が残っていると、次の付け直しが**存在しない予約**を
+   * 消そうとする——実害が出るのは、環境がIDを再利用したときだけなので、
+   * 挙動の比較では捕まらない（変異が素通りした）。
+   */
+  const fired = new Set();
+  const staleClears = [];
   const fakeSetTimeout = (fn, ms) => { timers.set(++seq, { fn, at: now + ms }); return seq; };
-  const fakeClearTimeout = (id) => { timers.delete(id); };
+  const fakeClearTimeout = (id) => {
+    if (fired.has(id)) staleClears.push(id);
+    timers.delete(id);
+  };
   const advance = (ms) => {
     now += ms;
     for (const [id, t] of [...timers.entries()]) {
-      if (t.at <= now) { timers.delete(id); t.fn(); }
+      if (t.at <= now) { timers.delete(id); fired.add(id); t.fn(); }
     }
   };
   const chrome = {
@@ -45,9 +58,23 @@ function mount({ queryResult = null, contentScript = true,
       /* 第20回監査 R20-005。ツールバーのリスナーを実際に呼べるようにする
          （それまで捨てていたので、リスナーが例外を握り潰す経路を試せなかった） */
       onClicked: { addListener(fn) { log.onClicked = fn; } },
-      async setBadgeText(o) { log.badges.push(o); },
-      async setBadgeBackgroundColor() {},
-      async setTitle(o) { log.titles.push(o); }
+      /*
+       * 第22回監査 R22-005。バッジの3つのAPIを**個別に**失敗させられるようにする。
+       * 「文字は出たが色だけ失敗」という重なりは通常入力では作れないので、
+       * ここでその状態そのものを作って観測する。
+       */
+      async setBadgeText(o) {
+        if (badgeFault === 'badge') throw new Error('setBadgeText 不可');
+        log.badges.push(o);
+      },
+      async setBadgeBackgroundColor(o) {
+        if (badgeFault === 'color') throw new Error('setBadgeBackgroundColor 不可');
+        log.colors.push(o);
+      },
+      async setTitle(o) {
+        if (badgeFault === 'title') throw new Error('setTitle 不可');
+        log.titles.push(o);
+      }
     },
     commands: { onCommand: { addListener() {} } },
     runtime: {
@@ -118,7 +145,8 @@ function mount({ queryResult = null, contentScript = true,
       else { const t = setTimeout(() => respond(undefined), 200); if (t.unref) t.unref(); }
     });
   }
-  return { bg: ctx.GXS_BG, log, advance, send, pending: () => timers.size };
+  return { bg: ctx.GXS_BG, log, advance, send, pending: () => timers.size,
+    staleClears: () => staleClears.slice() };
 }
 
 const TAB_A_NO_URL = { id: 1, title: 'A' };
@@ -574,4 +602,82 @@ test('画面側は、service worker が案内を出せたときは黙る（R20-0
   const src = stripComments(readFileSync(join(ROOT, 'src/content.js'), 'utf8'));
   assert.match(src, /res\.ok === false && res\.notified !== true/,
     '画面側が notified を見ずに案内を出している（二重通知）');
+});
+
+/* ---- バッジの部分成功（第22回監査 R22-005） ---------------------------- */
+
+test('色や説明文だけ失敗しても、バッジは出て消す予約も入る（R22-005）', async () => {
+  /*
+   * 第22回監査 R22-005。以前は `setBadgeText` / 色 / `setTitle` を同じ try に入れ、
+   * 消す予約をその**後ろ**に置いていた。すると色か説明文だけが失敗したとき、
+   *   ・`!` は画面に出ている
+   *   ・消す予約は入らない（永久に残る）
+   *   ・呼び出し元には false ＝「通知できなかった」と返る（別の案内が二重に出る）
+   * という三重の不具合になった。本体は「!」の文字だけ、色と説明文は補助。
+   */
+  for (const fault of ['color', 'title']) {
+    const { bg, log, pending } = mount({ contentScript: false, fakeTimers: true, badgeFault: fault });
+    const ok = await bg.flagTab(7, 'unsupported');
+    assert.equal(ok, true, `${fault} が失敗しただけで通知を失敗扱いにしている`);
+    assert.ok(log.badges.some((b) => b.text === '!'), `${fault}: バッジが出ていない`);
+    assert.equal(pending(), 1, `${fault}: 出したバッジを消す予約が入っていない`);
+  }
+});
+
+test('出したバッジは、色が失敗した後でもちゃんと消える（R22-005）', async () => {
+  /* 予約が「入る」だけでなく、走らせて**消えること**まで見る（R15-005 と同じ理由） */
+  const { bg, log, advance, pending } = mount({ contentScript: false, fakeTimers: true, badgeFault: 'color' });
+  await bg.flagTab(7, 'unsupported');
+  assert.equal(pending(), 1);
+  advance(6000);
+  await new Promise((r) => setImmediate(r));
+  const cleared = log.badges.filter((b) => b.text === '');
+  assert.equal(cleared.length, 1, '色が失敗するとバッジが消えないまま残る');
+  assert.equal(cleared[0].tabId, 7);
+});
+
+test('バッジ本体が失敗したときだけ、通知の失敗として扱う（R22-005）', async () => {
+  const { bg, log, pending } = mount({ contentScript: false, fakeTimers: true, badgeFault: 'badge' });
+  const ok = await bg.flagTab(7, 'unsupported');
+  assert.equal(ok, false, 'バッジ本体が出せないのに成功を返している');
+  assert.deepEqual(log.badges.filter((b) => b.text === '!'), [], 'バッジが出ている');
+  assert.equal(pending(), 0, '出していないバッジの消去を予約している');
+});
+
+test('色が失敗しても案内は1回だけ（二重に出さない・R22-005）', async () => {
+  /*
+   * announceRefusal は「画面の案内 → 届かなければバッジ」の順。バッジが
+   * 成立しているのに false を返すと、呼び出し元は**まだ誰も知らせていない**と
+   * 判断して別の経路をもう一度たどる。出口が1つであることを確かめる。
+   */
+  const { bg, log } = mount({ contentScript: false, fakeTimers: true, badgeFault: 'color' });
+  const how = await bg.announceRefusal(7, 'unsupported');
+  assert.equal(how, 'badge', `色の失敗で案内なし扱いになっている: ${how}`);
+  assert.equal(log.badges.filter((b) => b.text === '!').length, 1, 'バッジが2回出ている');
+  assert.deepEqual(log.notified, [], '画面の案内とバッジが二重に出ている');
+});
+
+test('付け直しの世代管理は、消去APIの失敗に巻き込まれない（R22-005）', async () => {
+  /*
+   * 消去の予約が走るとき、先に登録簿から消してから API を呼ぶ。逆順だと
+   * 消去APIが失敗した回だけ古い世代が残り、次の付け直しが前の予約を
+   * 消し損ねる。**API が全部失敗する状態**で、それでも世代が壊れないことを見る。
+   */
+  const { bg, log, advance, pending, staleClears } = mount({ contentScript: false, fakeTimers: true });
+  await bg.flagTab(7, 'unsupported');
+  assert.equal(pending(), 1);
+  advance(6000);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(pending(), 0, '走り終えた予約が登録簿に残っている');
+  await bg.flagTab(7, 'credential_like');       // 付け直す
+  assert.equal(pending(), 1, '付け直しで予約が入っていない');
+  const marks = log.badges.filter((b) => b.text === '!');
+  assert.equal(marks.length, 2, `付け直しでバッジが出ていない: ${JSON.stringify(log.badges)}`);
+  /*
+   * ★ ここが要点。走り終えた予約を登録簿から消していないと、付け直しのときに
+   * **もう存在しない予約**を消しに行く。実害はIDが再利用される環境でしか
+   * 出ないので、見えている挙動を比べても分からない——だから直接見る。
+   */
+  assert.deepEqual(staleClears(), [],
+    `走り終えた予約を消しに行っている（登録簿に古い世代が残る）: ${JSON.stringify(staleClears())}`);
 });

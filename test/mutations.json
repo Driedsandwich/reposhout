@@ -397,6 +397,294 @@
       "desc": "再測定のタイミングを正本から落とす",
       "find": "**ボタンを入れた後の 100 / 500 / 1500 ms の再測定**・",
       "replace": ""
+    },
+    {
+      "id": "N01",
+      "file": "PRIVACY.md",
+      "find": "This check reads a\n**fixed, limited set of things**: whether a few specific layout elements exist; how the",
+      "replace": "This check reads\n**only whether a few specific layout elements exist, and how tall the neighbouring button\nis**. It once read the",
+      "test": "test/docs.test.mjs",
+      "desc": "Privacy(英)の説明を「有無と高さだけ」へ戻す"
+    },
+    {
+      "id": "N02",
+      "file": "PRIVACY.md",
+      "find": "このとき見るのは**決まった範囲だけ**です——決まった数個の要素があるかどうかに加えて、",
+      "replace": "このとき見るのは**決まった数個の要素があるかどうかと、隣のボタンの高さだけ**です。かつては、",
+      "test": "test/docs.test.mjs",
+      "desc": "Privacy(日)の説明を「有無と高さだけ」へ戻す"
+    },
+    {
+      "id": "N03",
+      "file": "README.md",
+      "find": "- **If the anchor element isn't found, no button is inserted.**",
+      "replace": "- **If the anchor element isn't found, it does nothing.**",
+      "test": "test/docs.test.mjs",
+      "desc": "README(英)を「何もしない」へ戻す"
+    },
+    {
+      "id": "N04",
+      "file": "README.ja.md",
+      "find": "- **目印が見つからなければ、ボタンを置きません。**",
+      "replace": "- **目印が見つからなければ何もしない。**",
+      "test": "test/docs.test.mjs",
+      "desc": "README(日)を「何もしない」へ戻す"
+    },
+    {
+      "id": "N05",
+      "file": "store/DATA_DISCLOSURE.json",
+      "find": "ボタンを差し込む位置（ボタン群の並び）を探すために DOM を読む——読むのは決まった範囲で、",
+      "replace": "ボタンを差し込む位置（ボタン群の並び）を探すために DOM を読み、要素を1つ足す。かつては、",
+      "test": "test/docs.test.mjs",
+      "desc": "申告を「要素を1つ足す」へ戻す"
+    },
+    {
+      "id": "N06",
+      "file": "src/content.js",
+      "find": " *  3. 足す要素は次の3種類だけ（第22回監査 R22-001 で数え直した）:",
+      "replace": " *  3. 追加する要素は1個。失敗しても影響がそこで閉じる。内訳:",
+      "test": "test/docs.test.mjs",
+      "desc": "出荷コメントを「追加する要素は1個」へ戻す"
+    },
+    {
+      "id": "N07",
+      "file": "src/content.js",
+      "find": "      if (msg && msg.type === 'gxs-notice') showNotice(msg.reason);",
+      "replace": "      if (msg && msg.type === 'gxs-notice' && findContainer()) showNotice(msg.reason);",
+      "test": "test/content.test.mjs",
+      "desc": "案内の経路を操作列に依存させる（無い所で出なくする）"
+    },
+    {
+      "id": "N08",
+      "file": "store/LISTING.md",
+      "find": "history.\n\nIt is written to chrome.storage.session",
+      "replace": "history, nothing about the user.\n\nIt is written to chrome.storage.session",
+      "test": "test/docs.test.mjs",
+      "desc": "ストア原稿へ nothing about the user を戻す"
+    },
+    {
+      "id": "N09",
+      "file": "store/LISTING.md",
+      "find": "when that window closes, and Chrome clears the whole area when the browser\ncloses and when this extension is disabled, reloaded or updated.",
+      "replace": "when that window closes, and expire after 12 hours in any case.",
+      "test": "test/docs.test.mjs",
+      "desc": "ストア原稿の12時間を曖昧な言い方へ戻す"
+    },
+    {
+      "id": "N10",
+      "file": "README.md",
+      "find": "What it holds is a list of window IDs and the time each was opened — no URLs, no page titles,",
+      "replace": "What it holds is a list of window IDs — no URLs, no page titles,",
+      "test": "test/docs.test.mjs",
+      "desc": "README(英)から保存する時刻を落とす"
+    },
+    {
+      "id": "N11",
+      "file": "README.ja.md",
+      "find": "入るのはウィンドウIDと開いた時刻だけで、URL・ページのタイトル・",
+      "replace": "入るのはウィンドウIDだけで、URL・ページのタイトル・",
+      "test": "test/docs.test.mjs",
+      "desc": "README(日)から保存する時刻を落とす"
+    },
+    {
+      "id": "N12",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "find": "    \"失効した記録を、次に誰かが読んだとき（isShareWindow / prune）\"\n",
+      "replace": "",
+      "test": "test/docs.test.mjs",
+      "desc": "実際に消える契機を1つ削る"
+    },
+    {
+      "id": "N13",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "find": "\"storageLogicalExpiry\": \"12時間を過ぎた記録は「拡張が開いた窓」の根拠として**数えない**。これは保存の上限ではなく",
+      "replace": "\"storageLogicalExpiry\": \"12時間で保存の上限に達して消える。これは保存の上限であって",
+      "test": "test/docs.test.mjs",
+      "desc": "論理的な失効と物理的な削除を再び混ぜる"
+    },
+    {
+      "id": "N14",
+      "file": "store/DATA_DISCLOSURE.json",
+      "find": "ウィンドウIDと開いた時刻だけ（chrome.storage.session・メモリ上）。12時間を過ぎた記録は",
+      "replace": "ウィンドウIDと時刻だけ（chrome.storage.session・メモリ上・12時間で失効）。12時間を過ぎた記録は",
+      "test": "test/docs.test.mjs",
+      "desc": "申告を「12時間で失効」へ戻す"
+    },
+    {
+      "id": "N15",
+      "file": "README.md",
+      "find": "`/enterprises/<slug>`, `/oauth/authorize`, `/login/device`,",
+      "replace": "`/enterprises/<slug>`, `/oauth/authorize`, `/user/keys`,",
+      "test": "test/docs.test.mjs",
+      "desc": "README(英)の拒否例へ /user/keys を戻す"
+    },
+    {
+      "id": "N16",
+      "file": "README.ja.md",
+      "find": "`/enterprises/<slug>`・`/oauth/authorize`・`/login/device`・",
+      "replace": "`/enterprises/<slug>`・`/oauth/authorize`・`/user/keys`・",
+      "test": "test/docs.test.mjs",
+      "desc": "README(日)の拒否例へ /user/keys を戻す"
+    },
+    {
+      "id": "N17",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "find": "\"url\": \"https://github.com/user/keys\",\n      \"shareable\": true,",
+      "replace": "\"url\": \"https://github.com/user/keys\",\n      \"shareable\": false,",
+      "test": "test/docs.test.mjs",
+      "desc": "実物と逆の判定を正本へ書く（共有できるものを拒否と宣言）"
+    },
+    {
+      "id": "N18",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "find": "\"url\": \"https://github.com/login/device\",\n      \"shareable\": false,",
+      "replace": "\"url\": \"https://github.com/login/device\",\n      \"shareable\": true,",
+      "test": "test/docs.test.mjs",
+      "desc": "実物と逆の判定を正本へ書く（拒否するものを共有できると宣言）"
+    },
+    {
+      "id": "N19",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (!existsSync(abs)) return `対象テストのファイルが無い: ${rel}`;",
+      "replace": "  if (false) return `対象テストのファイルが無い: ${rel}`;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "存在しないテストの検査を外す（＝検知に化ける）"
+    },
+    {
+      "id": "N20",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  const bl = baselineFor(m.test);\n  if (!bl.passed) {",
+      "replace": "  const bl = baselineFor(m.test);\n  if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "変異前の対照を無視する（元から落ちるテストが検知に化ける）"
+    },
+    {
+      "id": "N21",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (run.timedOut || run.spawnError || (run.signal && run.exitCode === null)) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "上限打ち切り・signal・起動失敗を検知へ寄せる"
+    },
+    {
+      "id": "N22",
+      "file": "scripts/run-mutations.mjs",
+      "find": "    out.timedOut = e.code === 'ETIMEDOUT' || e.killed === true || e.signal === 'SIGTERM';",
+      "replace": "    out.timedOut = false;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "上限で打ち切ったことを記録しない"
+    },
+    {
+      "id": "N23",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (inside.startsWith('..') || isAbsolute(inside)) return `対象テストがリポジトリの外を指している: ${rel}`;",
+      "replace": "  if (false) return `対象テストがリポジトリの外を指している: ${rel}`;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "リポジトリの外を指す対象を許す"
+    },
+    {
+      "id": "N24",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  const after = parts.join(m.replace);\n  const replacements = actualMatches;",
+      "replace": "  const after = before.replace(m.find, m.replace);\n  const replacements = 1;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "複数一致でも1個しか置換しない旧挙動へ戻す"
+    },
+    {
+      "id": "N25",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  runnerSha256: sha(readFileSync(RUNNER_FILE, 'utf8')),\n  specSha256: sha(specText),",
+      "replace": "  specSha256: sha(specText),",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "証跡から由来（ランナーのハッシュ）を落とす"
+    },
+    {
+      "id": "N26",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  baselines: [...baselineCache.entries()].map(([test, b]) => ({\n    test, passed: b.passed, exitCode: b.exitCode, stdoutSha256: b.stdoutSha256\n  })),",
+      "replace": "  baselines: [],",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "証跡から変異前の対照を落とす"
+    },
+    {
+      "id": "N27",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  delete e.NODE_TEST_CONTEXT;",
+      "replace": "  /* delete e.NODE_TEST_CONTEXT; */",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "呼び出し元の環境を剥がさない（全件が素通りに化ける）"
+    },
+    {
+      "id": "N28",
+      "file": "scripts/run-mutations.mjs",
+      "find": "    console.error(`★ 証跡を書けなかった: ${receiptPath}\\n  ${e && e.message}`);\n    process.exit(2);",
+      "replace": "    console.error(`★ 証跡を書けなかった: ${receiptPath}`);",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "証跡を書けなくても成功で終わる"
+    },
+    {
+      "id": "N29",
+      "file": ".github/workflows/ci.yml",
+      "find": "          path: mutation-receipt.json\n          # ⚠️ warn ではなく error（第22回監査 R22-004）。",
+      "replace": "          path: receipt.json\n          # ⚠️ warn ではなく error（第22回監査 R22-004）。",
+      "test": "test/manifest.test.mjs",
+      "desc": "CIで証跡を書く場所と拾う場所をずらす"
+    },
+    {
+      "id": "N30",
+      "file": ".github/workflows/ci.yml",
+      "find": "          if-no-files-found: error\n\n      # PRのときは GITHUB_SHA",
+      "replace": "          if-no-files-found: warn\n\n      # PRのときは GITHUB_SHA",
+      "test": "test/manifest.test.mjs",
+      "desc": "CIの証跡アップロードを warn へ戻す"
+    },
+    {
+      "id": "N31",
+      "file": "src/background.js",
+      "find": "  scheduleBadgeCleanup(tabId);          // ★ 出した直後。色/説明文より前\n  if (chrome.action.setBadgeBackgroundColor) {",
+      "replace": "  if (chrome.action.setBadgeBackgroundColor) {",
+      "test": "test/background.test.mjs",
+      "desc": "出したバッジの消去予約を入れない（色/説明文の後ろに置いた旧形と同じ結果）"
+    },
+    {
+      "id": "N32",
+      "file": "src/background.js",
+      "find": "    } catch (e) { /* 色が付かないだけ。通知は成立している */ }",
+      "replace": "    } catch (e) { return false; }",
+      "test": "test/background.test.mjs",
+      "desc": "色の失敗で通知を失敗扱いにする"
+    },
+    {
+      "id": "N33",
+      "file": "src/background.js",
+      "find": "  } catch (e) { /* 説明文が既定のままなだけ。通知は成立している */ }",
+      "replace": "  } catch (e) { return false; }",
+      "test": "test/background.test.mjs",
+      "desc": "説明文の失敗で通知を失敗扱いにする"
+    },
+    {
+      "id": "N34",
+      "file": "src/background.js",
+      "find": "  if (badgeTimers[key]) clearTimeout(badgeTimers[key]);",
+      "replace": "  if (false) clearTimeout(badgeTimers[key]);",
+      "test": "test/background.test.mjs",
+      "desc": "付け直しの世代管理を外す"
+    },
+    {
+      "id": "N35",
+      "file": "src/background.js",
+      "find": "    delete badgeTimers[key];\n    /*\n     * 元へ戻す。",
+      "replace": "    /*\n     * 元へ戻す。",
+      "test": "test/background.test.mjs",
+      "desc": "走り終えた予約を登録簿から消さない"
+    },
+    {
+      "id": "N36",
+      "file": "test/mutation-runner.test.mjs",
+      "find": "  if (process.platform === 'win32') {",
+      "replace": "  if (process.platform !== 'win32') {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "環境の判定を反転させる（どちらのOSでも落ちるべき）"
     }
   ]
 }

@@ -70,7 +70,9 @@ viewing, together with that page's link. The page title is not read or sent.
 | 解析・トラッキング・広告 | **無し** |
 | Xへ渡るか | **渡る**。ルートから生成した1行と、検査済みパーツから組み直したURLが、Xの投稿画面のリンクに入って、画面が開いた時点で届く。**ページのタイトルは読まず、渡らない** |
 | いつ渡るか | 利用者が Share を押し、投稿画面が開いた瞬間。**Postを押す前** |
-| 保存するか | URLも投稿本文も保存しない。ウィンドウIDと時刻だけを `chrome.storage.session`（メモリ）へ一時保存 |
+| 保存するか | URLも投稿本文もタイトルも所有者名も保存しない。ウィンドウIDと開いた時刻だけを `chrome.storage.session`（メモリ）へ一時保存。12時間を過ぎた記録は根拠として数えなくなる（**消す期限ではない**——実際に消えるのは、窓を閉じたとき／Chromeがsession storageを消したとき／失効した記録を次に読んだとき） |
+| 画面へ足すもの | `<style>` 1つとボタンの入れ物1つ、および共有できなかったときの一時的な案内1つ（`<div id="gxs-notice">`・数秒で消える・URLや値は含まない）。**案内は操作列が無いページでも足す**。GitHub側の要素は消しも置き換えもしない |
+| 画面から読むもの | ボタンを置くための決まった範囲だけ——目印の有無・先頭の子の作り・配置合わせの表示値3つ・隣のボタンの高さ。ページの本文も入力欄の値も読まない。タイトルは読まない。URLもここでは読まず、見るのは service worker |
 
 これを踏まえた答えが次の表です。**答えの正本は [DATA_DISCLOSURE.json](DATA_DISCLOSURE.json)** で、この表はそこから写しています。ずれるとテストが落ちます。
 <!-- HISTORICAL_CLAIM:start reason="第5回監査より前の文書構成。現在の運用ではない" -->以前はこの表と `LISTING.md` で PII の答えが割れていて、どちらを見るかで申告が変わる状態でした（第5回監査 R5-001）。<!-- HISTORICAL_CLAIM:end -->
@@ -139,12 +141,12 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 今回出すもの:
 
 ```
-成果物 : reposhout-package-ee4ca3d77da80c1d65c62846a4bcd939477aafb5
-中のZIP : reposhout-1.1.8.zip
-大きさ : 41,819 B / 11ファイル
-SHA-256 : 0c16c326d4c34a1a132b0337c1da90a833ed250fea7c28e61944265e7846c8e0
+状態 : pending_main_ci — **出す成果物はまだ決まっていません**
+中のZIP : reposhout-1.1.8.zip（名前だけは版から決まる）
+成果物名 / 大きさ / SHA-256 : 未定
 ```
 
+第22回監査の指摘が実在したため、それまでの成果物は `rejected_by_R22` として外しました。
 正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) です。
 却下した成果物は提出しません（理由も同ファイルにあります）。
 **「最新の main」では選ばず、上の成果物名とSHA-256 で選んでください**（第10回監査 R10-006）。

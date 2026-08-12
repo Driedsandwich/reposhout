@@ -1056,6 +1056,37 @@ const CLAIMS = [
     why: '画面側は合図を送るだけで、URLも投稿文も組み立てない（第16回監査 R16-003）',
     staleRaw: [/Post this page to X/, /QUERY_ALLOW/] },
 
+  /*
+   * 第22回監査 R22-001。**読む範囲と足す要素の説明が、実挙動より狭かった。**
+   * 「〜以外は何もしない」「要素は1個」という全称が、面ごとに取り残されていた
+   * （権限の表だけ第21回で直し、冒頭の要約・README・出荷コメントが古いまま）。
+   */
+  { id: 'dom_scope_and_added_elements',
+    why: '読むのは決まった範囲、足すのは <style>・入れ物・拒否の案内の3種（第22回監査 R22-001）',
+    staleRaw: [/only whether a few specific layout elements exist/i,
+               /決まった数個の要素があるかどうかと[^。]{0,24}高さだけ/,
+               /one wrapper holding one button, and changes nothing else/i,
+               /ボタン1個を包む要素を1つ足す以外は何も変[更え]/,
+               /anchor element isn't found, it does nothing/i,
+               /目印が見つからなければ何もしない/,
+               /DOM を読み、要素を1つ足す/,
+               /追加する要素は1個/] },
+
+  /*
+   * 第22回監査 R22-002。保存の説明も同じ形で狭かった——
+   * 「利用者に関する情報は保存しない」（時刻を保存している）、
+   * 「いずれにせよ12時間で失効」（消える期限ではない）、
+   * 「ブラウザを終了すると消える」（消える契機は他にもある）。
+   */
+  { id: 'storage_scope_and_expiry',
+    why: '保存するのはIDと時刻。12時間は論理的な失効で、消える契機は3つ（第22回監査 R22-002）',
+    staleRaw: [/nothing about the user/i,
+               /expire after 12 hours in any case/i,
+               /12時間で失効/,
+               /list of window IDs described above, in memory, until you quit the browser/i,
+               /上記のウィンドウIDだけで、ブラウザを終了すると消え/,
+               /ウィンドウIDと開いた時刻だけで、URLもページ内容も履歴も入りません。\*\*この記録を外部へ送ることはありません。\*\*\s*$/m] },
+
   { id: 'routes_are_typed_only',
     why: '検索・explore・topics・プロフィールは共有できない（第15回監査 R15-001）',
     staleRaw: [/プロフィールページを共有した場合/,
@@ -1167,6 +1198,8 @@ test('履歴で囲って検査を逃れていない——囲いの数と大き�
    */
   const EXPECTED = {
     'PRIVACY.md': 2,
+    'README.md': 1,
+    'README.ja.md': 1,
     'store/LISTING.md': 2,
     'store/STORE_DASHBOARD_CHANGES.md': 3,
     'src/share.js': 1
@@ -1220,7 +1253,21 @@ test('主張の検査そのものが効いている（対照）', () => {
     '| Xへ渡るか | 渡る。ページのタイトルと正規化済みURLが、リンクに入って届く |',
     'ユーザー名または組織名が入る場合がある',
     /* 変異で見つけた素通り（第19回 M12）——行頭アンカーは空白をつぶすと効かない */
-    '   *   slug  英数と . _ - / , : だけの短い識別子'
+    '   *   slug  英数と . _ - / , : だけの短い識別子',
+    /* 第22回で撤回した全称（R22-001 / R22-002）。実際に残っていた文そのもの */
+    'This check reads only whether a few specific layout elements exist, and how tall',
+    'このとき見るのは決まった数個の要素があるかどうかと、隣のボタンの高さだけです。',
+    'adds one <style> element and one wrapper holding one button, and changes nothing else.',
+    '`<style>` を1つとボタン1個を包む要素を1つ足す以外は何も変更しません',
+    "- If the anchor element isn't found, it does nothing. No error, no fallback",
+    '- 目印が見つからなければ何もしない。 エラーも出さず、代替のDOM操作もせず',
+    ' *  3. 追加する要素は1個。失敗しても影響がそこで閉じる',
+    'ボタンを差し込む位置を探すために DOM を読み、要素を1つ足す。',
+    'No URLs, no page content, no browsing history, nothing about the user.',
+    'Entries are removed as soon as the window closes, and expire after 12 hours in any case.',
+    'ウィンドウIDと時刻だけ（chrome.storage.session・メモリ上・12時間で失効）',
+    'The only thing the extension itself stores is the list of window IDs described above, in memory, until you quit the browser.',
+    '拡張自身が保存するのは上記のウィンドウIDだけで、ブラウザを終了すると消えます。'
   ]) {
     assert.ok(catches(sample), `検査が空振りしている: ${sample.slice(0, 60)}`);
   }
@@ -1424,6 +1471,55 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
     assert.ok(C[k] && C[k].length >= 10, `正本に ${k} が無い`);
   }
 
+  /*
+   * 第22回監査 R22-001。**案内は、操作列が無いページでも足す。**
+   * 「目印が無ければ何もしない」はボタンの話だけだった。
+   * 案内を出す経路が、目印を探す経路と分かれていることをコードで確かめる。
+   */
+  assert.ok(C.noticeIndependentOfActionRow && C.noticeIndependentOfActionRow.length >= 20,
+    '正本が「操作列が無くても案内を出す」ことを説明していない');
+  const noticeListener = content.match(/onMessage\.addListener\([\s\S]{0,200}?\}\);/);
+  assert.ok(noticeListener, '拒否の案内を受ける入口が見つからない');
+  assert.ok(!/findContainer|CONTAINERS/.test(noticeListener[0]),
+    '案内の経路が、操作列を探す処理に依存している（正本の説明と食い違う）');
+
+  /*
+   * 第22回監査 R22-002。保存の説明を、service worker の実装へ縛る。
+   * **12時間は論理的な失効**であって、その時刻に起こして消すタイマーではない。
+   */
+  const bg = stripComments(read('src/background.js'));
+  assert.ok(Array.isArray(C.storageStores) && C.storageStores.length === 2,
+    '正本が「保存する2つ」を挙げていない');
+  assert.ok(Array.isArray(C.storageDoesNotStore) && C.storageDoesNotStore.length >= 6,
+    '正本が「保存しない物」を挙げていない');
+  assert.match(bg, /12 \* 60 \* 60 \* 1000/, '12時間の定数がコードに無い');
+  /* 「その時刻に起こす」仕掛けが**無い**こと（alarms を使っていない） */
+  assert.ok(!/chrome\.alarms/.test(bg),
+    '正本はタイマーが無いと言うが、alarms を使っている');
+  assert.ok(C.storageNoExpiryTimer && /タイマー/.test(C.storageNoExpiryTimer),
+    '正本が「起こして消すタイマーは無い」と書いていない');
+  assert.ok(Array.isArray(C.storagePhysicalDeletion) && C.storagePhysicalDeletion.length === 3,
+    `正本の「実際に消える契機」が3つでない: ${(C.storagePhysicalDeletion || []).length}`);
+  /* 3つの契機が、それぞれコードに実在すること */
+  assert.match(bg, /windows\.onRemoved/, '窓を閉じたときに消す処理が無い');
+  assert.match(bg, /storage\.session/, 'session storage を使っていない');
+  assert.ok(/isShareWindow/.test(bg) && /prune/i.test(bg),
+    '失効した記録を読んだときに消す処理が無い');
+  /*
+   * ⚠️ 根拠を「ID再利用」へ戻していないこと（第21回監査 R21-002）。
+   * 語の有無では見られない——**その語が誤りだと書いた訂正文**にも当たってしまう
+   * （実際に当たった）。「打ち消しと一緒に出てくるか」で見る。
+   */
+  const bgRaw = read('src/background.js');
+  for (const m of bgRaw.matchAll(/再利用/g)) {
+    const around = bgRaw.slice(Math.max(0, m.index - 300), m.index + 300);
+    assert.ok(/誤り|作れない/.test(around),
+      `ウィンドウIDの再利用を根拠として書いている（位置 ${m.index}）`);
+  }
+  /* 正しい根拠のほうが、消えずに残っていること */
+  assert.match(bgRaw, /Esc の許可として使わない/,
+    '12時間の正しい根拠（古い記録を Esc の許可に使わない）が消えている');
+
   /* 保留中の判断は、それぞれの正本と一致している */
   const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
   assert.equal(C.webIntentStatus, wi.status, 'Web Intent の状態が2か所で食い違っている');
@@ -1445,10 +1541,106 @@ test('言うべきことを、言っている（主張の裏返し）', () => {
     'README.ja.md': ['タイトルではありません'],
     'store/STORE_DASHBOARD_CHANGES.md': ['ページのタイトルは読まず、渡らない']
   };
+  /*
+   * 第22回監査 R22-001 / R22-002。撤回した全称の**代わりに何を書いたか**を
+   * 面ごとに固定する。消しただけでは、説明が消えたのか直ったのか分からない。
+   */
+  const mustAlso = {
+    'PRIVACY.md': ['gxs-notice', 'cssFloat', 'stops counting',
+                   'として数えなくなり', 'タイマーはありません'],
+    'README.md': ['gxs-notice', 'cssFloat', 'no button is inserted',
+                  'not a delete timer'],
+    'README.ja.md': ['gxs-notice', 'cssFloat', 'ボタンを置きません',
+                     '消す期限ではなく'],
+    'store/LISTING.md': ['status message', 'not a delete timer'],
+    'store/DATA_DISCLOSURE.json': ['gxs-notice', '保存の上限ではない'],
+    'store/STORE_DASHBOARD_CHANGES.md': ['gxs-notice', '消す期限ではない'],
+    'src/content.js': ['gxs-notice', 'ボタンを置かない'],
+    'store/DATA_FLOW_CLAIMS.json': ['storageLogicalExpiry', 'storagePhysicalDeletion',
+                                    'noticeIndependentOfActionRow']
+  };
+  for (const [file, phrases] of Object.entries(mustAlso)) {
+    const body = activeText(file);
+    for (const p of phrases) {
+      assert.ok(body.includes(p),
+        `${file} に「${p}」が無い（全称を消しただけで、代わりの説明が無い）`);
+    }
+  }
   for (const [file, phrases] of Object.entries(must)) {
     const body = activeText(file);        // 履歴の中に書いて済ませられないようにする
     for (const p of phrases) {
       assert.ok(body.includes(p), `${file} に「${p}」が無い（履歴の囲いの外に書く）`);
+    }
+  }
+});
+
+/* ============================================================
+ * 第22回監査 R22-003 — 文書が挙げるURLを、実物へ通す
+ * ============================================================ */
+
+test('文書のルート例が、出荷するコードの判定と一致する（R22-003）', () => {
+  /*
+   * README は `/user/keys` を「拒否するGitHubの機能ページ」の例に挙げていた。
+   * だが `user` は**実在する所有者名**で、`github.com/user/keys` はふつうの
+   * リポジトリのルート——**共有できる**。第20回でテストの前提は直したのに、
+   * 文書の例だけが誤ったまま残っていた。
+   *
+   * 例を文章の中だけで持つと、実物と食い違っても誰も気づかない。
+   * 正本へ集め、1件ずつ実際に buildShare() へ通す。
+   */
+  const C = JSON.parse(read('store/DATA_FLOW_CLAIMS.json'));
+  const { GXS } = loadShare();
+  const examples = C.documentedRouteExamples;
+  assert.ok(Array.isArray(examples) && examples.length >= 6,
+    `文書のルート例が正本に無い（または少なすぎる）: ${examples && examples.length}`);
+
+  /* ★対照が入っていること。拒否例だけ並べても「全部拒否」の実装で通ってしまう */
+  assert.ok(examples.some((e) => e.shareable === true), '共有できる対照が1件も無い');
+  assert.ok(examples.some((e) => e.shareable === false), '拒否する例が1件も無い');
+
+  const wrong = [];
+  for (const e of examples) {
+    const got = GXS.buildShare(e.url) !== null;
+    if (got !== e.shareable) {
+      wrong.push(`${e.url}: 正本は ${e.shareable ? '共有できる' : '拒否'} と言うが、実物は ${got ? '共有できる' : '拒否'}`);
+    }
+  }
+  assert.deepEqual(wrong, [], '文書のルート例が実物と食い違っている:\n' + wrong.join('\n'));
+});
+
+test('文書のルート例が、挙げた文書に実際に載っている（R22-003）', () => {
+  /*
+   * 正本だけ直して文書を直し忘れる形を塞ぐ。**両方向**を縛る——
+   * ①正本の例は、appearsIn の文書に literal で載っている
+   * ②誤りと分かった `/user/keys` は、どの文書にも「拒否する例」として残っていない
+   */
+  const C = JSON.parse(read('store/DATA_FLOW_CLAIMS.json'));
+  for (const e of C.documentedRouteExamples) {
+    assert.ok(e.docToken, `${e.url}: 文書に載せる形（docToken）が宣言されていない`);
+    for (const file of e.appearsIn) {
+      assert.ok(read(file).includes(e.docToken),
+        `${file} に ${e.docToken} が無い（正本だけ直して文書を直し忘れている）`);
+    }
+  }
+  /*
+   * ⚠️ 「文書のどこにも書くな」にはしない。**共有できる**という現行の事実として
+   * 書くのは正しく、実際そう書いてある（上の突合が実物で確かめている）。
+   * 縛るのは**置き場所**——拒否例を並べた段落に混ざっていないこと。
+   * どの段落かは正本が名指しする（語句から推測しない）。
+   */
+  const anchors = C.refusedExampleAnchors;
+  assert.ok(anchors && Object.keys(anchors).length >= 2, '拒否例の段落が正本で名指しされていない');
+  for (const [file, anchor] of Object.entries(anchors)) {
+    const blocks = activeBlocks(file).filter((b) => b.includes(squash(anchor)));
+    assert.equal(blocks.length, 1,
+      `${file}: 拒否例の段落を1つに特定できない（${blocks.length}件）。正本の目印が古い`);
+    /* 対照: その段落が、本当に拒否例を並べた段落であること */
+    assert.ok(blocks[0].includes('/oauth/authorize'),
+      `${file}: 目印の段落に拒否例が無い＝この検査は空振りする`);
+    /* 共有できると分かっている例が、その段落に混ざっていないこと */
+    for (const e of C.documentedRouteExamples.filter((x) => x.shareable)) {
+      assert.ok(!blocks[0].includes(e.docToken),
+        `${file}: 共有できる ${e.docToken} が、拒否例の段落に並んでいる`);
     }
   }
 });
