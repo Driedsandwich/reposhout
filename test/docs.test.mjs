@@ -1206,8 +1206,8 @@ test('履歴で囲って検査を逃れていない——囲いの数と大き�
    */
   const EXPECTED = {
     'PRIVACY.md': 2,
-    'README.md': 1,
-    'README.ja.md': 1,
+    'README.md': 2,
+    'README.ja.md': 2,
     'store/LISTING.md': 2,
     'store/STORE_DASHBOARD_CHANGES.md': 3,
     'src/share.js': 1
@@ -1733,6 +1733,59 @@ test('拒否する語の一覧と、台帳の deny が1語も違わない（R19-
     assert.ok(!runtime.includes(e.namespace),
       `${e.namespace} は allow と決めたのに拒否している（実在のリポジトリを巻き込む）`);
   }
+});
+
+test('READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）', () => {
+  /*
+   * 第23回監査 R23-004。README英日は「一覧へ足すのは、その名前の**アカウントが無い**
+   * ことを確かめたものだけ」と全称で書いていた。実測すると、**アカウントが在るのに
+   * deny の語が4つ**ある（watching / authorize / verify / customer-stories）。
+   * runtime の判定は正しく、**採用理由の説明だけが違って**いた。
+   * READMEを基準に次を直すと、route-shadow の判定を誤って外しかねない。
+   */
+  const inv = JSON.parse(read('store/GITHUB_NAMESPACE_INVENTORY.json'));
+  const crit = inv.denyCriteria;
+  assert.ok(crit && Array.isArray(crit.branches) && crit.branches.length === 3,
+    '台帳が採用理由を3つに分けていない');
+  assert.deepEqual(crit.branches.map((b) => b.id).sort(),
+    ['account_absent', 'reachable_repo', 'route_shadowed'].sort());
+
+  /* 台帳が挙げる「アカウントが在るのに deny」が、実測と1語も違わないこと */
+  const measured = inv.namespaces
+    .filter((e) => e.decision === 'deny' && e.accountApi && e.accountApi.present === true)
+    .map((e) => e.namespace).sort();
+  assert.deepEqual([...crit.measuredDenyWithAccountPresent].sort(), measured,
+    '台帳が挙げる「アカウントありで deny」が実測とずれている');
+  assert.ok(measured.length > 0,
+    'アカウントありで deny の語が0件＝この検査は空振りする（前提が変わったなら README も見直す）');
+
+  /* route-shadow の例が、本当に route-shadow であること */
+  const ex = crit.branches.find((b) => b.id === 'route_shadowed').example;
+  const e = inv.namespaces.find((x) => x.namespace === ex);
+  assert.ok(e, `route-shadow の例 ${ex} が台帳に無い`);
+  assert.equal(e.accountApi.present, true, `${ex}: アカウントが無いなら route-shadow の例にならない`);
+  assert.equal(e.repositoryProbe.repositoryUiRendered, false, `${ex}: browser で開けている`);
+  assert.equal(e.routeShadow, true);
+
+  /* README英日が、2つの採用理由と、その例を書いていること */
+  for (const [file, phrases] of Object.entries({
+    /* ⚠️ 語だけを見ると、「either（2つのうちどちらか）」を「only when（〜のときだけ）」へ
+       書き換える変異が素通りする（P21 で実測）。**2条件を並べた形ごと**要求する */
+    'README.md': ['may be added under one of two conditions',
+                  'either **no account holds the name**',
+                  'or **an account exists but the browser does not render a repository UI under it**', ex],
+    'README.ja.md': ['一覧へ足してよいのは次の2つ',
+                     '**①その名前のアカウントが無い**',
+                     '**②アカウントは在るが、ブラウザでリポジトリの画面が出ない**', ex]
+  })) {
+    const body = activeText(file);          // 履歴の囲いの中に書いて済ませられない
+    for (const p of phrases) {
+      assert.ok(body.includes(p), `${file} に「${p}」が無い（採用理由が台帳と食い違う）`);
+    }
+  }
+  /* deny/allow の数は変えていないこと */
+  assert.equal(inv.namespaces.filter((x) => x.decision === 'deny').length, 72);
+  assert.equal(inv.namespaces.filter((x) => x.decision === 'allow').length, 7);
 });
 
 test('台帳が、APIで見た事実と browser で見た事実を分けている（R19-002）', () => {

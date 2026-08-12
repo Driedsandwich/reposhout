@@ -1160,6 +1160,50 @@
       "expectedFailure": {
         "testName": "台帳を読めなければ、所有を認めない（R23-003）"
       }
+    },
+    {
+      "id": "P21",
+      "file": "README.md",
+      "find": "either **no account holds the name**",
+      "replace": "only when **no account holds the name**",
+      "test": "test/docs.test.mjs",
+      "desc": "README(英)の採用理由を「アカウントが無い語だけ」へ戻す",
+      "expectedFailure": {
+        "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）"
+      }
+    },
+    {
+      "id": "P22",
+      "file": "README.ja.md",
+      "find": "**②アカウントは在るが、ブラウザでリポジトリの画面が出ない**",
+      "replace": "**②（削除）**",
+      "test": "test/docs.test.mjs",
+      "desc": "README(日)から route-shadow の分岐を落とす",
+      "expectedFailure": {
+        "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）"
+      }
+    },
+    {
+      "id": "P23",
+      "file": "store/GITHUB_NAMESPACE_INVENTORY.json",
+      "find": "\"example\": \"customer-stories\"",
+      "replace": "\"example\": \"enterprises\"",
+      "test": "test/docs.test.mjs",
+      "desc": "route-shadow の例を、実際には route-shadow でない語へ変える",
+      "expectedFailure": {
+        "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）"
+      }
+    },
+    {
+      "id": "P24",
+      "file": "store/GITHUB_NAMESPACE_INVENTORY.json",
+      "find": "\"measuredDenyWithAccountPresent\": [\n      \"watching\",",
+      "replace": "\"measuredDenyWithAccountPresent\": [\n      \"watching_TYPO\",",
+      "test": "test/docs.test.mjs",
+      "desc": "「アカウントありで deny」の一覧を実測とずらす",
+      "expectedFailure": {
+        "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）"
+      }
     }
   ]
 }

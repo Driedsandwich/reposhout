@@ -253,10 +253,22 @@
       "sha256": "32bb422b05209967ab12c22bd96395be37bb54e60741acc707a2e121e53d7243"
     },
     {
+      "file": "README.md",
+      "reason": "第22回までのREADMEの説明。実際の採用理由と食い違っていた",
+      "chars": 240,
+      "sha256": "3fe49683777b0438be6a453b276040f9d6bb0a87adf392ea6e6cd60c245eb5da"
+    },
+    {
       "file": "README.ja.md",
       "reason": "第20回までこの一覧が挙げていた誤った例。現在は挙げていない",
       "chars": 134,
       "sha256": "6a892a80179d2558abb191d18867ada37c968cf651ad61f162748b58f295200a"
+    },
+    {
+      "file": "README.ja.md",
+      "reason": "第22回までのREADMEの説明。実際の採用理由と食い違っていた",
+      "chars": 166,
+      "sha256": "b4ff7b8082c13e399743a5ff55a8e9f58db8c911293ed1933c51477b2014af50"
     },
     {
       "file": "PRIVACY.md",

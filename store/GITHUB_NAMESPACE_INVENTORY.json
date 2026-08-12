@@ -1807,5 +1807,41 @@
       "reason": "**第20回監査 R20-001 で owner単位の拒否をやめた。** 実在の所有者で、password/python-code-shifter は browser で 200・リポジトリUIあり。認証系を守るための語だったが、本物の認証ルートは別の仕組みで拒否され続ける（/password_reset は所有者名にアンダースコアを許していないので文法で落ち、/login/* と /settings/* はそれぞれの語が一覧に残る）。外して新たに通るのは /devices/new・/password/new・/user/emails だが、いずれも github.com で 404",
       "evidence": "gh api users/password → User / 公開1件; curl -L https://github.com/password/python-code-shifter → 200"
     }
-  ]
+  ],
+  "denyCriteria": {
+    "_about": [
+      "deny としてよい理由の正本（第23回監査 R23-004）。",
+      "README は『その名前のアカウントが**無い**ことを確かめたものだけ』と書いていたが、",
+      "実際には**アカウントが在るのに deny**の語が4つある（実測）。",
+      "採用理由を機械可読にして、README と突き合わせる。"
+    ],
+    "branches": [
+      {
+        "id": "account_absent",
+        "label": "アカウントが無い",
+        "decision": "deny を許す",
+        "why": "その名前でリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない"
+      },
+      {
+        "id": "route_shadowed",
+        "label": "アカウントは在るが、browser でリポジトリUIが出ない",
+        "decision": "deny を許す",
+        "why": "GitHubの案内ページが名前空間を覆っていて、browser では開けない。開けないページは共有の対象にならない",
+        "example": "customer-stories"
+      },
+      {
+        "id": "reachable_repo",
+        "label": "アカウントが在り、browser でもリポジトリUIが出る",
+        "decision": "原則 allow",
+        "why": "実在して開けるリポジトリを巻き込むため",
+        "exception": "認証・アカウント系の入口を守るために必要なときだけ deny にし、suppressesReachableRepo=true を立てて代償を明記する"
+      }
+    ],
+    "measuredDenyWithAccountPresent": [
+      "watching",
+      "authorize",
+      "verify",
+      "customer-stories"
+    ]
+  }
 }
