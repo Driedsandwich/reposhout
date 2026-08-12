@@ -13,18 +13,18 @@
     "",
     "history には、提出しないことにした成果物も理由つきで残す。"
   ],
-  "status": "ready",
+  "status": "pending_main_ci",
   "itemId": "joaipdjaiefbenoijcekdnjagiadikkd",
   "version": "1.1.8",
   "tag": null,
-  "sourceCommit": "b85cf7540a8e5b7e3500be78a1a67c1ed56b0711",
-  "treeSha": "4b1d76e4af9be0de4a1c536f5302c33c5f7b8c7c",
-  "runId": "31561653247",
-  "artifactName": "reposhout-package-b85cf7540a8e5b7e3500be78a1a67c1ed56b0711",
+  "sourceCommit": null,
+  "treeSha": null,
+  "runId": null,
+  "artifactName": null,
   "innerName": "reposhout-1.1.8.zip",
-  "innerBytes": 42724,
-  "innerFiles": 11,
-  "innerSha256": "da155c1a36aaf0a79e0885ad5065703c5d907c461bb04a073e66763ef3ff63af",
+  "innerBytes": null,
+  "innerFiles": null,
+  "innerSha256": null,
   "privacyPolicyUrl": "https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md",
   "confirmationTimeZone": "Asia/Tokyo",
   "note": "選ぶ基準は、上の構造化された欄（artifactName / innerSha256 / innerBytes / innerFiles）だけ。ここに run 番号・バイト数・ハッシュ・監査の回次を書き写さない（第20回監査 R20-004。写した値は成果物を差し替えても取り残され、どちらが正しいか分からなくなる）。この候補は、main への push で走った CI の成果物をダウンロードし、外側のハッシュが GitHub の API が申告する digest と一致することを確かめたうえで内側を実測し、同じコミットを独立にクローンして作り直したZIPとバイト一致することも確認して確定した。タグは外部監査に合格するまで打たない。却下した成果物は history にある。",
@@ -260,6 +260,26 @@
         "R22-005"
       ],
       "reason": "R22-001: DOM参照と足す要素の説明が実挙動より狭い全称のまま、複数の面に取り残されていた（権限の表だけ第21回で直し、Privacy冒頭・README英日・出荷する content.js のコメント・DATA_DISCLOSURE が古いまま）。操作列が無いページでも案内要素を足すことを実測で確認。R22-002: Store貼付用の storage 原稿に「nothing about the user」「いずれにせよ12時間で失効」が残り、README英日も保存対象を「ウィンドウIDだけ」「ブラウザ終了で消える」と要約していた。R22-003: 誤前提と判明した /user/keys が README英日の拒否例に残っていた（実物は共有できる）。R22-004: 変異ランナーが、変異と無関係な失敗（対象テストが元から落ちる／存在しない／終わらない）をすべて「検知」に分類し、証跡のアップロードも if-no-files-found: warn で欠落を許していた。R22-005: バッジの色や説明文だけが失敗すると、「!」を出したまま消去予約が入らず、呼び出し元には通知失敗を返していた"
+    },
+    {
+      "version": "1.1.8",
+      "sourceCommit": "b85cf7540a8e5b7e3500be78a1a67c1ed56b0711",
+      "treeSha": "4b1d76e4af9be0de4a1c536f5302c33c5f7b8c7c",
+      "runId": "31561653247",
+      "artifactName": "reposhout-package-b85cf7540a8e5b7e3500be78a1a67c1ed56b0711",
+      "innerName": "reposhout-1.1.8.zip",
+      "innerBytes": 42724,
+      "innerFiles": 11,
+      "innerSha256": "da155c1a36aaf0a79e0885ad5065703c5d907c461bb04a073e66763ef3ff63af",
+      "status": "rejected_by_R23",
+      "auditRound": 23,
+      "findingIds": [
+        "R23-001",
+        "R23-002",
+        "R23-003",
+        "R23-004"
+      ],
+      "reason": "R23-001: 変異が「宣言した検査を落としたか」を見ておらず、構文エラー・import 失敗・読み込み時の例外・別テストだけの失敗が、すべて検知に化けていた（隔離した題材で再現）。R23-002: 変異する対象ファイルにリポジトリ境界の検査が無く外を書き換えられた。復旧が例外を投げると証跡が1行も残らず、書いたのに読み戻せなかった経路は復旧を呼ばずに「戻した」と記録していた。R23-003: windows.create が ID を返さない場合や、記録に失敗した場合を成功へ畳んでおり、文書が説明する Esc が使えないまま成功と報告していた。storage の読み取り失敗を空の台帳に変えていたため、直後の書き込みが既存の記録を消していた。R23-004: README英日の deny 採用理由が「アカウントが無い語だけ」と全称で書かれており、アカウントが在るのに deny の4語（watching / authorize / verify / customer-stories）と食い違っていた"
     }
   ]
 }
