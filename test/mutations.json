@@ -744,6 +744,17 @@
       }
     },
     {
+      "id": "N19",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  } catch (e) {\n    return `${label} のファイルが無い: ${rel}`;\n  }",
+      "replace": "  } catch (e) {\n    return null;\n  }",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "対象が存在しなくても通す（存在検査を外す）",
+      "expectedFailure": {
+        "testName": "前提が崩れている状態を、検知として数えない（R22-004）"
+      }
+    },
+    {
       "id": "N20",
       "file": "scripts/run-mutations.mjs",
       "find": "  const bl = baselineFor(m.test);\n  if (!bl.passed) {",
@@ -774,6 +785,17 @@
       "desc": "上限で打ち切ったことを記録しない",
       "expectedFailure": {
         "testName": "前提が崩れている状態を、検知として数えない（R22-004）"
+      }
+    },
+    {
+      "id": "N23",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (inside === '' || inside.startsWith('..') || isAbsolute(inside)) {\n",
+      "replace": "  if (false) {\n",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "リポジトリの外を指す対象を許す",
+      "expectedFailure": {
+        "testName": "変異する対象が、リポジトリの外を指せない（R23-002）"
       }
     },
     {
@@ -1005,6 +1027,72 @@
       "desc": "診断から絶対パスを伏せない",
       "expectedFailure": {
         "testName": "証跡に、落ちた理由と落ちたテスト名が残る（R23-001）"
+      }
+    },
+    {
+      "id": "P09",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  const problem = validatePath(m.file, '変異する対象') || validatePath(m.test, '対象テスト');",
+      "replace": "  const problem = validatePath(m.test, '対象テスト');",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "変異する対象のリポジトリ境界を外す",
+      "expectedFailure": {
+        "testName": "変異する対象が、リポジトリの外を指せない（R23-002）"
+      }
+    },
+    {
+      "id": "P10",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (st.isSymbolicLink()) return `${label} が symlink を指している: ${rel}`;",
+      "replace": "  if (false) return `${label} が symlink を指している: ${rel}`;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "symlink の検査を外す",
+      "expectedFailure": {
+        "testName": "リポジトリの中の symlink で外へ出られない（R23-002）"
+      }
+    },
+    {
+      "id": "P11",
+      "file": "scripts/run-mutations.mjs",
+      "find": "        restored = restoreExact({ file: w.file }, w.before);",
+      "replace": "        restored = true;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "復旧したふりをする（実際には戻さない）",
+      "expectedFailure": {
+        "testName": "書いたのに読み戻せなければ、戻したうえでランナー失敗にする（R23-002）"
+      }
+    },
+    {
+      "id": "P12",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (r.wrote && restored !== true) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "戻せなくても検知として扱う",
+      "expectedFailure": {
+        "testName": "復旧が例外を投げても、証跡が残り、検知にはならない（R23-002）"
+      }
+    },
+    {
+      "id": "P13",
+      "file": "scripts/run-mutations.mjs",
+      "find": "    if (pendingWrite) {",
+      "replace": "    if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "書いたのに復旧を試みない",
+      "expectedFailure": {
+        "testName": "復旧が例外を投げても、証跡が残り、検知にはならない（R23-002）"
+      }
+    },
+    {
+      "id": "P14",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  const remainingAfter = after.split(m.find).length - 1;",
+      "replace": "  const remainingAfter = 0;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "置き換え残しを数えない",
+      "expectedFailure": {
+        "testName": "期待した数だけ置換し、置換した数を証跡へ残す（R22-004）"
       }
     }
   ]

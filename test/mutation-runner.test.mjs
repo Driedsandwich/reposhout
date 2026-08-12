@@ -25,7 +25,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync,
-  existsSync } from 'node:fs';
+  existsSync, symlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -206,6 +206,90 @@ test('証跡に、落ちた理由と落ちたテスト名が残る（R23-001）'
 });
 
 /* ============================================================
+ * ② 書き込む範囲と、必ず戻すこと（第23回監査 R23-002）
+ * ============================================================ */
+
+test('変異する対象が、リポジトリの外を指せない（R23-002）', () => {
+  const { outer, dir } = makeFixture([
+    mut('O1', { file: '../outside.txt', find: 'SAFE', replace: 'BROKEN' })
+  ]);
+  const before = readFileSync(join(outer, 'outside.txt'), 'utf8');
+  const r = runRunner(dir);
+  const after = readFileSync(join(outer, 'outside.txt'), 'utf8');
+  assert.equal(outcomeOf(r, 'O1'), 'runner_error',
+    'リポジトリの外を書き換えたうえで検知にしている');
+  assert.equal(kindOf(r, 'O1'), 'target_rejected');
+  assert.match(of(r, 'O1').error, /リポジトリの外/, `別の理由で止めている: ${of(r, 'O1').error}`);
+  assert.equal(after, before, '外のファイルが書き換わっている');
+});
+
+test('リポジトリの中の symlink で外へ出られない（R23-002）', { skip: process.platform === 'win32'
+  ? 'Windows では symlink の作成に権限が要るため、この題材を作れない' : false }, () => {
+  const { outer, dir } = makeFixture([
+    mut('L1', { file: 'link.txt', find: 'SAFE', replace: 'BROKEN' })
+  ]);
+  symlinkSync(join(outer, 'outside.txt'), join(dir, 'link.txt'));
+  const before = readFileSync(join(outer, 'outside.txt'), 'utf8');
+  const r = runRunner(dir);
+  assert.equal(outcomeOf(r, 'L1'), 'runner_error', 'symlink 越しに外を書き換えている');
+  assert.match(of(r, 'L1').error, /symlink/, `別の理由で止めている: ${of(r, 'L1').error}`);
+  assert.equal(readFileSync(join(outer, 'outside.txt'), 'utf8'), before);
+});
+
+test('対象テストがリポジトリの外を指せない（外に実在しても）（R23-002）', () => {
+  const dir = makeFixture([mut('T1', { test: '../outside.test.mjs' })]).dir;
+  const r = runRunner(dir);
+  assert.equal(outcomeOf(r, 'T1'), 'runner_error');
+  assert.match(of(r, 'T1').error, /リポジトリの外/);
+});
+
+test('復旧が例外を投げても、証跡が残り、検知にはならない（R23-002）', () => {
+  /*
+   * ⚠️ 前はここでランナーごと落ち、**証跡が1行も書かれなかった**。
+   * 何が起きたか誰にも分からないまま終わるのがいちばん困る。
+   */
+  const dir = makeFixture([mut('X1', { test: 'test/wreck.test.mjs',
+    expectedFailure: { testName: '変異したときだけ、対象を消してディレクトリにする' } })], {
+    'test/wreck.test.mjs': `
+import test from 'node:test';
+import { rmSync, mkdirSync, readFileSync } from 'node:fs';
+const p = new URL('../mod.mjs', import.meta.url);
+const mutated = readFileSync(p, 'utf8').includes('99');
+test('変異したときだけ、対象を消してディレクトリにする', () => {
+  if (!mutated) return;
+  rmSync(p, { force: true });
+  mkdirSync(p);
+  throw new Error('わざと落とす');
+});
+`
+  }).dir;
+  const r = runRunner(dir);
+  assert.ok(r.receipt, `復旧が例外を投げると証跡が残らない:\n${r.stdout}`);
+  assert.equal(outcomeOf(r, 'X1'), 'runner_error', '戻せていないのに検知にしている');
+  assert.equal(kindOf(r, 'X1'), 'restore_failed');
+  assert.equal(of(r, 'X1').restored, false);
+  assert.ok(of(r, 'X1').restoreError, '復旧の失敗理由が残っていない');
+  assert.notEqual(r.exitCode, 0);
+});
+
+test('書いたのに読み戻せなければ、戻したうえでランナー失敗にする（R23-002）', () => {
+  /*
+   * 前は「当たらなかった（not_applied）」かつ「戻した（restored: true）」として
+   * **復旧を呼ばずに**次へ進んでいた——ファイルは変異したまま、証跡は嘘をついていた。
+   * 読み戻しの結果を変える題材は作れないので、**実装にその分岐が在ること**と、
+   * ふつうの経路では確かに戻せていることを見る。
+   */
+  const src = readFileSync(RUNNER, 'utf8');
+  assert.match(src, /readback_mismatch/, '読み戻し不一致の分類が無い');
+  assert.match(src, /wrote: true[\s\S]{0,240}読み戻せない/,
+    '読み戻せなかったとき「書いた」と記録していない');
+  const dir = makeFixture([mut('R1')]).dir;
+  const r = runRunner(dir);
+  assert.equal(of(r, 'R1').restored, true, '対照: ふつうは戻せている');
+  assert.equal(of(r, 'R1').restoredSha256, of(r, 'R1').beforeSha256);
+});
+
+/* ============================================================
  * ③ 第22回までの分類（引き続き効いていること）
  * ============================================================ */
 
@@ -278,8 +362,17 @@ test('変異前に対象テストを素で走らせ、その結果を証跡へ�
 });
 
 test('期待した数だけ置換し、置換した数を証跡へ残す（R22-004）', () => {
-  const dir = makeFixture([mut('C1', { find: 'GAMMA', replace: 'DELTA', expectMatches: 2,
-    expectedFailure: { testName: '数え上げ: GAMMA が2つ' } })]).dir;
+  const dir = makeFixture([
+    mut('C1', { find: 'GAMMA', replace: 'DELTA', expectMatches: 2,
+      expectedFailure: { testName: '数え上げ: GAMMA が2つ' } }),
+    /*
+     * ⚠️ 置き換え残しを「0 と決め打ち」しても C1 は通ってしまう（変異 P14 が素通りした）。
+     * 置換後に `find` が残る形——`replace` が `find` を含む——を1つ入れて、
+     * **数えた結果**でなければ合わない値を要求する。
+     */
+    mut('C2', { find: 'GAMMA', replace: 'GAMMA GAMMA', expectMatches: 2,
+      expectedFailure: { testName: '数え上げ: GAMMA が2つ' } })
+  ]).dir;
   const r = runRunner(dir);
   assert.equal(outcomeOf(r, 'C1'), 'applied_and_killed');
   assert.equal(of(r, 'C1').appliedReplacementCount, 2, '期待した数だけ置換していない');
@@ -287,6 +380,11 @@ test('期待した数だけ置換し、置換した数を証跡へ残す（R22-0
    * ⚠️ 置換した数を「一致数」から計算すると、**1個しか置き換えていなくても
    * 2と書ける**（N24 がそれで素通りした）。置き換え残しを実測で見る。
    */
+  assert.equal(of(r, 'C1').remainingAfter, 0,
+    `置き換え残しがある: ${of(r, 'C1').remainingAfter}`);
+  assert.equal(outcomeOf(r, 'C2'), 'applied_and_killed');
+  assert.equal(of(r, 'C2').remainingAfter, 4,
+    `置き換え残しを数えていない（2箇所を「GAMMA GAMMA」にしたら4残るはず）: ${of(r, 'C2').remainingAfter}`);
   assert.match(readFileSync(join(dir, 'mod.mjs'), 'utf8'), /GAMMA/, '元へ戻していない');
 });
 

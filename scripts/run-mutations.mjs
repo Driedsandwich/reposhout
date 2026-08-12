@@ -50,7 +50,7 @@
  *   npm run test:mutations -- --receipt out.json    証跡をJSONで残す
  *   npm run test:mutations -- --timeout 5000        1件あたりの上限（既定 300000ms）
  */
-import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, lstatSync, realpathSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -102,17 +102,42 @@ const provenance = {
   timeoutMs
 };
 
-/*
- * 対象テストが「測れる状態にあるか」を先に確かめる（第22回監査 R22-004 §8.4）。
- * リポジトリの中の、実在する通常ファイルであること。
+/* ------------------------------------------------------------------
+ * 書き込んでよい場所（第23回監査 R23-002）
+ * ------------------------------------------------------------------
+ * `m.file`（変異させる対象）と `m.test`（走らせるテスト）の**両方**に当てる。
+ * 前は `m.test` にしか当てていなかったので、`m.file: '../outside.txt'` で
+ * リポジトリの外を書き換えられた（隔離した題材で実測）。
+ *
+ * symlink は **realpath より先に lstat で弾く**——realpath は追ってしまうので、
+ * 「repo の中の symlink が外を指している」形を見逃す。
  */
+const REAL_ROOT = (() => {
+  try { return realpathSync(ROOT); } catch (e) { return ROOT; }
+})();
+
 function validatePath(rel, label) {
   if (typeof rel !== 'string' || !rel) return `${label} が指定されていない`;
+  if (isAbsolute(rel)) return `${label} に絶対パスは使えない: ${rel}`;
   const abs = resolve(ROOT, rel);
-  const inside = relative(ROOT, abs);
-  if (inside.startsWith('..') || isAbsolute(inside)) return `${label} がリポジトリの外を指している: ${rel}`;
-  if (!existsSync(abs)) return `${label} のファイルが無い: ${rel}`;
-  if (!statSync(abs).isFile()) return `${label} が通常ファイルでない: ${rel}`;
+  let st;
+  try {
+    st = lstatSync(abs);
+  } catch (e) {
+    return `${label} のファイルが無い: ${rel}`;
+  }
+  if (st.isSymbolicLink()) return `${label} が symlink を指している: ${rel}`;
+  if (!st.isFile()) return `${label} が通常ファイルでない: ${rel}`;
+  let real;
+  try {
+    real = realpathSync(abs);
+  } catch (e) {
+    return `${label} の実体を解決できない: ${rel}`;
+  }
+  const inside = relative(REAL_ROOT, real);
+  if (inside === '' || inside.startsWith('..') || isAbsolute(inside)) {
+    return `${label} がリポジトリの外を指している: ${rel}`;
+  }
   return null;
 }
 
@@ -228,6 +253,13 @@ function baselineFor(rel) {
 }
 
 /* 対象ファイルを読み、期待した回数だけ現れることを確かめてから**全部**置換する */
+/*
+ * ⚠️ 書き込んだ事実は、**この変数**にだけ持たせる。
+ * applyMutation の途中で例外が出ても finally から辿れるようにするため
+ * （戻り値に持たせると、throw したときに誰も知らないまま変異が残る）。
+ */
+let pendingWrite = null;
+
 function applyMutation(m) {
   const path = join(ROOT, m.file);
   const before = readFileSync(path, 'utf8');
@@ -244,18 +276,38 @@ function applyMutation(m) {
    * split/join で**期待した数だけ**置き換え、実際に置き換えた数を記録する。
    */
   const after = parts.join(m.replace);
+  /*
+   * ⚠️ **置き残しを数える。**（第23回監査 R23-001 の作業中に発見）
+   * 「1個だけ置換する」旧挙動へ戻す変異が素通りした——置換した数を
+   * 一致数から計算していたので、実際に置き換わったかを見ていなかった。
+   * 置換後に `find` が残っていたら、期待した数だけ当たっていない。
+   * （`replace` の中に `find` を含む変異だけは、残って当たり前なので除く）
+   */
+  const remainingAfter = after.split(m.find).length - 1;
+  if (remainingAfter !== 0 && !m.replace.includes(m.find)) {
+    return { applied: false, wrote: false, before, actualMatches, expected, replacements: 0,
+      remainingAfter,
+      why: `置き換え残しがある（${remainingAfter} 箇所）。期待した数だけ当たっていない` };
+  }
   if (after === before) {
     return { applied: false, wrote: false, before, actualMatches, expected, replacements: 0,
       why: '置換しても中身が変わらなかった' };
   }
+  pendingWrite = { file: m.file, before };
   writeFileSync(path, after);
   const readBack = readFileSync(path, 'utf8');
   if (readBack !== after) {
-    return { applied: false, wrote: false, before, actualMatches, expected, replacements: 0,
+    /*
+     * ⚠️ **もう書いてしまっている。**（第23回監査 R23-002）
+     * 前はここを `not_applied` かつ `restored: true` として、復旧を呼ばずに
+     * 次へ進んでいた——ファイルは変異したまま、証跡は「戻した」と言っていた。
+     */
+    return { applied: false, wrote: true, before, after, actualMatches, expected,
+      replacements: actualMatches, readbackSha256: sha(readBack),
       why: '書き込んだ内容が読み戻せない' };
   }
   return { applied: true, wrote: true, before, after, actualMatches, expected,
-    replacements: actualMatches };
+    replacements: actualMatches, remainingAfter };
 }
 
 function restoreExact(m, before) {
@@ -272,7 +324,7 @@ for (const m of mutations) {
     expectedFailure: m.expectedFailure || null };
 
   /* ① 変異する対象と対象テストの両方が、書いてよい場所にあるか */
-  const problem = validatePath(m.test, '対象テスト');
+  const problem = validatePath(m.file, '変異する対象') || validatePath(m.test, '対象テスト');
   if (problem) {
     results.push({ ...base, outcome: 'runner_error', failureKind: 'target_rejected',
       error: problem, restored: true });
@@ -313,10 +365,17 @@ for (const m of mutations) {
   } finally {
     /* 一度でも書いたなら、当たったかどうかに関わらず戻す（R23-002）。
        判断の根拠は pendingWrite——applyMutation が途中で throw しても効く */
-    if (r && r.applied) {
-      restored = restoreExact(m, r.before);
-      restoredSha256 = sha(readFileSync(join(ROOT, m.file), 'utf8'));
-      if (!restored) baselineCache.clear();
+    if (pendingWrite) {
+      const w = pendingWrite;
+      pendingWrite = null;
+      try {
+        restored = restoreExact({ file: w.file }, w.before);
+        restoredSha256 = sha(readFileSync(join(ROOT, w.file), 'utf8'));
+      } catch (e) {
+        restored = false;
+        restoreError = String(e && e.message);
+        baselineCache.clear();      // 前提が崩れたので覚えを捨てる
+      }
     }
   }
 
@@ -330,23 +389,31 @@ for (const m of mutations) {
     ...base,
     expectedMatches: r.expected, actualMatches: r.actualMatches,
     appliedReplacementCount: r.replacements,
+    remainingAfter: r.remainingAfter === undefined ? null : r.remainingAfter,
     beforeSha256: sha(r.before),
     afterSha256: r.after ? sha(r.after) : null,
     changed: r.after ? sha(r.before) !== sha(r.after) : false,
-    restored: r.applied ? restored : true,
+    wrote: r.wrote === true,
+    restored: r.wrote ? restored : true,
     restoredSha256, restoreError
   };
 
   /* 復旧できなかったのは、何より先に報告する */
-  if (r.applied && restored !== true) {
+  if (r.wrote && restored !== true) {
     results.push({ ...common, outcome: 'runner_error', failureKind: 'restore_failed',
       error: restoreError || '変異したファイルを元へ戻せなかった' });
     continue;
   }
 
   if (!r.applied) {
-    /* ★ ここを survived と数えない。結果は「何も言えない」 */
-    results.push({ ...common, outcome: 'not_applied', why: r.why });
+    if (r.wrote) {
+      /* 書いたが読み戻せなかった＝当たったとも当たらなかったとも言えない */
+      results.push({ ...common, outcome: 'runner_error', failureKind: 'readback_mismatch',
+        error: r.why, readbackSha256: r.readbackSha256 });
+    } else {
+      /* ★ ここを survived と数えない。結果は「何も言えない」 */
+      results.push({ ...common, outcome: 'not_applied', why: r.why });
+    }
     continue;
   }
 
@@ -397,6 +464,11 @@ for (const m of mutations) {
     expectedFailureMatched: true });
 }
 
+/* 作業ツリーが元に戻っているか（第23回監査 R23-002 §6.6） */
+const gitStatusEnd = gitOut(['status', '--porcelain']);
+const workspaceUnchanged = gitStatusStart === null || gitStatusEnd === null
+  ? null : gitStatusStart === gitStatusEnd;
+
 const by = (o) => results.filter((r) => r.outcome === o);
 const killed = by('applied_and_killed'), survived = by('applied_but_survived');
 const notApplied = by('not_applied'), errors = by('runner_error');
@@ -417,11 +489,17 @@ if (survived.length) console.log('★ 素通り（検査の穴）:\n  ' + surviv
 if (notApplied.length) console.log('★ 当たらなかった（結果は何も言えない）:\n  ' + notApplied.map((r) => `${r.id} ${r.why}`).join('\n  '));
 if (errors.length) console.log('★ ランナー失敗（結果は何も言えない）:\n  ' + errors.map((r) => `${r.id} [${r.failureKind}] ${r.error}`).join('\n  '));
 if (badRestore.length) console.log('★ 復旧できなかったファイルがある:\n  ' + badRestore.map((r) => r.file).join('\n  '));
+if (workspaceUnchanged === false) {
+  console.log('★ 作業ツリーが実行前と違う（何かを残している）');
+  console.log(`  実行前: ${JSON.stringify(gitStatusStart).slice(0, 200)}`);
+  console.log(`  実行後: ${JSON.stringify(gitStatusEnd).slice(0, 200)}`);
+}
 
 const summary = {
   spec: specPath, total: results.length,
   applied_and_killed: killed.length, applied_but_survived: survived.length,
   not_applied: notApplied.length, runner_error: errors.length,
+  workspaceUnchanged,
   provenance: { ...provenance, startedAt, completedAt: new Date().toISOString() },
   baselines: [...baselineCache.entries()].map(([test, b]) => ({
     test, passed: b.passed, exitCode: b.exitCode, stdoutSha256: b.stdoutSha256
@@ -441,5 +519,5 @@ if (receiptPath) {
 }
 
 const ok = survived.length === 0 && notApplied.length === 0
-  && errors.length === 0 && badRestore.length === 0;
+  && errors.length === 0 && badRestore.length === 0 && workspaceUnchanged !== false;
 process.exit(ok ? 0 : 1);
