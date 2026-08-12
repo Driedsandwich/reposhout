@@ -177,17 +177,36 @@ test('9通りの状態を、ランナーが実際に走って区別する（R22-
   /* ★ ここが第22回で見つかった穴。どれも「検知」に化けていた */
   for (const [id, what] of [['A5', '存在しないテスト'], ['A6', 'もともと落ちるテスト'],
     ['A7', '終わらないテスト'], ['A8', 'signal で死ぬテスト'], ['A9', '外を指すテスト'],
-    ['A10', '変異後に終わらなくなるテスト'], ['A11', '変異後に signal で死ぬテスト']]) {
+    ['A10', '変異後に終わらなくなるテスト']]) {
     assert.equal(outcomeOf(r, id), 'runner_error',
       `${what}が ${outcomeOf(r, id)} になっている（検知として数えてはいけない）`);
   }
   /* 上限で打ち切ったことが、証跡に記録されていること */
   const hung = r.receipt.results.find((x) => x.id === 'A10');
   assert.equal(hung.timedOut, true, '上限で打ち切ったのに、証跡へそう書いていない');
-  /* signal で死んだことも、証跡に残っていること */
+
+  /*
+   * ⚠️ **A11（変異後に、外から signal で殺される）は POSIX でしか作れない。**
+   *
+   * Windows に signal は無く、プロセスを終わらせても親へ届くのは終了コードだけ
+   * ——「外から殺された」と「テストがふつうに落ちた」が**境界では区別できない**。
+   * ここで期待値を `applied_and_killed` に書き換えると、POSIX で効いている分類まで
+   * 弱まる。1つの環境の実測で期待値を反転させず、**環境ごとに何が観測できるか**で分ける。
+   *
+   * つまりランナーの保証は環境で違う: POSIX では「外から殺された」を検知として
+   * 数えないが、**Windows ではそれができない**（この非対称は報告にも書く）。
+   */
   const boom = r.receipt.results.find((x) => x.id === 'A11');
-  assert.equal(boom.signal, 'SIGKILL', `signal を記録していない: ${JSON.stringify(boom.signal)}`);
-  assert.equal(boom.exitCode, null, '終了コードが無いのに数字を記録している');
+  if (process.platform === 'win32') {
+    assert.equal(boom.signal, null,
+      'Windows で signal が観測できている＝前提が変わったので、この分岐を見直す');
+    assert.equal(typeof boom.exitCode, 'number', '終了コードすら記録されていない');
+  } else {
+    assert.equal(outcomeOf(r, 'A11'), 'runner_error',
+      `変異後に signal で死ぬテストが ${outcomeOf(r, 'A11')} になっている`);
+    assert.equal(boom.signal, 'SIGKILL', `signal を記録していない: ${JSON.stringify(boom.signal)}`);
+    assert.equal(boom.exitCode, null, '終了コードが無いのに数字を記録している');
+  }
   /* 外を指す件は「外だから」止めたのであって、「無いから」ではないこと */
   const outside = r.receipt.results.find((x) => x.id === 'A9');
   assert.match(outside.error, /リポジトリの外/,

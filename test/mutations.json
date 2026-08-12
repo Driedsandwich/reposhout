@@ -677,6 +677,14 @@
       "replace": "    /*\n     * 元へ戻す。",
       "test": "test/background.test.mjs",
       "desc": "走り終えた予約を登録簿から消さない"
+    },
+    {
+      "id": "N36",
+      "file": "test/mutation-runner.test.mjs",
+      "find": "  if (process.platform === 'win32') {",
+      "replace": "  if (process.platform !== 'win32') {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "環境の判定を反転させる（どちらのOSでも落ちるべき）"
     }
   ]
 }
