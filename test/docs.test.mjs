@@ -1056,6 +1056,22 @@ const CLAIMS = [
     why: '画面側は合図を送るだけで、URLも投稿文も組み立てない（第16回監査 R16-003）',
     staleRaw: [/Post this page to X/, /QUERY_ALLOW/] },
 
+  /*
+   * 第22回監査 R22-001。**読む範囲と足す要素の説明が、実挙動より狭かった。**
+   * 「〜以外は何もしない」「要素は1個」という全称が、面ごとに取り残されていた
+   * （権限の表だけ第21回で直し、冒頭の要約・README・出荷コメントが古いまま）。
+   */
+  { id: 'dom_scope_and_added_elements',
+    why: '読むのは決まった範囲、足すのは <style>・入れ物・拒否の案内の3種（第22回監査 R22-001）',
+    staleRaw: [/only whether a few specific layout elements exist/i,
+               /決まった数個の要素があるかどうかと[^。]{0,24}高さだけ/,
+               /one wrapper holding one button, and changes nothing else/i,
+               /ボタン1個を包む要素を1つ足す以外は何も変[更え]/,
+               /anchor element isn't found, it does nothing/i,
+               /目印が見つからなければ何もしない/,
+               /DOM を読み、要素を1つ足す/,
+               /追加する要素は1個/] },
+
   { id: 'routes_are_typed_only',
     why: '検索・explore・topics・プロフィールは共有できない（第15回監査 R15-001）',
     staleRaw: [/プロフィールページを共有した場合/,
@@ -1220,7 +1236,16 @@ test('主張の検査そのものが効いている（対照）', () => {
     '| Xへ渡るか | 渡る。ページのタイトルと正規化済みURLが、リンクに入って届く |',
     'ユーザー名または組織名が入る場合がある',
     /* 変異で見つけた素通り（第19回 M12）——行頭アンカーは空白をつぶすと効かない */
-    '   *   slug  英数と . _ - / , : だけの短い識別子'
+    '   *   slug  英数と . _ - / , : だけの短い識別子',
+    /* 第22回で撤回した全称（R22-001 / R22-002）。実際に残っていた文そのもの */
+    'This check reads only whether a few specific layout elements exist, and how tall',
+    'このとき見るのは決まった数個の要素があるかどうかと、隣のボタンの高さだけです。',
+    'adds one <style> element and one wrapper holding one button, and changes nothing else.',
+    '`<style>` を1つとボタン1個を包む要素を1つ足す以外は何も変更しません',
+    "- If the anchor element isn't found, it does nothing. No error, no fallback",
+    '- 目印が見つからなければ何もしない。 エラーも出さず、代替のDOM操作もせず',
+    ' *  3. 追加する要素は1個。失敗しても影響がそこで閉じる',
+    'ボタンを差し込む位置を探すために DOM を読み、要素を1つ足す。',
   ]) {
     assert.ok(catches(sample), `検査が空振りしている: ${sample.slice(0, 60)}`);
   }
@@ -1424,6 +1449,18 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
     assert.ok(C[k] && C[k].length >= 10, `正本に ${k} が無い`);
   }
 
+  /*
+   * 第22回監査 R22-001。**案内は、操作列が無いページでも足す。**
+   * 「目印が無ければ何もしない」はボタンの話だけだった。
+   * 案内を出す経路が、目印を探す経路と分かれていることをコードで確かめる。
+   */
+  assert.ok(C.noticeIndependentOfActionRow && C.noticeIndependentOfActionRow.length >= 20,
+    '正本が「操作列が無くても案内を出す」ことを説明していない');
+  const noticeListener = content.match(/onMessage\.addListener\([\s\S]{0,200}?\}\);/);
+  assert.ok(noticeListener, '拒否の案内を受ける入口が見つからない');
+  assert.ok(!/findContainer|CONTAINERS/.test(noticeListener[0]),
+    '案内の経路が、操作列を探す処理に依存している（正本の説明と食い違う）');
+
   /* 保留中の判断は、それぞれの正本と一致している */
   const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
   assert.equal(C.webIntentStatus, wi.status, 'Web Intent の状態が2か所で食い違っている');
@@ -1445,6 +1482,26 @@ test('言うべきことを、言っている（主張の裏返し）', () => {
     'README.ja.md': ['タイトルではありません'],
     'store/STORE_DASHBOARD_CHANGES.md': ['ページのタイトルは読まず、渡らない']
   };
+  /*
+   * 第22回監査 R22-001。撤回した全称の**代わりに何を書いたか**を面ごとに固定する。
+   * 消しただけでは、説明が消えたのか直ったのか分からない。
+   */
+  const mustAlso = {
+    'PRIVACY.md': ['gxs-notice', 'cssFloat'],
+    'README.md': ['gxs-notice', 'cssFloat', 'no button is inserted'],
+    'README.ja.md': ['gxs-notice', 'cssFloat', 'ボタンを置きません'],
+    'store/DATA_DISCLOSURE.json': ['gxs-notice'],
+    'store/STORE_DASHBOARD_CHANGES.md': ['gxs-notice'],
+    'src/content.js': ['gxs-notice', 'ボタンを置かない'],
+    'store/DATA_FLOW_CLAIMS.json': ['noticeIndependentOfActionRow']
+  };
+  for (const [file, phrases] of Object.entries(mustAlso)) {
+    const body = activeText(file);
+    for (const p of phrases) {
+      assert.ok(body.includes(p),
+        `${file} に「${p}」が無い（全称を消しただけで、代わりの説明が無い）`);
+    }
+  }
   for (const [file, phrases] of Object.entries(must)) {
     const body = activeText(file);        // 履歴の中に書いて済ませられないようにする
     for (const p of phrases) {

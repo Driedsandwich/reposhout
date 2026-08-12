@@ -399,6 +399,62 @@
       "replace": ""
     },
     {
+      "id": "N01",
+      "file": "PRIVACY.md",
+      "find": "This check reads a\n**fixed, limited set of things**: whether a few specific layout elements exist; how the",
+      "replace": "This check reads\n**only whether a few specific layout elements exist, and how tall the neighbouring button\nis**. It once read the",
+      "test": "test/docs.test.mjs",
+      "desc": "Privacy(英)の説明を「有無と高さだけ」へ戻す"
+    },
+    {
+      "id": "N02",
+      "file": "PRIVACY.md",
+      "find": "このとき見るのは**決まった範囲だけ**です——決まった数個の要素があるかどうかに加えて、",
+      "replace": "このとき見るのは**決まった数個の要素があるかどうかと、隣のボタンの高さだけ**です。かつては、",
+      "test": "test/docs.test.mjs",
+      "desc": "Privacy(日)の説明を「有無と高さだけ」へ戻す"
+    },
+    {
+      "id": "N03",
+      "file": "README.md",
+      "find": "- **If the anchor element isn't found, no button is inserted.**",
+      "replace": "- **If the anchor element isn't found, it does nothing.**",
+      "test": "test/docs.test.mjs",
+      "desc": "README(英)を「何もしない」へ戻す"
+    },
+    {
+      "id": "N04",
+      "file": "README.ja.md",
+      "find": "- **目印が見つからなければ、ボタンを置きません。**",
+      "replace": "- **目印が見つからなければ何もしない。**",
+      "test": "test/docs.test.mjs",
+      "desc": "README(日)を「何もしない」へ戻す"
+    },
+    {
+      "id": "N05",
+      "file": "store/DATA_DISCLOSURE.json",
+      "find": "ボタンを差し込む位置（ボタン群の並び）を探すために DOM を読む——読むのは決まった範囲で、",
+      "replace": "ボタンを差し込む位置（ボタン群の並び）を探すために DOM を読み、要素を1つ足す。かつては、",
+      "test": "test/docs.test.mjs",
+      "desc": "申告を「要素を1つ足す」へ戻す"
+    },
+    {
+      "id": "N06",
+      "file": "src/content.js",
+      "find": " *  3. 足す要素は次の3種類だけ（第22回監査 R22-001 で数え直した）:",
+      "replace": " *  3. 追加する要素は1個。失敗しても影響がそこで閉じる。内訳:",
+      "test": "test/docs.test.mjs",
+      "desc": "出荷コメントを「追加する要素は1個」へ戻す"
+    },
+    {
+      "id": "N07",
+      "file": "src/content.js",
+      "find": "      if (msg && msg.type === 'gxs-notice') showNotice(msg.reason);",
+      "replace": "      if (msg && msg.type === 'gxs-notice' && findContainer()) showNotice(msg.reason);",
+      "test": "test/content.test.mjs",
+      "desc": "案内の経路を操作列に依存させる（無い所で出なくする）"
+    },
+    {
       "id": "N19",
       "file": "scripts/run-mutations.mjs",
       "find": "  if (!existsSync(abs)) return `対象テストのファイルが無い: ${rel}`;",

@@ -120,5 +120,6 @@
   "noticePurpose": "共有できなかった理由を、値を出さずに利用者へ伝えるため（第12回監査 R12-002）",
   "noticeData": "理由ごとの定型文だけ。URL・パラメータ名・値・所有者名・リポジトリ名は入れない",
   "noticeLifetime": "一定時間で自分を取り除く。GitHub の既存要素は削除も置換もしない",
-  "contentScriptInsertsInto": "document.head へ <style> 1つ、操作列へボタンの入れ物1つ、および拒否の案内が必要なときだけ document.body へ <div id=\"gxs-notice\"> 1つ"
+  "contentScriptInsertsInto": "document.head へ <style> 1つ、操作列へボタンの入れ物1つ、および拒否の案内が必要なときだけ document.body へ <div id=\"gxs-notice\"> 1つ",
+  "noticeIndependentOfActionRow": "操作列（挿入先の目印）が無いページでも、拒否の案内は body へ足す。「目印が無ければ何もしない」のはボタンの設置だけで、案内はそれとは別の経路（第22回監査 R22-001）"
 }

@@ -106,8 +106,9 @@ RepoShout is narrower than RepoCast on purpose (one destination, no side panel, 
 
 Browser extensions that inject UI into GitHub have a habit of dying when GitHub redesigns — as the abandoned predecessors listed above show. RepoShout is built to limit *how* it breaks rather than to pretend it won't.
 
-- **If the anchor element isn't found, it does nothing.** No error, no fallback DOM surgery, no broken GitHub page.
-- **GitHub's existing DOM is read, never modified.** The extension adds one `<style>` element in the document head and one wrapper holding one button — an `<li>` inside the repository page's `<ul>`, a `<div>` inside the flex row on issues and pull requests. It deletes and replaces nothing of GitHub's own.
+- **If the anchor element isn't found, no button is inserted.** No error, no fallback DOM surgery, no broken GitHub page. This covers the button only: the toolbar icon and the keyboard shortcut still work on that page, and if the page cannot be shared they still add the status message described below.
+- **GitHub's existing DOM is read, never modified.** The extension adds one `<style>` element in the document head and one wrapper holding one button — an `<li>` inside the repository page's `<ul>`, a `<div>` inside the flex row on issues and pull requests. When a page cannot be shared it also adds one `<div id="gxs-notice">` to `<body>`, which removes itself after a few seconds and carries a fixed sentence with no URL, parameter name or value — **and it adds that even where no button was inserted**. It deletes and replaces nothing of GitHub's own.
+- **What it reads to place the button is a fixed set.** Whether the container exists, how its first child is built (`children`, `tagName`), three computed style values used for alignment (`display`, `cssFloat`, `marginRight`), and the neighbouring button's height. Not the page text, not form values, not the URL, not the title.
 - **It never inspects which buttons are present.** Signed-in and signed-out GitHub show different button sets; prepending to the container works identically for both, and for whatever GitHub adds next.
 - **The toolbar icon and keyboard shortcut don't touch the DOM at all.** They work from the tab's URL alone, so they keep working even if the in-page button stops appearing.
 - Colours are read from GitHub's own theme variables (`--button-default-*`), so light and dark mode follow automatically.
@@ -127,7 +128,7 @@ Content scripts run on two sites:
 
 | Site | Purpose |
 |---|---|
-| `github.com` | Add the Share button. Reads the page only to find the button row; adds one `<style>` element and one wrapper holding one button, and changes nothing else. |
+| `github.com` | Add the Share button. Reads the page to find the button row and to line the button up with its neighbour (a fixed set: existence, first child, three computed style values, one height); adds one `<style>` element and one wrapper holding one button, plus — when a page cannot be shared — one temporary status message in `<body>`. It deletes and replaces nothing of GitHub's own. |
 | `x.com` | **One `keydown` listener; `event.key` is checked on each press and anything other than an unmodified Escape is ignored immediately** — so you can dismiss a share window you didn't want. Field values and page content are never read. |
 
 The X script never reads page content. Before closing a window it asks the service worker one question: *is this window one you opened?* The answer comes from the window ID that `chrome.windows.create()` returned, and from nothing else. A page cannot read or forge that ID.

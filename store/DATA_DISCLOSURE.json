@@ -140,7 +140,7 @@
       "label": "Website content",
       "labelJa": "ウェブサイトのコンテンツ",
       "answer": "Yes",
-      "codeFact": "GitHubの画面のDOMは読むが、**送るのはページのURLから決めたものだけ**。ボタンを差し込む位置（ボタン群の並び）を探すために DOM を読み、要素を1つ足す。第16回監査 R16-004 で、**ページのタイトル（document.title）を読む処理そのものを消した**——第15回 R15-001 で本文に使わなくなったのに、読んで関数へ渡す形が残っていたため。ページ本文・入力欄の値・cookie は読まない。Xへ渡すのは、ルートから生成した1行（owner/repo・Issue #123 · owner/repo など）と、検査済みパーツから組み直した github.com のURLだけ",
+      "codeFact": "GitHubの画面のDOMは読むが、**送るのはページのURLから決めたものだけ**。ボタンを差し込む位置（ボタン群の並び）を探すために DOM を読む——読むのは決まった範囲で、要素の有無・先頭の子の作り（children・tagName）・配置合わせの表示値（display・cssFloat・marginRight）・隣のボタンの高さ。足すのは `<style>` 1つとボタンの入れ物1つ、**および共有できなかったときの一時的な案内（`<div id=\"gxs-notice\">`）1つ**で、案内は操作列が無いページでも足す（第22回監査 R22-001）。第16回監査 R16-004 で、**ページのタイトル（document.title）を読む処理そのものを消した**——第15回 R15-001 で本文に使わなくなったのに、読んで関数へ渡す形が残っていたため。ページ本文・入力欄の値・cookie は読まない。Xへ渡すのは、ルートから生成した1行（owner/repo・Issue #123 · owner/repo など）と、検査済みパーツから組み直した github.com のURLだけ",
       "policyBasis": "handle には use と transmit が含まれる。端末内だけで処理する場合も開示が要る。DOMを読むこと自体と、共有URL（ハイパーリンク）をXへ渡すことの両方があるため Yes のままにした。実際に外へ出るものは狭くなったが、**申告を狭める方向の変更は本人がダッシュボードの設問文を読んでから判断する**（過少申告のほうが危険なため、こちらでは動かさない）",
       "requiresOwnerConfirmation": false,
       "confirmationStatus": "not_required"
