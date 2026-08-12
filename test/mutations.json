@@ -397,6 +397,102 @@
       "desc": "再測定のタイミングを正本から落とす",
       "find": "**ボタンを入れた後の 100 / 500 / 1500 ms の再測定**・",
       "replace": ""
+    },
+    {
+      "id": "N19",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (!existsSync(abs)) return `対象テストのファイルが無い: ${rel}`;",
+      "replace": "  if (false) return `対象テストのファイルが無い: ${rel}`;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "存在しないテストの検査を外す（＝検知に化ける）"
+    },
+    {
+      "id": "N20",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  const bl = baselineFor(m.test);\n  if (!bl.passed) {",
+      "replace": "  const bl = baselineFor(m.test);\n  if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "変異前の対照を無視する（元から落ちるテストが検知に化ける）"
+    },
+    {
+      "id": "N21",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (run.timedOut || run.spawnError || (run.signal && run.exitCode === null)) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "上限打ち切り・signal・起動失敗を検知へ寄せる"
+    },
+    {
+      "id": "N22",
+      "file": "scripts/run-mutations.mjs",
+      "find": "    out.timedOut = e.code === 'ETIMEDOUT' || e.killed === true || e.signal === 'SIGTERM';",
+      "replace": "    out.timedOut = false;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "上限で打ち切ったことを記録しない"
+    },
+    {
+      "id": "N23",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (inside.startsWith('..') || isAbsolute(inside)) return `対象テストがリポジトリの外を指している: ${rel}`;",
+      "replace": "  if (false) return `対象テストがリポジトリの外を指している: ${rel}`;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "リポジトリの外を指す対象を許す"
+    },
+    {
+      "id": "N24",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  const after = parts.join(m.replace);\n  const replacements = actualMatches;",
+      "replace": "  const after = before.replace(m.find, m.replace);\n  const replacements = 1;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "複数一致でも1個しか置換しない旧挙動へ戻す"
+    },
+    {
+      "id": "N25",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  runnerSha256: sha(readFileSync(RUNNER_FILE, 'utf8')),\n  specSha256: sha(specText),",
+      "replace": "  specSha256: sha(specText),",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "証跡から由来（ランナーのハッシュ）を落とす"
+    },
+    {
+      "id": "N26",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  baselines: [...baselineCache.entries()].map(([test, b]) => ({\n    test, passed: b.passed, exitCode: b.exitCode, stdoutSha256: b.stdoutSha256\n  })),",
+      "replace": "  baselines: [],",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "証跡から変異前の対照を落とす"
+    },
+    {
+      "id": "N27",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  delete e.NODE_TEST_CONTEXT;",
+      "replace": "  /* delete e.NODE_TEST_CONTEXT; */",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "呼び出し元の環境を剥がさない（全件が素通りに化ける）"
+    },
+    {
+      "id": "N28",
+      "file": "scripts/run-mutations.mjs",
+      "find": "    console.error(`★ 証跡を書けなかった: ${receiptPath}\\n  ${e && e.message}`);\n    process.exit(2);",
+      "replace": "    console.error(`★ 証跡を書けなかった: ${receiptPath}`);",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "証跡を書けなくても成功で終わる"
+    },
+    {
+      "id": "N29",
+      "file": ".github/workflows/ci.yml",
+      "find": "          path: mutation-receipt.json\n          # ⚠️ warn ではなく error（第22回監査 R22-004）。",
+      "replace": "          path: receipt.json\n          # ⚠️ warn ではなく error（第22回監査 R22-004）。",
+      "test": "test/manifest.test.mjs",
+      "desc": "CIで証跡を書く場所と拾う場所をずらす"
+    },
+    {
+      "id": "N30",
+      "file": ".github/workflows/ci.yml",
+      "find": "          if-no-files-found: error\n\n      # PRのときは GITHUB_SHA",
+      "replace": "          if-no-files-found: warn\n\n      # PRのときは GITHUB_SHA",
+      "test": "test/manifest.test.mjs",
+      "desc": "CIの証跡アップロードを warn へ戻す"
     }
   ]
 }
