@@ -46,7 +46,35 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
       (await targets()).find((x) => x.type === 'service_worker' && x.url.includes(extId)));
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId: t.targetId, flatten: true });
     await cdp.send('Runtime.enable', {}, sessionId);
+    /*
+     * ⚠️ **target があることと、実装が読み終わっていることは別。**
+     *
+     * service worker の target は、`importScripts('/src/share.js')` と
+     * background.js の最上位が走り終える**前に**現れる。attach しただけで
+     * 評価を始めると `self.GXS_BG` がまだ undefined で、
+     * `Object.keys(undefined)` が投げる——遅い runner でだけ落ちる。
+     * 2026-08-12 の main の CI（run 31559789517）で実際に落ちた
+     * （同じツリーの PR ラン 31559203603 は通っていたので、競合と分かった）。
+     *
+     * 待つのは「読み終えた印」。**評価するたび**に確かめる——service worker は
+     * 数十秒で止められて作り直されるので、1回目だけ待っても足りない。
+     */
+    await waitInSw(sessionId,
+      "typeof self.GXS_BG === 'object' && typeof self.GXS === 'object'");
     return sessionId;
+  }
+
+  /*
+   * service worker の中で、式が true になるまで待つ。
+   * **対照から同じ経路を叩けるように**切り出してある——待ちが効いていないと、
+   * 上の「読み終えるまで待つ」は素通りするが、素通りしても見た目は同じ。
+   */
+  async function waitInSw(sessionId, expression, opts) {
+    return waitFor(`service worker で ${expression}`, async () => {
+      const r = await cdp.send('Runtime.evaluate',
+        { expression, returnByValue: true }, sessionId);
+      return r && r.result && r.result.value === true;
+    }, opts);
   }
 
   async function evalInSw(expression) {
@@ -133,6 +161,21 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
 
   it('出荷する一覧のファイルだけで拡張として読み込める', async () => {
     assert.match(extId, /^[a-p]{32}$/);
+  });
+
+  it('実装を待つ仕掛けが、待たずに通っていない（対照）', async () => {
+    /*
+     * 「読み終えるまで待つ」は、**待ちが壊れていても同じ見た目**になる
+     * （手元では最初から読み終わっているので、待たなくても通る）。
+     * 同じ経路へ、**決して true にならない式**を通して、
+     * ちゃんと時間切れになることを確かめる。
+     */
+    const s = await swSession();
+    await assert.rejects(
+      () => waitInSw(s, "typeof self.__gxs_does_not_exist__ === 'object'",
+        { timeout: 1500, interval: 100 }),
+      /待ち時間内に成立しなかった/,
+      '存在しない印でも通ってしまう＝待ちが効いていない');
   });
 
   it('service worker が起動し、実装が読めている', async () => {
