@@ -637,6 +637,46 @@
       "replace": "          if-no-files-found: warn\n\n      # PRのときは GITHUB_SHA",
       "test": "test/manifest.test.mjs",
       "desc": "CIの証跡アップロードを warn へ戻す"
+    },
+    {
+      "id": "N31",
+      "file": "src/background.js",
+      "find": "  scheduleBadgeCleanup(tabId);          // ★ 出した直後。色/説明文より前\n  if (chrome.action.setBadgeBackgroundColor) {",
+      "replace": "  if (chrome.action.setBadgeBackgroundColor) {",
+      "test": "test/background.test.mjs",
+      "desc": "出したバッジの消去予約を入れない（色/説明文の後ろに置いた旧形と同じ結果）"
+    },
+    {
+      "id": "N32",
+      "file": "src/background.js",
+      "find": "    } catch (e) { /* 色が付かないだけ。通知は成立している */ }",
+      "replace": "    } catch (e) { return false; }",
+      "test": "test/background.test.mjs",
+      "desc": "色の失敗で通知を失敗扱いにする"
+    },
+    {
+      "id": "N33",
+      "file": "src/background.js",
+      "find": "  } catch (e) { /* 説明文が既定のままなだけ。通知は成立している */ }",
+      "replace": "  } catch (e) { return false; }",
+      "test": "test/background.test.mjs",
+      "desc": "説明文の失敗で通知を失敗扱いにする"
+    },
+    {
+      "id": "N34",
+      "file": "src/background.js",
+      "find": "  if (badgeTimers[key]) clearTimeout(badgeTimers[key]);",
+      "replace": "  if (false) clearTimeout(badgeTimers[key]);",
+      "test": "test/background.test.mjs",
+      "desc": "付け直しの世代管理を外す"
+    },
+    {
+      "id": "N35",
+      "file": "src/background.js",
+      "find": "    delete badgeTimers[key];\n    /*\n     * 元へ戻す。",
+      "replace": "    /*\n     * 元へ戻す。",
+      "test": "test/background.test.mjs",
+      "desc": "走り終えた予約を登録簿から消さない"
     }
   ]
 }
