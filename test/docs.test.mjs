@@ -1072,6 +1072,21 @@ const CLAIMS = [
                /DOM を読み、要素を1つ足す/,
                /追加する要素は1個/] },
 
+  /*
+   * 第22回監査 R22-002。保存の説明も同じ形で狭かった——
+   * 「利用者に関する情報は保存しない」（時刻を保存している）、
+   * 「いずれにせよ12時間で失効」（消える期限ではない）、
+   * 「ブラウザを終了すると消える」（消える契機は他にもある）。
+   */
+  { id: 'storage_scope_and_expiry',
+    why: '保存するのはIDと時刻。12時間は論理的な失効で、消える契機は3つ（第22回監査 R22-002）',
+    staleRaw: [/nothing about the user/i,
+               /expire after 12 hours in any case/i,
+               /12時間で失効/,
+               /list of window IDs described above, in memory, until you quit the browser/i,
+               /上記のウィンドウIDだけで、ブラウザを終了すると消え/,
+               /ウィンドウIDと開いた時刻だけで、URLもページ内容も履歴も入りません。\*\*この記録を外部へ送ることはありません。\*\*\s*$/m] },
+
   { id: 'routes_are_typed_only',
     why: '検索・explore・topics・プロフィールは共有できない（第15回監査 R15-001）',
     staleRaw: [/プロフィールページを共有した場合/,
@@ -1246,6 +1261,11 @@ test('主張の検査そのものが効いている（対照）', () => {
     '- 目印が見つからなければ何もしない。 エラーも出さず、代替のDOM操作もせず',
     ' *  3. 追加する要素は1個。失敗しても影響がそこで閉じる',
     'ボタンを差し込む位置を探すために DOM を読み、要素を1つ足す。',
+    'No URLs, no page content, no browsing history, nothing about the user.',
+    'Entries are removed as soon as the window closes, and expire after 12 hours in any case.',
+    'ウィンドウIDと時刻だけ（chrome.storage.session・メモリ上・12時間で失効）',
+    'The only thing the extension itself stores is the list of window IDs described above, in memory, until you quit the browser.',
+    '拡張自身が保存するのは上記のウィンドウIDだけで、ブラウザを終了すると消えます。'
   ]) {
     assert.ok(catches(sample), `検査が空振りしている: ${sample.slice(0, 60)}`);
   }
@@ -1461,6 +1481,43 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
   assert.ok(!/findContainer|CONTAINERS/.test(noticeListener[0]),
     '案内の経路が、操作列を探す処理に依存している（正本の説明と食い違う）');
 
+  /*
+   * 第22回監査 R22-002。保存の説明を、service worker の実装へ縛る。
+   * **12時間は論理的な失効**であって、その時刻に起こして消すタイマーではない。
+   */
+  const bg = stripComments(read('src/background.js'));
+  assert.ok(Array.isArray(C.storageStores) && C.storageStores.length === 2,
+    '正本が「保存する2つ」を挙げていない');
+  assert.ok(Array.isArray(C.storageDoesNotStore) && C.storageDoesNotStore.length >= 6,
+    '正本が「保存しない物」を挙げていない');
+  assert.match(bg, /12 \* 60 \* 60 \* 1000/, '12時間の定数がコードに無い');
+  /* 「その時刻に起こす」仕掛けが**無い**こと（alarms を使っていない） */
+  assert.ok(!/chrome\.alarms/.test(bg),
+    '正本はタイマーが無いと言うが、alarms を使っている');
+  assert.ok(C.storageNoExpiryTimer && /タイマー/.test(C.storageNoExpiryTimer),
+    '正本が「起こして消すタイマーは無い」と書いていない');
+  assert.ok(Array.isArray(C.storagePhysicalDeletion) && C.storagePhysicalDeletion.length === 3,
+    `正本の「実際に消える契機」が3つでない: ${(C.storagePhysicalDeletion || []).length}`);
+  /* 3つの契機が、それぞれコードに実在すること */
+  assert.match(bg, /windows\.onRemoved/, '窓を閉じたときに消す処理が無い');
+  assert.match(bg, /storage\.session/, 'session storage を使っていない');
+  assert.ok(/isShareWindow/.test(bg) && /prune/i.test(bg),
+    '失効した記録を読んだときに消す処理が無い');
+  /*
+   * ⚠️ 根拠を「ID再利用」へ戻していないこと（第21回監査 R21-002）。
+   * 語の有無では見られない——**その語が誤りだと書いた訂正文**にも当たってしまう
+   * （実際に当たった）。「打ち消しと一緒に出てくるか」で見る。
+   */
+  const bgRaw = read('src/background.js');
+  for (const m of bgRaw.matchAll(/再利用/g)) {
+    const around = bgRaw.slice(Math.max(0, m.index - 300), m.index + 300);
+    assert.ok(/誤り|作れない/.test(around),
+      `ウィンドウIDの再利用を根拠として書いている（位置 ${m.index}）`);
+  }
+  /* 正しい根拠のほうが、消えずに残っていること */
+  assert.match(bgRaw, /Esc の許可として使わない/,
+    '12時間の正しい根拠（古い記録を Esc の許可に使わない）が消えている');
+
   /* 保留中の判断は、それぞれの正本と一致している */
   const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
   assert.equal(C.webIntentStatus, wi.status, 'Web Intent の状態が2か所で食い違っている');
@@ -1483,17 +1540,22 @@ test('言うべきことを、言っている（主張の裏返し）', () => {
     'store/STORE_DASHBOARD_CHANGES.md': ['ページのタイトルは読まず、渡らない']
   };
   /*
-   * 第22回監査 R22-001。撤回した全称の**代わりに何を書いたか**を面ごとに固定する。
-   * 消しただけでは、説明が消えたのか直ったのか分からない。
+   * 第22回監査 R22-001 / R22-002。撤回した全称の**代わりに何を書いたか**を
+   * 面ごとに固定する。消しただけでは、説明が消えたのか直ったのか分からない。
    */
   const mustAlso = {
-    'PRIVACY.md': ['gxs-notice', 'cssFloat'],
-    'README.md': ['gxs-notice', 'cssFloat', 'no button is inserted'],
-    'README.ja.md': ['gxs-notice', 'cssFloat', 'ボタンを置きません'],
-    'store/DATA_DISCLOSURE.json': ['gxs-notice'],
-    'store/STORE_DASHBOARD_CHANGES.md': ['gxs-notice'],
+    'PRIVACY.md': ['gxs-notice', 'cssFloat', 'stops counting',
+                   'として数えなくなり', 'タイマーはありません'],
+    'README.md': ['gxs-notice', 'cssFloat', 'no button is inserted',
+                  'not a delete timer'],
+    'README.ja.md': ['gxs-notice', 'cssFloat', 'ボタンを置きません',
+                     '消す期限ではなく'],
+    'store/LISTING.md': ['status message', 'not a delete timer'],
+    'store/DATA_DISCLOSURE.json': ['gxs-notice', '保存の上限ではない'],
+    'store/STORE_DASHBOARD_CHANGES.md': ['gxs-notice', '消す期限ではない'],
     'src/content.js': ['gxs-notice', 'ボタンを置かない'],
-    'store/DATA_FLOW_CLAIMS.json': ['noticeIndependentOfActionRow']
+    'store/DATA_FLOW_CLAIMS.json': ['storageLogicalExpiry', 'storagePhysicalDeletion',
+                                    'noticeIndependentOfActionRow']
   };
   for (const [file, phrases] of Object.entries(mustAlso)) {
     const body = activeText(file);

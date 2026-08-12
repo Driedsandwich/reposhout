@@ -92,7 +92,7 @@
   "queryPolicy": "int / bool / enum の値だけを、名前ごとに1回だけ残す。同じ名前が2回以上あればURLごと拒否する。自由文（q / query / discussions_q / title / body）は落とす",
   "recipient": "x.com（X Corp.）— 拡張の開発者のサーバーは存在しない",
   "transferTiming": "利用者が共有を操作し、Xの投稿画面が開いた時点。Postを押す前",
-  "storage": "chrome.storage.session にウィンドウIDと時刻だけ。URLも投稿本文もタイトルも保存しない",
+  "storage": "chrome.storage.session に、拡張自身が開いたウィンドウのIDと、開いた時刻だけ。URLも投稿本文もタイトルも保存しない",
   "webIntentStatus": "pending",
   "ownerConfirmationStatus": {
     "authentication_information": "pending",
@@ -121,5 +121,25 @@
   "noticeData": "理由ごとの定型文だけ。URL・パラメータ名・値・所有者名・リポジトリ名は入れない",
   "noticeLifetime": "一定時間で自分を取り除く。GitHub の既存要素は削除も置換もしない",
   "contentScriptInsertsInto": "document.head へ <style> 1つ、操作列へボタンの入れ物1つ、および拒否の案内が必要なときだけ document.body へ <div id=\"gxs-notice\"> 1つ",
-  "noticeIndependentOfActionRow": "操作列（挿入先の目印）が無いページでも、拒否の案内は body へ足す。「目印が無ければ何もしない」のはボタンの設置だけで、案内はそれとは別の経路（第22回監査 R22-001）"
+  "noticeIndependentOfActionRow": "操作列（挿入先の目印）が無いページでも、拒否の案内は body へ足す。「目印が無ければ何もしない」のはボタンの設置だけで、案内はそれとは別の経路（第22回監査 R22-001）",
+  "storageStores": [
+    "拡張自身が開いたウィンドウのID（chrome.windows.create が返す数値）",
+    "そのウィンドウを開いた時刻（ミリ秒）"
+  ],
+  "storageDoesNotStore": [
+    "URL",
+    "ページのタイトル",
+    "ページの中身",
+    "所有者名",
+    "リポジトリ名",
+    "投稿本文",
+    "閲覧履歴"
+  ],
+  "storageLogicalExpiry": "12時間を過ぎた記録は「拡張が開いた窓」の根拠として**数えない**。これは保存の上限ではなく、古い記録をいつまでも Esc の許可として使わないため（第21回監査 R21-002）",
+  "storagePhysicalDeletion": [
+    "そのウィンドウを閉じたとき（windows.onRemoved）",
+    "Chrome が session storage を消したとき（ブラウザの終了・拡張の無効化・再読み込み・更新）",
+    "失効した記録を、次に誰かが読んだとき（isShareWindow / prune）"
+  ],
+  "storageNoExpiryTimer": "12時間の時点で拡張を起こして消すタイマーは無い。それまでは使われないままメモリに残ることがある"
 }

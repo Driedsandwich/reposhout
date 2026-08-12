@@ -455,6 +455,62 @@
       "desc": "案内の経路を操作列に依存させる（無い所で出なくする）"
     },
     {
+      "id": "N08",
+      "file": "store/LISTING.md",
+      "find": "history.\n\nIt is written to chrome.storage.session",
+      "replace": "history, nothing about the user.\n\nIt is written to chrome.storage.session",
+      "test": "test/docs.test.mjs",
+      "desc": "ストア原稿へ nothing about the user を戻す"
+    },
+    {
+      "id": "N09",
+      "file": "store/LISTING.md",
+      "find": "when that window closes, and Chrome clears the whole area when the browser\ncloses and when this extension is disabled, reloaded or updated.",
+      "replace": "when that window closes, and expire after 12 hours in any case.",
+      "test": "test/docs.test.mjs",
+      "desc": "ストア原稿の12時間を曖昧な言い方へ戻す"
+    },
+    {
+      "id": "N10",
+      "file": "README.md",
+      "find": "What it holds is a list of window IDs and the time each was opened — no URLs, no page titles,",
+      "replace": "What it holds is a list of window IDs — no URLs, no page titles,",
+      "test": "test/docs.test.mjs",
+      "desc": "README(英)から保存する時刻を落とす"
+    },
+    {
+      "id": "N11",
+      "file": "README.ja.md",
+      "find": "入るのはウィンドウIDと開いた時刻だけで、URL・ページのタイトル・",
+      "replace": "入るのはウィンドウIDだけで、URL・ページのタイトル・",
+      "test": "test/docs.test.mjs",
+      "desc": "README(日)から保存する時刻を落とす"
+    },
+    {
+      "id": "N12",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "find": "    \"失効した記録を、次に誰かが読んだとき（isShareWindow / prune）\"\n",
+      "replace": "",
+      "test": "test/docs.test.mjs",
+      "desc": "実際に消える契機を1つ削る"
+    },
+    {
+      "id": "N13",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "find": "\"storageLogicalExpiry\": \"12時間を過ぎた記録は「拡張が開いた窓」の根拠として**数えない**。これは保存の上限ではなく",
+      "replace": "\"storageLogicalExpiry\": \"12時間で保存の上限に達して消える。これは保存の上限であって",
+      "test": "test/docs.test.mjs",
+      "desc": "論理的な失効と物理的な削除を再び混ぜる"
+    },
+    {
+      "id": "N14",
+      "file": "store/DATA_DISCLOSURE.json",
+      "find": "ウィンドウIDと開いた時刻だけ（chrome.storage.session・メモリ上）。12時間を過ぎた記録は",
+      "replace": "ウィンドウIDと時刻だけ（chrome.storage.session・メモリ上・12時間で失効）。12時間を過ぎた記録は",
+      "test": "test/docs.test.mjs",
+      "desc": "申告を「12時間で失効」へ戻す"
+    },
+    {
       "id": "N19",
       "file": "scripts/run-mutations.mjs",
       "find": "  if (!existsSync(abs)) return `対象テストのファイルが無い: ${rel}`;",

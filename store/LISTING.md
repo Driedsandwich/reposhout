@@ -293,14 +293,21 @@ RepoShout opens the X composer in a window it creates itself, and lets the user
 dismiss that window with the Escape key. To do that safely it has to know which
 window it opened, so that Escape can never close a window the user opened.
 
-The only thing written to storage is the window identifier returned by
-chrome.windows.create(), together with the time it was opened. No URLs, no page
-content, no browsing history, nothing about the user.
+Two values are written: the window identifier returned by
+chrome.windows.create(), and the time that window was opened. No URLs, no page
+titles, no page content, no owner or repository names, no post text, no browsing
+history.
 
-It is written to chrome.storage.session, which is held in memory, is cleared when
-the browser closes, is never written to disk, and is not readable by content
-scripts. Entries are removed as soon as the window closes, and expire after 12
-hours in any case.
+It is written to chrome.storage.session, which is held in memory, is never
+written to disk, and is not readable by content scripts. An entry is removed
+when that window closes, and Chrome clears the whole area when the browser
+closes and when this extension is disabled, reloaded or updated.
+
+After 12 hours an entry stops counting as evidence that the extension opened
+that window, and it is deleted the next time the extension reads it. That is a
+rule about what an old entry may still prove, not a delete timer: no alarm wakes
+the extension at the 12-hour mark, so an unused entry can sit in memory until
+one of the events above clears it.
 
 This replaces the previous approach of identifying the window by a fixed name,
 which any web page could copy.

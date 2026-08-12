@@ -37,7 +37,7 @@
     "whenItReachesX": "利用者が Share を押して投稿画面が開いた時点（Post を押す前）",
     "postIsUserDecision": true,
     "persistentStorageOfTitleOrUrl": "無い",
-    "sessionStorage": "ウィンドウIDと時刻だけ（chrome.storage.session・メモリ上・12時間で失効）",
+    "sessionStorage": "ウィンドウIDと開いた時刻だけ（chrome.storage.session・メモリ上）。12時間を過ぎた記録は「拡張が開いた窓」の根拠として数えなくなり、次に読んだ時点で削除する——**保存の上限ではない**（消える契機は、窓を閉じたとき／Chromeがsession storageを消したとき〈ブラウザ終了・無効化・再読み込み・更新〉／失効した記録を次に読んだとき）",
     "whoDecidesWhatLeaves": "service worker（src/background.js）だけ。画面内のボタンは「押されました」しか送らず、URLも投稿文も組み立てない（第16回監査 R16-003）"
   },
   "categories": [
