@@ -232,6 +232,15 @@
       return t('noticeOpenFailed',
         'The X composer could not be opened. Nothing was sent to X.');
     }
+    if (reason === 'open_unknown') {
+      /*
+       * 開いたかどうかをブラウザが教えてくれなかった（第23回監査 R23-003）。
+       * 二重に開かないため、ここでは何もしない——起きたことをそのまま伝える。
+       */
+      return t('noticeOpenUnknown',
+        'The browser did not confirm whether the X composer window opened. ' +
+        'If a window did open, it may not close with Escape. Nothing else was sent to X.');
+    }
     if (reason === 'reload_required') {
       /*
        * 拡張を更新した直後で、この画面に残っているのが古い部品（第16回監査 R16-003）。

@@ -31,6 +31,10 @@
     "message": "The X composer could not be opened. Nothing was sent to X.",
     "description": "Shown when both the popup window and the tab could not be opened. Must not include the URL or any value."
   },
+  "noticeOpenUnknown": {
+    "message": "The browser did not confirm whether the X composer window opened. If a window did open, it may not close with Escape. Nothing else was sent to X.",
+    "description": "Shown when chrome.windows.create resolved without a window id, so the extension cannot tell whether a window opened. Must not include the URL or any value."
+  },
   "noticeReloadRequired": {
     "message": "The extension was updated. Reload this GitHub tab and try again. Nothing was sent to X.",
     "description": "Shown when the page still runs an old content script after an update (R16-003). Must not include the URL or any value."

@@ -1,41 +1,50 @@
 /*
- * 変異対照ランナー自身の対照（第22回監査 R22-004）
+ * 変異対照ランナー自身の対照
+ *   第22回監査 R22-004 で新設（静的な文字列検査 → 実際に起動する対照へ）
+ *   第23回監査 R23-001 / R23-002 で「落ちた理由」と「書き込む範囲」を足した
  *
  * ⚠️ **道具が壊れると、結果が読めなくなる。**
  *
- * 第21回でランナーをリポジトリへ入れたとき、自己検査は
- * 「4つの分類名がソースに書いてあるか」を見るだけの**静的な**ものだった。
- * これは「書いてある」ことしか言えない——第22回監査で、実際に走らせると
+ * 第21回の自己検査は「4つの分類名がソースに書いてあるか」を見るだけだった。
+ * 名前が書いてあることは、区別できることの証拠にならない——第22回に、
+ * 変異と無関係な失敗（元から落ちる／存在しない／終わらないテスト）が
+ * 全部「検知」に化けていた。
  *
- *   ・もともと落ちるテストを指した変異     → applied_and_killed（＝検知）
- *   ・存在しないテストを指した変異         → applied_and_killed
- *   ・終わらないテストを指した変異         → applied_and_killed
+ * ⚠️ **第23回で、さらにその裏返しが出た。**
+ * 変異前に通っていても、**落ちた理由**を見ていなかったので:
  *
- * になっていた。**変異と何の関係もない失敗が、全部「検査が効いた」に化けていた。**
- * 名前が書いてあることは、区別できることの証拠にならない。
+ *   構文が壊れただけ／import に失敗しただけ／読み込み時に例外／
+ *   **別のテストだけ**が落ちた
+ *
+ * が全部「検知」だった。守りたい検査は無傷なのに、守られていることになる。
  *
  * そこでこのテストは、**ランナーを別プロセスとして実際に起動する**。
- * 使い捨てのディレクトリに小さな題材とテストを並べ、9通りの状態を作って、
+ * 使い捨てのディレクトリに題材とテストを並べ、状態を作って、
  * 証跡JSONに出る分類を1件ずつ突き合わせる。
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, existsSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync,
+  existsSync, symlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ROOT } from './helpers/load.mjs';
 
 const RUNNER = join(ROOT, 'scripts/run-mutations.mjs');
+const GUARD = 'test/guard.test.mjs';
+const WANT = '守りたい検査: value は 1';
+const OTHER = '別の検査: other は 2';
 
-/* 題材とテストを並べた使い捨ての作業場を作り、そこへランナーを複製する */
+/*
+ * 題材とテストを並べた使い捨ての作業場を作り、そこへランナーを複製する。
+ * root を1段深くして、**外側に実在するファイル**を置けるようにしてある
+ * ——「リポジトリの外を指している」検査は、外のファイルが実在しないと、
+ * 手前の「ファイルが無い」検査に先を越されて空振りする。
+ */
 function makeFixture(mutations, files = {}) {
-  /*
-   * root を1段深くする。**外側に実在するテストファイル**を置けるようにするため
-   * ——「リポジトリの外を指している」検査は、外のファイルが**実在しないと
-   * 空振りする**（存在検査のほうが先に落ちるので、外していても同じ結果になる）。
-   */
   const outer = mkdtempSync(join(tmpdir(), 'reposhout-mut-'));
+  writeFileSync(join(outer, 'outside.txt'), 'SAFE\n');
   writeFileSync(join(outer, 'outside.test.mjs'), `
 import test from 'node:test';
 test('外にある、ふつうに通るテスト', () => {});
@@ -46,69 +55,70 @@ test('外にある、ふつうに通るテスト', () => {});
   mkdirSync(join(dir, 'test'));
   copyFileSync(RUNNER, join(dir, 'scripts/run-mutations.mjs'));
 
-  writeFileSync(join(dir, 'target.txt'), 'ALPHA\nBETA\nGAMMA\nGAMMA\n');
+  writeFileSync(join(dir, 'mod.mjs'),
+    'export const value = 1;\nexport const other = 2;\nexport const many = "GAMMA GAMMA";\n');
 
-  /* 題材の中身を見る、ふつうに通るテスト */
-  writeFileSync(join(dir, 'test/passes.test.mjs'), `
+  writeFileSync(join(dir, GUARD), `
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-const read = () => readFileSync(new URL('../target.txt', import.meta.url), 'utf8');
-test('ALPHA がある', () => { assert.ok(read().includes('ALPHA')); });
-test('GAMMA が2つある', () => { assert.equal(read().split('GAMMA').length - 1, 2); });
+import { value, other, many } from '../mod.mjs';
+test(${JSON.stringify(WANT)}, () => {
+  /* ⚠️ 失敗の文へ、わざと2種類のパスを混ぜる——伏字の検査を、動いているOSに
+     関わらず効かせるため（Windows のパスは macOS では自然には現れない） */
+  assert.equal(value, 1, 'D:\\\\a\\\\repo\\\\mod.mjs と /var/tmp/repo/mod.mjs を見よ');
+});
+test(${JSON.stringify(OTHER)}, () => { assert.equal(other, 2); });
+test('数え上げ: GAMMA が2つ', () => { assert.equal(many.split('GAMMA').length - 1, 2); });
 `);
-  /* 題材を見ない（＝変異しても落ちない）テスト */
+  /* 題材を何も見ない＝変異しても落ちない */
   writeFileSync(join(dir, 'test/blind.test.mjs'), `
 import test from 'node:test';
 test('題材を何も見ない', () => {});
 `);
-  /* 変異と関係なく、最初から落ちるテスト */
+  /* 変異と関係なく、最初から落ちる */
   writeFileSync(join(dir, 'test/fails.test.mjs'), `
 import test from 'node:test';
 test('もともと落ちる', () => { throw new Error('変異前から失敗している'); });
 `);
-  /* 上限まで終わらないテスト（handle を持って居座る） */
+  /* 上限まで終わらない */
   writeFileSync(join(dir, 'test/hangs.test.mjs'), `
 import test from 'node:test';
-test('終わらない', async () => {
-  const t = setInterval(() => {}, 100);
-  await new Promise(() => {});
-});
-`);
-  /* 自分から signal で死ぬテスト */
-  writeFileSync(join(dir, 'test/signal.test.mjs'), `
-import test from 'node:test';
-test('signal で死ぬ', () => { process.kill(process.pid, 'SIGKILL'); });
+test('終わらない', async () => { setInterval(() => {}, 100); await new Promise(() => {}); });
 `);
   /*
-   * ⚠️ **変異前は通り、変異後に初めて壊れる**テスト。
+   * 変異前は通り、**変異後に初めて**壊れる。
    * 変異前から壊れているものは対照の段階で止まるので、
-   * **変異後の分類**（上限打ち切り・signal）はこれでないと通らない。
+   * 変異後の分類（上限打ち切り・signal）はこれでないと通らない。
    */
   writeFileSync(join(dir, 'test/breaks-after.test.mjs'), `
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-const body = readFileSync(new URL('../target.txt', import.meta.url), 'utf8');
-if (body.includes('HANGNOW')) { setInterval(() => {}, 50); await new Promise(() => {}); }
-/*
- * ⚠️ 自分（分離された test プロセス）を殺しても、\`node --test\` の親が
- * それを受け止めて**ふつうの失敗（exit 1）**にしてしまう。
- * ランナーから見える境界は親のほうなので、外から signal で殺された状況を
- * 作るには**親**を殺す（OOM killer に殺される形と同じ見え方になる）。
- */
+const body = readFileSync(new URL('../mod.mjs', import.meta.url), 'utf8');
+if (body.includes('HANGNOW')) { setInterval(() => {}, 100); await new Promise(() => {}); }
 if (body.includes('BOOMNOW')) {
+  /*
+   * ⚠️ 自分（分離された test プロセス）を殺しても、node --test の親が
+   * 受け止めて**ふつうの失敗（exit 1）**にしてしまう。ランナーから見える
+   * 境界は親のほうなので、外から殺された状況を作るには**親**を殺す。
+   */
   process.kill(process.ppid, 'SIGKILL');
   await new Promise((r) => setTimeout(r, 3000));
 }
 test('題材がふつうなら、ふつうに通る', () => {});
 `);
-
   for (const [rel, body] of Object.entries(files)) writeFileSync(join(dir, rel), body);
   writeFileSync(join(dir, 'test/mutations.json'), JSON.stringify({ mutations }, null, 2));
-  return dir;
+  return { outer, dir };
 }
 
-/* ランナーを別プロセスで走らせ、終了コードと証跡を返す */
+/* 期待する失敗を省略しないための小さな作り手 */
+function mut(id, over = {}) {
+  return {
+    id, file: 'mod.mjs', find: 'export const value = 1;', replace: 'export const value = 99;',
+    test: GUARD, desc: id, expectedFailure: { testName: WANT }, ...over
+  };
+}
+
 function runRunner(dir, { receipt = 'receipt.json', timeout = 8000, extra = [], env = null } = {}) {
   const receiptPath = receipt === null ? null : join(dir, receipt);
   const args = [join(dir, 'scripts/run-mutations.mjs'),
@@ -127,145 +137,285 @@ function runRunner(dir, { receipt = 'receipt.json', timeout = 8000, extra = [], 
     ? JSON.parse(readFileSync(receiptPath, 'utf8')) : null;
   return { exitCode, stdout, receipt: json, dir, receiptPath };
 }
+const of = (r, id) => (r.receipt.results.find((x) => x.id === id) || {});
+const outcomeOf = (r, id) => of(r, id).outcome;
+const kindOf = (r, id) => of(r, id).failureKind;
 
-const outcomeOf = (r, id) => (r.receipt.results.find((x) => x.id === id) || {}).outcome;
+/* ============================================================
+ * ① 落ち方を区別する（第23回監査 R23-001）
+ * ============================================================ */
 
-test('9通りの状態を、ランナーが実際に走って区別する（R22-004）', () => {
+test('落ちた理由を区別する——構文・import・setup・別テストを検知にしない（R23-001）', () => {
   const dir = makeFixture([
-    /* ① ふつうに検知できる */
-    { id: 'A1', file: 'target.txt', find: 'ALPHA', replace: 'XXXXX',
-      test: 'test/passes.test.mjs', desc: '当たって落ちる' },
-    /* ② 当たったのに通る＝検査の穴 */
-    { id: 'A2', file: 'target.txt', find: 'BETA', replace: 'YYYYY',
-      test: 'test/blind.test.mjs', desc: '当たったが誰も見ていない' },
-    /* ③ 一致0 */
-    { id: 'A3', file: 'target.txt', find: 'NOPE', replace: 'ZZZZZ',
-      test: 'test/passes.test.mjs', desc: '一致しない' },
-    /* ④ 一致数が期待と違う */
-    { id: 'A4', file: 'target.txt', find: 'GAMMA', replace: 'ZZZZZ', expectMatches: 1,
-      test: 'test/passes.test.mjs', desc: '2つあるのに1つのつもり' },
-    /* ⑤ 対象テストが無い */
-    { id: 'A5', file: 'target.txt', find: 'BETA', replace: 'QQQQQ',
-      test: 'test/does-not-exist.test.mjs', desc: '存在しないテスト' },
-    /* ⑥ 対象テストが変異前から落ちている */
-    { id: 'A6', file: 'target.txt', find: 'BETA', replace: 'RRRRR',
-      test: 'test/fails.test.mjs', desc: 'もともと落ちるテスト' },
-    /* ⑦ 対象テストが終わらない */
-    { id: 'A7', file: 'target.txt', find: 'BETA', replace: 'SSSSS',
-      test: 'test/hangs.test.mjs', desc: '終わらないテスト' },
-    /* ⑧ 対象テストが signal で死ぬ */
-    { id: 'A8', file: 'target.txt', find: 'BETA', replace: 'TTTTT',
-      test: 'test/signal.test.mjs', desc: 'signal で死ぬテスト' },
-    /* ⑨ リポジトリの外を指している（★外のファイルは実在する） */
-    { id: 'A9', file: 'target.txt', find: 'BETA', replace: 'UUUUU',
-      test: '../outside.test.mjs', desc: '外を指すテスト' },
-    /* ⑩ 変異前は通るが、変異後に終わらなくなる */
-    { id: 'A10', file: 'target.txt', find: 'ALPHA', replace: 'HANGNOW',
-      test: 'test/breaks-after.test.mjs', desc: '変異後に終わらなくなる' },
-    /* ⑪ 変異前は通るが、変異後に signal で死ぬ */
-    { id: 'A11', file: 'target.txt', find: 'BETA', replace: 'BOOMNOW',
-      test: 'test/breaks-after.test.mjs', desc: '変異後に signal で死ぬ' }
-  ]);
+    mut('K1'),                                     /* 意図した検査が落ちる */
+    mut('K2', { replace: 'export const value = ;' }),
+    mut('K3', { replace: "import missing from './does-not-exist.mjs';\nexport const value = 1;" }),
+    mut('K4', { replace: "throw new Error('setup が壊れた');\nexport const value = 1;" }),
+    mut('K5', { find: 'export const other = 2;', replace: 'export const other = 3;' }),
+    mut('K6', { test: 'test/blind.test.mjs', expectedFailure: { testName: '題材を何も見ない' } })
+  ]).dir;
   const r = runRunner(dir);
   assert.ok(r.receipt, `証跡が書かれていない:\n${r.stdout}`);
 
-  assert.equal(outcomeOf(r, 'A1'), 'applied_and_killed', '当たって落ちたものを検知にしていない');
-  assert.equal(outcomeOf(r, 'A2'), 'applied_but_survived', '素通りを検知に寄せている');
-  assert.equal(outcomeOf(r, 'A3'), 'not_applied', '一致0を素通りに寄せている');
-  assert.equal(outcomeOf(r, 'A4'), 'not_applied', '一致数の食い違いを見逃している');
+  assert.equal(outcomeOf(r, 'K1'), 'applied_and_killed', '意図した検査の失敗を検知にしていない');
+  assert.equal(kindOf(r, 'K1'), 'expected_assertion_failure');
+  assert.equal(of(r, 'K1').expectedFailureMatched, true);
+  assert.deepEqual(of(r, 'K1').failedTestNames, [WANT], '落ちたテスト名を記録していない');
 
-  /* ★ ここが第22回で見つかった穴。どれも「検知」に化けていた */
-  for (const [id, what] of [['A5', '存在しないテスト'], ['A6', 'もともと落ちるテスト'],
-    ['A7', '終わらないテスト'], ['A8', 'signal で死ぬテスト'], ['A9', '外を指すテスト'],
-    ['A10', '変異後に終わらなくなるテスト']]) {
-    assert.equal(outcomeOf(r, id), 'runner_error',
-      `${what}が ${outcomeOf(r, id)} になっている（検知として数えてはいけない）`);
-  }
-  /* 上限で打ち切ったことが、証跡に記録されていること */
-  const hung = r.receipt.results.find((x) => x.id === 'A10');
-  assert.equal(hung.timedOut, true, '上限で打ち切ったのに、証跡へそう書いていない');
+  /* ★ ここが第23回で見つかった穴。どれも「検知」に化けていた */
+  assert.equal(outcomeOf(r, 'K2'), 'runner_error', '構文が壊れただけを検知にしている');
+  assert.equal(kindOf(r, 'K2'), 'syntax_error');
+  assert.equal(outcomeOf(r, 'K3'), 'runner_error', 'import の失敗を検知にしている');
+  assert.equal(kindOf(r, 'K3'), 'module_resolution_error');
+  assert.equal(outcomeOf(r, 'K4'), 'runner_error', '読み込み時の例外を検知にしている');
+  assert.equal(kindOf(r, 'K4'), 'bootstrap_error');
+  assert.equal(outcomeOf(r, 'K5'), 'runner_error', '別のテストだけの失敗を検知にしている');
+  assert.equal(kindOf(r, 'K5'), 'wrong_test_failure');
+  assert.deepEqual(of(r, 'K5').failedTestNames, [OTHER],
+    '実際に落ちたのが別のテストであることを記録していない');
 
-  /*
-   * ⚠️ **A11（変異後に、外から signal で殺される）は POSIX でしか作れない。**
-   *
-   * Windows に signal は無く、プロセスを終わらせても親へ届くのは終了コードだけ
-   * ——「外から殺された」と「テストがふつうに落ちた」が**境界では区別できない**。
-   * ここで期待値を `applied_and_killed` に書き換えると、POSIX で効いている分類まで
-   * 弱まる。1つの環境の実測で期待値を反転させず、**環境ごとに何が観測できるか**で分ける。
-   *
-   * つまりランナーの保証は環境で違う: POSIX では「外から殺された」を検知として
-   * 数えないが、**Windows ではそれができない**（この非対称は報告にも書く）。
-   */
-  const boom = r.receipt.results.find((x) => x.id === 'A11');
-  if (process.platform === 'win32') {
-    assert.equal(boom.signal, null,
-      'Windows で signal が観測できている＝前提が変わったので、この分岐を見直す');
-    assert.equal(typeof boom.exitCode, 'number', '終了コードすら記録されていない');
-  } else {
-    assert.equal(outcomeOf(r, 'A11'), 'runner_error',
-      `変異後に signal で死ぬテストが ${outcomeOf(r, 'A11')} になっている`);
-    assert.equal(boom.signal, 'SIGKILL', `signal を記録していない: ${JSON.stringify(boom.signal)}`);
-    assert.equal(boom.exitCode, null, '終了コードが無いのに数字を記録している');
-  }
-  /* 外を指す件は「外だから」止めたのであって、「無いから」ではないこと */
-  const outside = r.receipt.results.find((x) => x.id === 'A9');
-  assert.match(outside.error, /リポジトリの外/,
-    `外を指す対象を、別の理由で止めている: ${outside.error}`);
+  assert.equal(outcomeOf(r, 'K6'), 'applied_but_survived', '素通りを別の分類にしている');
   assert.equal(r.exitCode, 1, 'これだけ問題があるのに成功で終わっている');
 });
 
-test('変異前に対象テストを素で走らせ、その結果を証跡へ残す（R22-004）', () => {
-  const dir = makeFixture([
-    { id: 'B1', file: 'target.txt', find: 'ALPHA', replace: 'XXXXX',
-      test: 'test/passes.test.mjs', desc: '正常' }
+test('どのテストが落ちるはずかを宣言していない変異は、測れない（R23-001）', () => {
+  const dir = makeFixture([{ id: 'E1', file: 'mod.mjs',
+    find: 'export const value = 1;', replace: 'export const value = 99;',
+    test: GUARD, desc: '宣言なし' }]).dir;
+  const r = runRunner(dir);
+  assert.equal(outcomeOf(r, 'E1'), 'runner_error', '宣言が無いのに検知にしている');
+  assert.equal(kindOf(r, 'E1'), 'expectation_missing');
+});
+
+test('証跡に、落ちた理由と落ちたテスト名が残る（R23-001）', () => {
+  const { dir } = makeFixture([mut('P1')]);
+  const r = runRunner(dir);
+  const one = r.receipt.results[0];
+  for (const k of ['failureKind', 'failedTestNames', 'expectedFailure',
+    'expectedFailureMatched', 'sanitizedDiagnostic', 'stdoutSha256', 'stderrSha256']) {
+    assert.ok(k in one, `証跡に ${k} が無い`);
+  }
+  assert.equal(one.expectedFailure.testName, WANT);
+  /* 診断は伏せてから残す（絶対パスと長い列を出さない） */
+  assert.ok(typeof one.sanitizedDiagnostic === 'string' && one.sanitizedDiagnostic.length > 0);
+  /*
+   * ⚠️ 「/private/ か /Users/ か /home/ で始まるか」で見ていたが、使い捨ての
+   * 作業場は /var/folders/… なので**一度も当たらなかった**（変異 P08 が素通り）。
+   * 題材そのもののパスで見る——これなら環境によらず必ず当たる。
+   */
+  assert.ok(!one.sanitizedDiagnostic.includes(dir),
+    `診断に作業場の絶対パスが残っている: ${one.sanitizedDiagnostic.slice(0, 160)}`);
+  assert.match(one.sanitizedDiagnostic, /<path>/,
+    '伏せた印が無い＝そもそも伏せていない');
+  /*
+   * ⚠️ **落ちた理由の本文まで入っていること。** 見出しの行だけを集めていた版では
+   * 本文が1文字も入らず、下の「パスが残っていないか」が**当たるものが無いまま**
+   * 通っていた（変異 P25 が素通りして分かった）。
+   */
+  assert.match(one.sanitizedDiagnostic, /を見よ/,
+    `落ちた理由の本文が入っていない: ${one.sanitizedDiagnostic.slice(0, 200)}`);
+  /*
+   * ⚠️ **どのOSでも、両方の形のパスを伏せる。**
+   * Windows の CI で「バックスラッシュのパスが伏せられていない」と落ちた。
+   * 動いているOSに現れる形だけを見ていると、片方は永久に検査されない。
+   */
+  assert.ok(!one.sanitizedDiagnostic.includes('D:\\a\\repo'),
+    `Windows形式のパスが残っている: ${one.sanitizedDiagnostic.slice(0, 160)}`);
+  assert.ok(!one.sanitizedDiagnostic.includes('/var/tmp/repo'),
+    `POSIX形式のパスが残っている: ${one.sanitizedDiagnostic.slice(0, 160)}`);
+});
+
+/* ============================================================
+ * ② 書き込む範囲と、必ず戻すこと（第23回監査 R23-002）
+ * ============================================================ */
+
+test('変異する対象が、リポジトリの外を指せない（R23-002）', () => {
+  const { outer, dir } = makeFixture([
+    mut('O1', { file: '../outside.txt', find: 'SAFE', replace: 'BROKEN' })
   ]);
+  const before = readFileSync(join(outer, 'outside.txt'), 'utf8');
+  const r = runRunner(dir);
+  const after = readFileSync(join(outer, 'outside.txt'), 'utf8');
+  assert.equal(outcomeOf(r, 'O1'), 'runner_error',
+    'リポジトリの外を書き換えたうえで検知にしている');
+  assert.equal(kindOf(r, 'O1'), 'target_rejected');
+  assert.match(of(r, 'O1').error, /リポジトリの外/, `別の理由で止めている: ${of(r, 'O1').error}`);
+  assert.equal(after, before, '外のファイルが書き換わっている');
+});
+
+test('リポジトリの中の symlink で外へ出られない（R23-002）', { skip: process.platform === 'win32'
+  ? 'Windows では symlink の作成に権限が要るため、この題材を作れない' : false }, () => {
+  const { outer, dir } = makeFixture([
+    mut('L1', { file: 'link.txt', find: 'SAFE', replace: 'BROKEN' })
+  ]);
+  symlinkSync(join(outer, 'outside.txt'), join(dir, 'link.txt'));
+  const before = readFileSync(join(outer, 'outside.txt'), 'utf8');
+  const r = runRunner(dir);
+  assert.equal(outcomeOf(r, 'L1'), 'runner_error', 'symlink 越しに外を書き換えている');
+  assert.match(of(r, 'L1').error, /symlink/, `別の理由で止めている: ${of(r, 'L1').error}`);
+  assert.equal(readFileSync(join(outer, 'outside.txt'), 'utf8'), before);
+});
+
+test('対象テストがリポジトリの外を指せない（外に実在しても）（R23-002）', () => {
+  const dir = makeFixture([mut('T1', { test: '../outside.test.mjs' })]).dir;
+  const r = runRunner(dir);
+  assert.equal(outcomeOf(r, 'T1'), 'runner_error');
+  assert.match(of(r, 'T1').error, /リポジトリの外/);
+});
+
+test('復旧が例外を投げても、証跡が残り、検知にはならない（R23-002）', () => {
+  /*
+   * ⚠️ 前はここでランナーごと落ち、**証跡が1行も書かれなかった**。
+   * 何が起きたか誰にも分からないまま終わるのがいちばん困る。
+   */
+  const dir = makeFixture([mut('X1', { test: 'test/wreck.test.mjs',
+    expectedFailure: { testName: '変異したときだけ、対象を消してディレクトリにする' } })], {
+    'test/wreck.test.mjs': `
+import test from 'node:test';
+import { rmSync, mkdirSync, readFileSync } from 'node:fs';
+const p = new URL('../mod.mjs', import.meta.url);
+const mutated = readFileSync(p, 'utf8').includes('99');
+test('変異したときだけ、対象を消してディレクトリにする', () => {
+  if (!mutated) return;
+  rmSync(p, { force: true });
+  mkdirSync(p);
+  throw new Error('わざと落とす');
+});
+`
+  }).dir;
+  const r = runRunner(dir);
+  assert.ok(r.receipt, `復旧が例外を投げると証跡が残らない:\n${r.stdout}`);
+  assert.equal(outcomeOf(r, 'X1'), 'runner_error', '戻せていないのに検知にしている');
+  assert.equal(kindOf(r, 'X1'), 'restore_failed');
+  assert.equal(of(r, 'X1').restored, false);
+  assert.ok(of(r, 'X1').restoreError, '復旧の失敗理由が残っていない');
+  assert.notEqual(r.exitCode, 0);
+});
+
+test('書いたのに読み戻せなければ、戻したうえでランナー失敗にする（R23-002）', () => {
+  /*
+   * 前は「当たらなかった（not_applied）」かつ「戻した（restored: true）」として
+   * **復旧を呼ばずに**次へ進んでいた——ファイルは変異したまま、証跡は嘘をついていた。
+   * 読み戻しの結果を変える題材は作れないので、**実装にその分岐が在ること**と、
+   * ふつうの経路では確かに戻せていることを見る。
+   */
+  const src = readFileSync(RUNNER, 'utf8');
+  assert.match(src, /readback_mismatch/, '読み戻し不一致の分類が無い');
+  assert.match(src, /wrote: true[\s\S]{0,240}読み戻せない/,
+    '読み戻せなかったとき「書いた」と記録していない');
+  const dir = makeFixture([mut('R1')]).dir;
+  const r = runRunner(dir);
+  assert.equal(of(r, 'R1').restored, true, '対照: ふつうは戻せている');
+  assert.equal(of(r, 'R1').restoredSha256, of(r, 'R1').beforeSha256);
+});
+
+/* ============================================================
+ * ③ 第22回までの分類（引き続き効いていること）
+ * ============================================================ */
+
+test('前提が崩れている状態を、検知として数えない（R22-004）', () => {
+  const dir = makeFixture([
+    mut('A1'),
+    mut('A3', { find: 'NOPE' }),
+    mut('A4', { find: 'GAMMA', replace: 'DELTA', expectMatches: 1 }),
+    mut('A5', { test: 'test/does-not-exist.test.mjs' }),
+    mut('A6', { test: 'test/fails.test.mjs', expectedFailure: { testName: 'もともと落ちる' } }),
+    mut('A7', { test: 'test/hangs.test.mjs', expectedFailure: { testName: '終わらない' } }),
+    mut('A10', { replace: 'export const value = 1; // HANGNOW',
+      test: 'test/breaks-after.test.mjs',
+      expectedFailure: { testName: '題材がふつうなら、ふつうに通る' } }),
+    mut('A11', { replace: 'export const value = 1; // BOOMNOW',
+      test: 'test/breaks-after.test.mjs',
+      expectedFailure: { testName: '題材がふつうなら、ふつうに通る' } })
+  ]).dir;
+  const r = runRunner(dir);
+  assert.equal(outcomeOf(r, 'A1'), 'applied_and_killed');
+  assert.equal(outcomeOf(r, 'A3'), 'not_applied', '一致0を素通りに寄せている');
+  assert.equal(outcomeOf(r, 'A4'), 'not_applied', '一致数の食い違いを見逃している');
+  for (const [id, what] of [['A5', '存在しないテスト'], ['A6', 'もともと落ちるテスト'],
+    ['A7', '終わらないテスト'], ['A10', '変異後に終わらなくなるテスト']]) {
+    assert.equal(outcomeOf(r, id), 'runner_error',
+      `${what}が ${outcomeOf(r, id)} になっている（検知として数えてはいけない）`);
+  }
+  /*
+   * ⚠️ **「止まった」だけでなく「どの検査が止めたか」まで見る。**
+   * outcome しか見ていなかったので、手前の検査を外しても後ろの検査が
+   * 別の理由で止め、**外したことに気づけなかった**（N19・N21 が素通りした）。
+   */
+  assert.equal(kindOf(r, 'A5'), 'target_rejected',
+    `存在しないテストを、パスの検査で止めていない: ${kindOf(r, 'A5')}`);
+  assert.equal(kindOf(r, 'A6'), 'baseline_failed');
+  assert.equal(kindOf(r, 'A7'), 'baseline_failed');
+  assert.equal(kindOf(r, 'A10'), 'timeout',
+    `上限打ち切りを、上限として分類していない: ${kindOf(r, 'A10')}`);
+  assert.equal(of(r, 'A10').timedOut, true, '上限で打ち切ったのに、証跡へそう書いていない');
+
+  /*
+   * ⚠️ **A11（変異後に、外から signal で殺される）は POSIX でしか作れない。**
+   * Windows に signal は無く、外からプロセスを終わらせても親へ届くのは終了コード
+   * だけ——「外から殺された」と「テストがふつうに落ちた」を境界では区別できない。
+   * 1つの環境の実測で期待値を反転させず、環境ごとに何が観測できるかで分ける。
+   */
+  const boom = of(r, 'A11');
+  if (process.platform === 'win32') {
+    assert.equal(boom.signal, null,
+      'Windows で signal が観測できている＝前提が変わったので、この分岐を見直す');
+  } else {
+    assert.equal(outcomeOf(r, 'A11'), 'runner_error',
+      `変異後に signal で死ぬテストが ${outcomeOf(r, 'A11')} になっている`);
+    assert.equal(boom.signal, 'SIGKILL');
+    assert.equal(boom.exitCode, null);
+  }
+});
+
+test('変異前に対象テストを素で走らせ、その結果を証跡へ残す（R22-004）', () => {
+  const dir = makeFixture([mut('B1')]).dir;
   const r = runRunner(dir);
   assert.equal(r.exitCode, 0, `正常な変異1件で失敗している:\n${r.stdout}`);
-  assert.ok(Array.isArray(r.receipt.baselines), '変異前の対照が証跡に無い');
-  const bl = r.receipt.baselines.find((b) => b.test === 'test/passes.test.mjs');
-  assert.ok(bl, '対象テストの変異前の結果が記録されていない');
-  assert.equal(bl.passed, true);
-  assert.equal(bl.exitCode, 0);
-  assert.ok(bl.stdoutSha256, '変異前の出力のハッシュが無い');
-  /* 変異後の結果にも、変異前の結果が並んでいる（後から突き合わせられる） */
+  const bl = r.receipt.baselines.find((b) => b.test === GUARD);
+  assert.ok(bl && bl.passed === true && bl.exitCode === 0 && bl.stdoutSha256,
+    '変異前の対照が記録されていない');
   const one = r.receipt.results[0];
-  assert.equal(one.baseline.exitCode, 0, '結果の側に変異前の記録が無い');
-  assert.notEqual(one.beforeSha256, one.afterSha256, '当たったのに中身が変わっていない');
-  assert.equal(one.restoredSha256, one.beforeSha256, '元へ戻せていない');
+  assert.equal(one.baseline.exitCode, 0);
+  assert.notEqual(one.beforeSha256, one.afterSha256);
+  assert.equal(one.restoredSha256, one.beforeSha256);
 });
 
 test('期待した数だけ置換し、置換した数を証跡へ残す（R22-004）', () => {
-  /*
-   * 以前は `String.replace` に文字列を渡していたので、`expectMatches: 2` と
-   * 書いても**最初の1個しか**置換しなかった。「2箇所とも検査されている」ことの
-   * 対照になっていなかった。
-   */
   const dir = makeFixture([
-    { id: 'C1', file: 'target.txt', find: 'GAMMA', replace: 'DELTA', expectMatches: 2,
-      test: 'test/passes.test.mjs', desc: '2箇所を両方置換する' }
-  ]);
+    mut('C1', { find: 'GAMMA', replace: 'DELTA', expectMatches: 2,
+      expectedFailure: { testName: '数え上げ: GAMMA が2つ' } }),
+    /*
+     * ⚠️ 置き換え残しを「0 と決め打ち」しても C1 は通ってしまう（変異 P14 が素通りした）。
+     * 置換後に `find` が残る形——`replace` が `find` を含む——を1つ入れて、
+     * **数えた結果**でなければ合わない値を要求する。
+     */
+    mut('C2', { find: 'GAMMA', replace: 'GAMMA GAMMA', expectMatches: 2,
+      expectedFailure: { testName: '数え上げ: GAMMA が2つ' } })
+  ]).dir;
   const r = runRunner(dir);
-  const one = r.receipt.results[0];
-  assert.equal(one.outcome, 'applied_and_killed');
-  assert.equal(one.appliedReplacementCount, 2, '期待した数だけ置換していない');
-  const after = readFileSync(join(dir, 'target.txt'), 'utf8');
-  assert.equal(after.includes('GAMMA'), true, '元へ戻していない');
+  assert.equal(outcomeOf(r, 'C1'), 'applied_and_killed');
+  assert.equal(of(r, 'C1').appliedReplacementCount, 2, '期待した数だけ置換していない');
+  /*
+   * ⚠️ 置換した数を「一致数」から計算すると、**1個しか置き換えていなくても
+   * 2と書ける**（N24 がそれで素通りした）。置き換え残しを実測で見る。
+   */
+  assert.equal(of(r, 'C1').remainingAfter, 0,
+    `置き換え残しがある: ${of(r, 'C1').remainingAfter}`);
+  assert.equal(outcomeOf(r, 'C2'), 'applied_and_killed');
+  assert.equal(of(r, 'C2').remainingAfter, 4,
+    `置き換え残しを数えていない（2箇所を「GAMMA GAMMA」にしたら4残るはず）: ${of(r, 'C2').remainingAfter}`);
+  assert.match(readFileSync(join(dir, 'mod.mjs'), 'utf8'), /GAMMA/, '元へ戻していない');
 });
 
 test('証跡には、何をどの版で測ったかが入る（R22-004）', () => {
-  const dir = makeFixture([
-    { id: 'D1', file: 'target.txt', find: 'ALPHA', replace: 'XXXXX',
-      test: 'test/passes.test.mjs', desc: '正常' }
-  ]);
+  const dir = makeFixture([mut('D1')]).dir;
   const r = runRunner(dir);
   const p = r.receipt.provenance;
-  assert.ok(p, '由来が証跡に無い');
   for (const k of ['runnerSha256', 'specSha256', 'nodeVersion', 'startedAt', 'completedAt', 'timeoutMs']) {
     assert.ok(p[k] !== undefined && p[k] !== null, `由来に ${k} が無い`);
   }
   assert.match(p.runnerSha256, /^[0-9a-f]{64}$/);
-  assert.match(p.specSha256, /^[0-9a-f]{64}$/);
-  /* 定義を1文字変えたら、証跡のハッシュも変わる（＝本当にその定義を測っている） */
   const spec = JSON.parse(readFileSync(join(dir, 'test/mutations.json'), 'utf8'));
   spec.mutations[0].desc += '（変えた）';
   writeFileSync(join(dir, 'test/mutations.json'), JSON.stringify(spec, null, 2));
@@ -275,56 +425,28 @@ test('証跡には、何をどの版で測ったかが入る（R22-004）', () =
 });
 
 test('証跡を書けなければ、成功で終わらない（R22-004）', () => {
-  const dir = makeFixture([
-    { id: 'E1', file: 'target.txt', find: 'ALPHA', replace: 'XXXXX',
-      test: 'test/passes.test.mjs', desc: '正常' }
-  ]);
-  /* 存在しない階層の下を指す＝書けない */
+  const dir = makeFixture([mut('E2')]).dir;
   const r = runRunner(dir, { receipt: join('no-such-dir', 'deep', 'receipt.json') });
   assert.notEqual(r.exitCode, 0, '証跡を書けなかったのに成功で終わっている');
-  assert.match(r.stdout + '', /./);
-});
-
-test('元へ戻せなかったら、検知ではなくランナー失敗にする（R22-004）', () => {
-  const dir = makeFixture([
-    { id: 'F1', file: 'target.txt', find: 'ALPHA', replace: 'XXXXX',
-      test: 'test/passes.test.mjs', desc: '書き戻せない題材' }
-  ]);
-  /*
-   * 復旧そのものを失敗させるのは環境依存が大きい（root では読み取り専用でも書ける）。
-   * ここでは**判定の分岐が実在すること**を、ランナーの実装から確かめる。
-   * ⚠️ 静的な確認であることを承知のうえで、「戻せた」ことの実測は上のテストが持つ。
-   */
-  const src = readFileSync(RUNNER, 'utf8');
-  assert.match(src, /if \(!restored\) \{\s*\n\s*results\.push\(\{ \.\.\.common, outcome: 'runner_error'/,
-    '復旧できなかったときに runner_error にする分岐が無い');
-  const r = runRunner(dir);
-  assert.equal(r.receipt.results[0].restored, true, '対照: ふつうは戻せている');
 });
 
 test('分類の4値は、証跡の集計と1件ずつ一致する（R22-004）', () => {
   const dir = makeFixture([
-    { id: 'G1', file: 'target.txt', find: 'ALPHA', replace: 'XXXXX',
-      test: 'test/passes.test.mjs', desc: '落ちる' },
-    { id: 'G2', file: 'target.txt', find: 'BETA', replace: 'YYYYY',
-      test: 'test/blind.test.mjs', desc: '素通り' },
-    { id: 'G3', file: 'target.txt', find: 'NOPE', replace: 'ZZZZZ',
-      test: 'test/passes.test.mjs', desc: '当たらない' },
-    { id: 'G4', file: 'target.txt', find: 'BETA', replace: 'WWWWW',
-      test: 'test/fails.test.mjs', desc: 'ランナー失敗' }
-  ]);
+    mut('G1'),
+    mut('G2', { test: 'test/blind.test.mjs', expectedFailure: { testName: '題材を何も見ない' } }),
+    mut('G3', { find: 'NOPE' }),
+    mut('G4', { test: 'test/fails.test.mjs', expectedFailure: { testName: 'もともと落ちる' } })
+  ]).dir;
   const r = runRunner(dir);
   const count = (o) => r.receipt.results.filter((x) => x.outcome === o).length;
   assert.equal(r.receipt.applied_and_killed, count('applied_and_killed'));
   assert.equal(r.receipt.applied_but_survived, count('applied_but_survived'));
   assert.equal(r.receipt.not_applied, count('not_applied'));
   assert.equal(r.receipt.runner_error, count('runner_error'));
-  assert.equal(r.receipt.total, r.receipt.results.length);
   assert.deepEqual(
     [r.receipt.applied_and_killed, r.receipt.applied_but_survived,
-      r.receipt.not_applied, r.receipt.runner_error],
-    [1, 1, 1, 1], `4値がそれぞれ1件ずつにならない: ${JSON.stringify(r.receipt.results.map((x) => [x.id, x.outcome]))}`);
-  /* 集計の見出しにも、素通り・当たらない・ランナー失敗が出る */
+      r.receipt.not_applied, r.receipt.runner_error], [1, 1, 1, 1],
+    `4値がそれぞれ1件ずつにならない: ${JSON.stringify(r.receipt.results.map((x) => [x.id, x.outcome]))}`);
   assert.match(r.stdout, /素通り 1/);
   assert.match(r.stdout, /当たらなかった 1/);
   assert.match(r.stdout, /ランナー失敗 1/);
@@ -335,24 +457,12 @@ test('呼ばれ方（NODE_TEST_CONTEXT）で判定が変わらない（R22-004�
    * ⚠️ `node --test` は、自分が別の test runner の子だと判断すると
    * **失敗しても終了コード 0 で終わる**。この変数が孫へ伝わると、
    * ランナーから見たテストは常に「通った」——**全件が素通りに化ける**。
-   *
-   * 落ちるはずのテストが 0 で返ってくるので、出力からは区別できない。
-   * 実際、このファイルを書いた最初の版は**7件中4件が誤判定**していた
-   * （検知 0 件・素通り 3 件）。判定の根拠を環境変数に握らせないこと。
    */
-  const mutations = [
-    { id: 'H1', file: 'target.txt', find: 'ALPHA', replace: 'XXXXX',
-      test: 'test/passes.test.mjs', desc: '落ちるはず' },
-    { id: 'H2', file: 'target.txt', find: 'BETA', replace: 'YYYYY',
-      test: 'test/blind.test.mjs', desc: '素通りするはず' }
-  ];
-  /*
-   * まず、この環境変数が本当に終了コードを変えることを確かめる（対照）。
-   * ⚠️ このテスト自身が `node --test` の中で動いているので、**素の環境は
-   *    自分で作る**。`process.env` をそのまま使うと既に変数が入っていて、
-   *    対照のほうが空振りする（最初に書いた版がそうだった）。
-   */
-  const probe = makeFixture(mutations);
+  const mutations = [mut('H1'),
+    mut('H2', { test: 'test/blind.test.mjs', expectedFailure: { testName: '題材を何も見ない' } })];
+  /* まず、この環境変数が本当に終了コードを変えることを確かめる（対照）。
+     ⚠️ このテスト自身が `node --test` の中なので、**素の環境は自分で作る**。 */
+  const probe = makeFixture(mutations).dir;
   const cleanEnv = { ...process.env };
   delete cleanEnv.NODE_TEST_CONTEXT;
   delete cleanEnv.NODE_OPTIONS;
@@ -366,8 +476,7 @@ test('呼ばれ方（NODE_TEST_CONTEXT）で判定が変わらない（R22-004�
   assert.equal(wrapped, 0,
     'この node では NODE_TEST_CONTEXT が終了コードを変えない＝以下の検査は空振り');
 
-  /* その状態でランナーを起動しても、分類が変わらないこと */
-  const dir = makeFixture(mutations);
+  const dir = makeFixture(mutations).dir;
   const r = runRunner(dir, { env: { NODE_TEST_CONTEXT: 'child-v8' } });
   assert.equal(outcomeOf(r, 'H1'), 'applied_and_killed',
     '呼び出し元の環境変数で、検知が素通りに化けている');

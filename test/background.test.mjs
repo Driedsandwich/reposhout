@@ -23,8 +23,11 @@ const BG = readFileSync(join(ROOT, 'src/background.js'), 'utf8');
 /* Chrome を丸ごと偽物にして service worker を読み込む */
 function mount({ queryResult = null, contentScript = true,
                 openFails = false, fakeTimers = false, fault = null,
-                badgeFault = null } = {}) {
+                badgeFault = null, createResult = 'ok', setFails = false,
+                getFailsOnce = false, initialRecords = null } = {}) {
   const log = { opened: [], notified: [], badges: [], titles: [], colors: [], created: [] };
+  const store = initialRecords ? { shareWindows: { ...initialRecords } } : {};
+  let storeGetCalls = 0;
   /*
    * 偽のタイマー（第15回監査 R15-005）。
    * 「6000ms 後に消える」ことは、実時間を待たずに**予約を実行して**確かめる。
@@ -101,11 +104,35 @@ function mount({ queryResult = null, contentScript = true,
       async create(o) {
         if (openFails) throw new Error('cannot open window');
         log.opened.push(o.url);
+        /*
+         * 第23回監査 R23-003。`windows.create` は Window | undefined を返しうる
+         * （公式仕様）。ID が返らない形を、ここで実際に作れるようにする。
+         */
+        if (createResult === 'undefined') return undefined;
+        if (createResult === 'empty') return {};
+        /* 窓だけ作れない（タブへは回れる）状態。openFails は両方失敗させる */
+        if (createResult === 'throws') throw new Error('cannot open window');
         return { id: 99, tabs: [{ id: 100 }] };
       },
       async remove() {}, onRemoved: { addListener() {} }
     },
-    storage: { session: { async get() { return {}; }, async set() {} } },
+    /*
+     * 第23回監査 R23-003。読み書きを**個別に**失敗させられるようにする。
+     * 「読めなかったのに書く」形は、実ブラウザでは狙って作れない。
+     */
+    storage: {
+      session: {
+        async get(k) {
+          storeGetCalls++;
+          if (getFailsOnce && storeGetCalls === 1) throw new Error('読み出しに失敗');
+          return { [k]: store[k] };
+        },
+        async set(o) {
+          if (setFails) throw new Error('書き込みに失敗');
+          Object.assign(store, JSON.parse(JSON.stringify(o)));
+        }
+      }
+    },
     i18n: { getMessage: (k) => `[${k}]` }
   };
   const ctx = {
@@ -146,7 +173,7 @@ function mount({ queryResult = null, contentScript = true,
     });
   }
   return { bg: ctx.GXS_BG, log, advance, send, pending: () => timers.size,
-    staleClears: () => staleClears.slice() };
+    staleClears: () => staleClears.slice(), records: () => store.shareWindows };
 }
 
 const TAB_A_NO_URL = { id: 1, title: 'A' };
@@ -680,4 +707,97 @@ test('付け直しの世代管理は、消去APIの失敗に巻き込まれな�
    */
   assert.deepEqual(staleClears(), [],
     `走り終えた予約を消しに行っている（登録簿に古い世代が残る）: ${JSON.stringify(staleClears())}`);
+});
+
+/* ---- Chrome API の部分成功（第23回監査 R23-003） ---------------------- */
+
+test('窓のIDが返らなければ、開いたことにしない（R23-003）', async () => {
+  /*
+   * 第23回監査 R23-003。`chrome.windows.create` は `Window | undefined` を
+   * 返しうる（公式仕様）。前は ID が無くても `opened: 'popup'` ＝成功として返し、
+   * 呼び出し元は `{opened:true}` を受け取っていた——**開いたかどうか分からない**のに。
+   */
+  for (const createResult of ['undefined', 'empty']) {
+    const { bg } = mount({ createResult });
+    const r = await bg.openShareWindow('https://x.com/intent/post?text=a');
+    assert.equal(r.state, 'creation_unknown', `${createResult}: 状態が違う: ${JSON.stringify(r)}`);
+    assert.equal(r.windowOpened, null, '開いたかどうかを断定している');
+    assert.equal(r.escAvailable, false);
+    assert.equal(r.windowId, null);
+  }
+});
+
+test('開いたか分からないときは、タブで開き直さず案内を1回出す（R23-003）', async () => {
+  /*
+   * ここでタブを開くと、窓が実際には開いていた場合に**二重に開く**。
+   * 開けなかったのではなく「分からない」ので、その通りに伝える。
+   */
+  const { bg, log } = mount({ createResult: 'undefined' });
+  const res = await bg.shareTab({ id: 7, url: 'https://github.com/o/r' });
+  assert.equal(res.opened, false);
+  assert.equal(res.reason, 'open_unknown');
+  assert.equal(res.notified, true, '何も伝えずに終わっている');
+  assert.deepEqual(log.created, [], 'タブで開き直して二重に開いている');
+  assert.equal(log.notified.length, 1, `案内が1回でない: ${JSON.stringify(log.notified)}`);
+  assert.equal(log.notified[0].reason, 'open_unknown');
+});
+
+test('記録できなければ、開いたことは認めてもEscは使えないと返す（R23-003）', async () => {
+  /*
+   * 窓は開いた（それは事実）。しかし記録できていないので Esc では閉じられない。
+   * 前は成功として畳んでいたので、**文書が説明しているEscが使えない**ことに
+   * 誰も気づけなかった（実測: isShareWindow が false）。
+   */
+  const { bg } = mount({ setFails: true });
+  const r = await bg.openShareWindow('https://x.com/intent/post?text=a');
+  assert.equal(r.state, 'popup_confirmed_untracked');
+  assert.equal(r.windowOpened, true, '開いたことまで否定している');
+  assert.equal(r.escAvailable, false, 'Escが使えると偽っている');
+  assert.equal(r.errorKind, 'write_failed');
+  assert.equal(await bg.isShareWindow(99), false, '記録できていないのに所有を認めている');
+});
+
+test('台帳を読めなかったときは、書かない（既にある記録を消さない）（R23-003）', async () => {
+  /*
+   * ⚠️ 前は読み取り失敗を「空の台帳」に変えていたので、直後の書き込みが
+   * **他の共有ウィンドウの記録を丸ごと消して**いた。消えた窓は Esc で閉じられない。
+   */
+  const { bg, records } = mount({ getFailsOnce: true, initialRecords: { 10: Date.now() } });
+  const r = await bg.rememberShareWindow(20);
+  assert.equal(r.ok, false, '読めていないのに成功を返している');
+  assert.equal(r.errorKind, 'read_failed');
+  const rec = records();
+  assert.ok(Object.prototype.hasOwnProperty.call(rec, '10'), '既にあった記録を消している');
+  assert.ok(!Object.prototype.hasOwnProperty.call(rec, '20'), '読めていないのに書いている');
+});
+
+test('台帳を読めなければ、所有を認めない（R23-003）', async () => {
+  const { bg } = mount({ getFailsOnce: true, initialRecords: { 99: Date.now() } });
+  assert.equal(await bg.isShareWindow(99), false,
+    '読めていないのに「拡張が開いた窓だ」と認めている');
+  /* 対照: 読めるようになれば認める */
+  const { bg: bg2 } = mount({ initialRecords: { 99: Date.now() } });
+  assert.equal(await bg2.isShareWindow(99), true, '対照が壊れている（読めても認めない）');
+});
+
+test('すべて正常なら、開いて記録できたと返す（対照・R23-003）', async () => {
+  const { bg } = mount({});
+  const r = await bg.openShareWindow('https://x.com/intent/post?text=a');
+  assert.equal(r.state, 'popup_confirmed_tracked');
+  assert.equal(r.windowOpened, true);
+  assert.equal(r.escAvailable, true);
+  assert.equal(r.windowId, 99);
+  assert.equal(await bg.isShareWindow(99), true);
+});
+
+test('ポップアップを作れなければタブで開き、Escの対象にはしない（対照・R23-003）', async () => {
+  const { bg, log } = mount({ createResult: 'throws' });
+  const r = await bg.openShareWindow('https://x.com/intent/post?text=a');
+  assert.equal(r.state, 'tab_confirmed');
+  assert.equal(r.windowOpened, true);
+  assert.equal(r.escAvailable, false, 'タブをEscの対象にしている');
+  assert.equal(log.created.length, 1);
+  /* 対照: どちらも開けなければ failed */
+  const { bg: bg2 } = mount({ openFails: true });
+  assert.equal((await bg2.openShareWindow('https://x.com/intent/post?text=a')).state, 'failed');
 });

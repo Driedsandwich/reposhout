@@ -237,5 +237,125 @@
   "refusedExampleAnchors": {
     "README.md": "**GitHub's own function pages are not repositories.**",
     "README.ja.md": "**GitHubの機能ページはリポジトリではありません。**"
-  }
+  },
+  "_historicalClaimSpansAbout": [
+    "履歴として検査から外している範囲の正本（第23回監査 R23-001 の作業中に追加）。",
+    "囲いの**数と大きさ**だけを見ていたので、既存の囲いを**別の現在の文へ動かす**変異が",
+    "素通りしていた（帳簿係のテストが副作用で落ちていただけだった）。",
+    "囲った中身をハッシュで固定する。動かす・広げる・別の文へ移すと必ず落ちる。",
+    "増やすとき・書き換えるときは、それが本当に履歴かを確かめてからここを直す。"
+  ],
+  "historicalClaimSpans": [
+    {
+      "file": "README.md",
+      "reason": "第20回までこの一覧が挙げていた誤った例。現在は挙げていない",
+      "chars": 177,
+      "sha256": "32bb422b05209967ab12c22bd96395be37bb54e60741acc707a2e121e53d7243"
+    },
+    {
+      "file": "README.md",
+      "reason": "第22回までのREADMEの説明。実際の採用理由と食い違っていた",
+      "chars": 240,
+      "sha256": "3fe49683777b0438be6a453b276040f9d6bb0a87adf392ea6e6cd60c245eb5da"
+    },
+    {
+      "file": "README.ja.md",
+      "reason": "第20回までこの一覧が挙げていた誤った例。現在は挙げていない",
+      "chars": 134,
+      "sha256": "6a892a80179d2558abb191d18867ada37c968cf651ad61f162748b58f295200a"
+    },
+    {
+      "file": "README.ja.md",
+      "reason": "第22回までのREADMEの説明。実際の採用理由と食い違っていた",
+      "chars": 166,
+      "sha256": "b4ff7b8082c13e399743a5ff55a8e9f58db8c911293ed1933c51477b2014af50"
+    },
+    {
+      "file": "PRIVACY.md",
+      "reason": "1.1.8より前の版の挙動。現在の仕様ではない",
+      "chars": 129,
+      "sha256": "c86dc4af2bcd5ffea3ee13bc2026d1573796a0b26249212712772ce81479d105"
+    },
+    {
+      "file": "PRIVACY.md",
+      "reason": "1.1.8より前の版の挙動。現在の仕様ではない",
+      "chars": 112,
+      "sha256": "04f4b6ac24fee168a494da3082d2d73619983114aef329b1ce6f3927e2400fd0"
+    },
+    {
+      "file": "store/LISTING.md",
+      "reason": "第10回監査より前の、この手順書自身の記述。製品仕様の説明ではない",
+      "chars": 139,
+      "sha256": "5b6d63cb44376e9e507c15ae7423ef4f89a367c5c26f2e6af56b1377fcb51da9"
+    },
+    {
+      "file": "store/LISTING.md",
+      "reason": "第5回監査より前の文書構成。現在の運用ではない",
+      "chars": 204,
+      "sha256": "69ba4d8db526997c3aaa96e2c12c3817745dbe02fe608299b414592645898358"
+    },
+    {
+      "file": "store/STORE_DASHBOARD_CHANGES.md",
+      "reason": "第5回監査より前の文書構成。現在の運用ではない",
+      "chars": 164,
+      "sha256": "de4185443b7f7377332e181f514a3ddd72df2a519689407ea3e36eb0655f7705"
+    },
+    {
+      "file": "store/STORE_DASHBOARD_CHANGES.md",
+      "reason": "第5回〜第14回のPII申告の経緯。現在の仕様ではない",
+      "chars": 390,
+      "sha256": "87289308e8f035c419f097a38fe4290ffef0e98617f812a25ae6e310b2c4c8fc"
+    },
+    {
+      "file": "store/STORE_DASHBOARD_CHANGES.md",
+      "reason": "1.1.7までの挙動。現在の仕様ではない",
+      "chars": 148,
+      "sha256": "22222b3cac11ba5ab2b8a21236d344a07ec62da570d97147f667f7fc74762ac5"
+    },
+    {
+      "file": "src/share.js",
+      "reason": "第14回までの設計。現在の仕様ではない",
+      "chars": 164,
+      "sha256": "2b45c731e6979daf89176baa77804b07af0f0d1578d5dfee6c4100bac28d6281"
+    }
+  ],
+  "_openOutcomeAbout": [
+    "共有ウィンドウを開いた結果の正本（第23回監査 R23-003）。",
+    "前は opened: 'popup' | 'tab' | 'none' の3値へ畳んでいたので、",
+    "『窓のIDが返らなかった』『記録できなかった』が成功に混ざっていた。",
+    "**開いたこと**と**Escで閉じられること**は別の事実なので、別の欄で返す。"
+  ],
+  "openOutcomes": [
+    {
+      "state": "popup_confirmed_tracked",
+      "windowOpened": true,
+      "escAvailable": true,
+      "meaning": "窓が開き、記録もできた。Escで閉じられる"
+    },
+    {
+      "state": "popup_confirmed_untracked",
+      "windowOpened": true,
+      "escAvailable": false,
+      "meaning": "窓は開いたが記録できなかった。Escでは閉じられない"
+    },
+    {
+      "state": "creation_unknown",
+      "windowOpened": null,
+      "escAvailable": false,
+      "meaning": "ブラウザがIDを返さず、開いたかどうか分からない。二重に開かないためタブでは開き直さず、案内を1回出す"
+    },
+    {
+      "state": "tab_confirmed",
+      "windowOpened": true,
+      "escAvailable": false,
+      "meaning": "ポップアップを作れずタブで開いた。利用者が自分で開いたタブと見分けがつかないので、Escの対象にしない"
+    },
+    {
+      "state": "failed",
+      "windowOpened": false,
+      "escAvailable": false,
+      "meaning": "どちらでも開けなかった。案内を1回出す"
+    }
+  ],
+  "storageFailureHandling": "読み取りに失敗したら**書かない**（既にある記録を消さないため）。読めないときは「拡張が開いた窓だ」と認めない。書き込みに失敗したら、開いたことは認めても escAvailable=false を返す（第23回監査 R23-003）"
 }
