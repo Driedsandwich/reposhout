@@ -175,9 +175,21 @@ function parseFailure(rel, output) {
   NOT_OK.lastIndex = 0;
   while ((m = NOT_OK.exec(output)) !== null) names.push(m[1].trim());
 
-  const fileNames = new Set([rel, basename(rel), rel.replace(/\//g, '\\')]);
-  const bootstrap = names.filter((n) => fileNames.has(n));
-  const testNames = names.filter((n) => !fileNames.has(n));
+  /*
+   * ⚠️ **区切り文字と絶対パスに依らず判定する。**（Windows の CI で実測）
+   * `test/guard.test.mjs` を、Windows の node は `test\guard.test.mjs` の形で
+   * 報告する。前は「文字列が一致するか」で見ていたので**対象ファイルだと
+   * 気づけず**、SyntaxError を「別のテストが落ちた」と読み違えていた。
+   * 区切りを `/` へ揃え、末尾一致でも認める。
+   */
+  const norm = (x) => String(x).replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
+  const relN = norm(rel), baseN = norm(basename(rel));
+  const isTargetFile = (n) => {
+    const x = norm(n);
+    return x === relN || x === baseN || x.endsWith('/' + relN) || x.endsWith('/' + baseN);
+  };
+  const bootstrap = names.filter(isTargetFile);
+  const testNames = names.filter((n) => !isTargetFile(n));
 
   let kind;
   if (bootstrap.length) {
@@ -201,11 +213,36 @@ function parseFailure(rel, output) {
  * 見出しではない `#` の行（SyntaxError などの診断）を集める。
  */
 function sanitizeDiagnostic(output, limit = 600) {
-  const lines = output.split('\n').filter((l) =>
-    /^\s*(location:|error:|code:|failureType:)/.test(l)
-    || (/^\s*#/.test(l) && !/^\s*# (Subtest:|tests |pass |fail |cancelled |skipped |todo |duration_ms)/.test(l)));
-  let text = lines.slice(0, 12).join('\n');
+  /*
+   * ⚠️ `error:` の**中身**は次の行から始まる（TAP のブロック）。見出しの行だけを
+   * 集めていたので、**落ちた理由の本文が1文字も入っていなかった**
+   * （伏字の検査が、当たるものが無いまま通っていた——変異 P25 で判明）。
+   */
+  const all = output.split('\n');
+  const lines = [];
+  for (let i = 0; i < all.length; i++) {
+    const l = all[i];
+    const head = /^\s*(location:|error:|code:|failureType:)/.test(l);
+    const diag = /^\s*#/.test(l)
+      && !/^\s*# (Subtest:|tests |pass |fail |cancelled |skipped |todo |duration_ms)/.test(l);
+    if (!head && !diag) continue;
+    lines.push(l);
+    if (/^\s*error:/.test(l)) {
+      const indent = l.length - l.trimStart().length;
+      for (let j = i + 1; j < all.length && lines.length < 24; j++) {
+        const b = all[j];
+        if (!b.trim()) continue;
+        if (b.length - b.trimStart().length <= indent) break;
+        lines.push(b);
+      }
+    }
+  }
+  let text = lines.slice(0, 24).join('\n');
+  /* ⚠️ `/` だけ見ていたので、Windows の `D:\a\…` が伏せられていなかった（CIで実測） */
   text = text.replace(/(\/[^\s'"]+){2,}/g, '<path>');
+  /* ⚠️ 2つの規則で同じ入力を覆っていたので、片方を外しても何も起きなかった
+     （変異 P25 が素通り）。**1つにまとめて**、外したら落ちるようにする */
+  text = text.replace(/(?:[A-Za-z]:)?(?:\\[^\s'"\\]+){2,}/g, '<path>');
   text = text.replace(/[A-Za-z0-9_-]{24,}/g, '<token>');
   text = text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '');
   return text.length > limit ? `${text.slice(0, limit)}…` : text;

@@ -988,12 +988,12 @@
     {
       "id": "P05",
       "file": "scripts/run-mutations.mjs",
-      "find": "  const bootstrap = names.filter((n) => fileNames.has(n));",
-      "replace": "  const bootstrap = [];",
+      "find": "      const indent = l.length - l.trimStart().length;\n",
+      "replace": "      const indent = 9999;\n",
       "test": "test/mutation-runner.test.mjs",
-      "desc": "ファイルごと読めなかったことを見分けない",
+      "desc": "落ちた理由の本文を診断へ集めない",
       "expectedFailure": {
-        "testName": "落ちた理由を区別する——構文・import・setup・別テストを検知にしない（R23-001）"
+        "testName": "証跡に、落ちた理由と落ちたテスト名が残る（R23-001）"
       }
     },
     {
@@ -1203,6 +1203,28 @@
       "desc": "「アカウントありで deny」の一覧を実測とずらす",
       "expectedFailure": {
         "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）"
+      }
+    },
+    {
+      "id": "P25",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  text = text.replace(/(?:[A-Za-z]:)?(?:\\\\[^\\s'\"\\\\]+){2,}/g, '<path>');\n",
+      "replace": "",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "Windows形式のパスを伏せない",
+      "expectedFailure": {
+        "testName": "証跡に、落ちた理由と落ちたテスト名が残る（R23-001）"
+      }
+    },
+    {
+      "id": "P26",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  const bootstrap = names.filter(isTargetFile);",
+      "replace": "  const bootstrap = names.filter(() => false);",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "対象ファイルの判定をやめる（ファイルごと読めない失敗を見分けない）",
+      "expectedFailure": {
+        "testName": "落ちた理由を区別する——構文・import・setup・別テストを検知にしない（R23-001）"
       }
     }
   ]

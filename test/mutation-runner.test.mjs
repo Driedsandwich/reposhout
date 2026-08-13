@@ -62,7 +62,11 @@ test('外にある、ふつうに通るテスト', () => {});
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { value, other, many } from '../mod.mjs';
-test(${JSON.stringify(WANT)}, () => { assert.equal(value, 1); });
+test(${JSON.stringify(WANT)}, () => {
+  /* ⚠️ 失敗の文へ、わざと2種類のパスを混ぜる——伏字の検査を、動いているOSに
+     関わらず効かせるため（Windows のパスは macOS では自然には現れない） */
+  assert.equal(value, 1, 'D:\\\\a\\\\repo\\\\mod.mjs と /var/tmp/repo/mod.mjs を見よ');
+});
 test(${JSON.stringify(OTHER)}, () => { assert.equal(other, 2); });
 test('数え上げ: GAMMA が2つ', () => { assert.equal(many.split('GAMMA').length - 1, 2); });
 `);
@@ -203,6 +207,22 @@ test('証跡に、落ちた理由と落ちたテスト名が残る（R23-001）'
     `診断に作業場の絶対パスが残っている: ${one.sanitizedDiagnostic.slice(0, 160)}`);
   assert.match(one.sanitizedDiagnostic, /<path>/,
     '伏せた印が無い＝そもそも伏せていない');
+  /*
+   * ⚠️ **落ちた理由の本文まで入っていること。** 見出しの行だけを集めていた版では
+   * 本文が1文字も入らず、下の「パスが残っていないか」が**当たるものが無いまま**
+   * 通っていた（変異 P25 が素通りして分かった）。
+   */
+  assert.match(one.sanitizedDiagnostic, /を見よ/,
+    `落ちた理由の本文が入っていない: ${one.sanitizedDiagnostic.slice(0, 200)}`);
+  /*
+   * ⚠️ **どのOSでも、両方の形のパスを伏せる。**
+   * Windows の CI で「バックスラッシュのパスが伏せられていない」と落ちた。
+   * 動いているOSに現れる形だけを見ていると、片方は永久に検査されない。
+   */
+  assert.ok(!one.sanitizedDiagnostic.includes('D:\\a\\repo'),
+    `Windows形式のパスが残っている: ${one.sanitizedDiagnostic.slice(0, 160)}`);
+  assert.ok(!one.sanitizedDiagnostic.includes('/var/tmp/repo'),
+    `POSIX形式のパスが残っている: ${one.sanitizedDiagnostic.slice(0, 160)}`);
 });
 
 /* ============================================================
