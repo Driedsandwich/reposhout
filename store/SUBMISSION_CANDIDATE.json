@@ -13,18 +13,18 @@
     "",
     "history には、提出しないことにした成果物も理由つきで残す。"
   ],
-  "status": "ready",
+  "status": "pending_main_ci",
   "itemId": "joaipdjaiefbenoijcekdnjagiadikkd",
   "version": "1.1.8",
   "tag": null,
-  "sourceCommit": "7086c0a77decd164fb469c6fdceb1abcc540ca55",
-  "treeSha": "5149c6ab4de8b6775629429770cf815e73668cef",
-  "runId": "31660880894",
-  "artifactName": "reposhout-package-7086c0a77decd164fb469c6fdceb1abcc540ca55",
+  "sourceCommit": null,
+  "treeSha": null,
+  "runId": null,
+  "artifactName": null,
   "innerName": "reposhout-1.1.8.zip",
-  "innerBytes": 44385,
-  "innerFiles": 11,
-  "innerSha256": "392416b4026d2c1338ceca1d0961ab38479fab3fe653137db796d56e70fb7ce0",
+  "innerBytes": null,
+  "innerFiles": null,
+  "innerSha256": null,
   "privacyPolicyUrl": "https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md",
   "confirmationTimeZone": "Asia/Tokyo",
   "note": "選ぶ基準は、上の構造化された欄（artifactName / innerSha256 / innerBytes / innerFiles）だけ。ここに run 番号・バイト数・ハッシュ・監査の回次を書き写さない（第20回監査 R20-004。写した値は成果物を差し替えても取り残され、どちらが正しいか分からなくなる）。この候補は、main への push で走った CI の成果物をダウンロードし、外側のハッシュが GitHub の API が申告する digest と一致することを確かめたうえで内側を実測し、同じコミットを独立にクローンして作り直したZIPとバイト一致することも確認して確定した。タグは外部監査に合格するまで打たない。却下した成果物は history にある。",
@@ -280,6 +280,26 @@
         "R23-004"
       ],
       "reason": "R23-001: 変異が「宣言した検査を落としたか」を見ておらず、構文エラー・import 失敗・読み込み時の例外・別テストだけの失敗が、すべて検知に化けていた（隔離した題材で再現）。R23-002: 変異する対象ファイルにリポジトリ境界の検査が無く外を書き換えられた。復旧が例外を投げると証跡が1行も残らず、書いたのに読み戻せなかった経路は復旧を呼ばずに「戻した」と記録していた。R23-003: windows.create が ID を返さない場合や、記録に失敗した場合を成功へ畳んでおり、文書が説明する Esc が使えないまま成功と報告していた。storage の読み取り失敗を空の台帳に変えていたため、直後の書き込みが既存の記録を消していた。R23-004: README英日の deny 採用理由が「アカウントが無い語だけ」と全称で書かれており、アカウントが在るのに deny の4語（watching / authorize / verify / customer-stories）と食い違っていた"
+    },
+    {
+      "version": "1.1.8",
+      "sourceCommit": "7086c0a77decd164fb469c6fdceb1abcc540ca55",
+      "treeSha": "5149c6ab4de8b6775629429770cf815e73668cef",
+      "runId": "31660880894",
+      "artifactName": "reposhout-package-7086c0a77decd164fb469c6fdceb1abcc540ca55",
+      "innerName": "reposhout-1.1.8.zip",
+      "innerBytes": 44385,
+      "innerFiles": 11,
+      "innerSha256": "392416b4026d2c1338ceca1d0961ab38479fab3fe653137db796d56e70fb7ce0",
+      "status": "rejected_by_R24",
+      "auditRound": 24,
+      "findingIds": [
+        "R24-001",
+        "R24-002",
+        "R24-003",
+        "R24-004"
+      ],
+      "reason": "R24-001: 変異の検知が「宣言した名前のテストが落ちたか」までしか見ておらず、その名前が assertion で落ちたのか、JSONが壊れた／TypeError／unhandledRejection で落ちたのかを区別していなかった（守りたい assertion が一度も走らないまま検知に数えられる）。同名のテストが2つあるとどちらが落ちたか決まらないことも見ていなかった。R24-002: git から由来を取れなくても走り切り、最後の条件が null を成功側として扱っていた。--timeout 0（Node では上限なし）や知らない引数も受け取っていた。さらに、途中で倒れると証跡を1行も残さずに死ぬので、受け取る側は「まだ走っていない」と「途中で死んだ」を区別できなかった。R24-003: popup_confirmed_untracked（窓は開いたが記録できず Esc が効かない）を第23回で内部的には分けたが、3つの入口のどれも利用者へ伝えていなかった（実測で notice 0 / badge 0 / 応答は ok:true・notified:false）。PRIVACY.md は「そう伝える」と書いていたが、実際にそう振る舞うのはブラウザが窓IDを返さなかったときだけだった。R24-004: deny の採用理由が3つの branch しか無く、watching / authorize / verify がどれにも当てはまらないまま一覧に載っていた（アカウントは在り、routeShadow は not_applicable）。「アカウントありで deny が4語ある」ことは書いてあったのに、その4語をどの理由で採ったかはどこにも書かれていなかった"
     }
   ]
 }
