@@ -278,6 +278,12 @@
     },
     {
       "file": "PRIVACY.md",
+      "reason": "1.1.7までの挙動。現在の仕様ではない",
+      "chars": 212,
+      "sha256": "681cb6aa0a3859094a9d44596e7eb49d0c4223f20f08356c9f35fd4f0e852fc3"
+    },
+    {
+      "file": "PRIVACY.md",
       "reason": "1.1.8より前の版の挙動。現在の仕様ではない",
       "chars": 112,
       "sha256": "04f4b6ac24fee168a494da3082d2d73619983114aef329b1ce6f3927e2400fd0"
@@ -323,39 +329,64 @@
     "共有ウィンドウを開いた結果の正本（第23回監査 R23-003）。",
     "前は opened: 'popup' | 'tab' | 'none' の3値へ畳んでいたので、",
     "『窓のIDが返らなかった』『記録できなかった』が成功に混ざっていた。",
-    "**開いたこと**と**Escで閉じられること**は別の事実なので、別の欄で返す。"
+    "**開いたこと**と**Escで閉じられること**は別の事実なので、別の欄で返す。",
+    "第24回監査 R24-003 で userNotice を足した——どの状態で利用者へ何を伝えるかを、この表が正本として持ち、test/background.test.mjs が偽のChrome APIで**実際に走らせて**突き合わせる（この表は第23回まで、どの検査からも読まれていなかった）。"
   ],
   "openOutcomes": [
     {
       "state": "popup_confirmed_tracked",
       "windowOpened": true,
       "escAvailable": true,
-      "meaning": "窓が開き、記録もできた。Escで閉じられる"
+      "meaning": "窓が開き、記録もできた。Escで閉じられる",
+      "userNotice": null,
+      "probeMountOption": {}
     },
     {
       "state": "popup_confirmed_untracked",
       "windowOpened": true,
       "escAvailable": false,
-      "meaning": "窓は開いたが記録できなかった。Escでは閉じられない"
+      "meaning": "窓は開いたが記録できなかった。Escでは閉じられない",
+      "userNotice": "esc_unavailable",
+      "probeMountOption": {
+        "setFails": true
+      },
+      "docToken": "Escape will not close it, and the extension tells you once",
+      "appearsIn": [
+        "README.md",
+        "PRIVACY.md",
+        "store/LISTING.md"
+      ]
     },
     {
       "state": "creation_unknown",
       "windowOpened": null,
       "escAvailable": false,
-      "meaning": "ブラウザがIDを返さず、開いたかどうか分からない。二重に開かないためタブでは開き直さず、案内を1回出す"
+      "meaning": "ブラウザがIDを返さず、開いたかどうか分からない。二重に開かないためタブでは開き直さず、案内を1回出す",
+      "userNotice": "open_unknown",
+      "probeMountOption": {
+        "createResult": "undefined"
+      }
     },
     {
       "state": "tab_confirmed",
       "windowOpened": true,
       "escAvailable": false,
-      "meaning": "ポップアップを作れずタブで開いた。利用者が自分で開いたタブと見分けがつかないので、Escの対象にしない"
+      "meaning": "ポップアップを作れずタブで開いた。利用者が自分で開いたタブと見分けがつかないので、Escの対象にしない",
+      "userNotice": null,
+      "probeMountOption": {
+        "createResult": "throws"
+      }
     },
     {
       "state": "failed",
       "windowOpened": false,
       "escAvailable": false,
-      "meaning": "どちらでも開けなかった。案内を1回出す"
+      "meaning": "どちらでも開けなかった。案内を1回出す",
+      "userNotice": "open_failed",
+      "probeMountOption": {
+        "openFails": true
+      }
     }
   ],
-  "storageFailureHandling": "読み取りに失敗したら**書かない**（既にある記録を消さないため）。読めないときは「拡張が開いた窓だ」と認めない。書き込みに失敗したら、開いたことは認めても escAvailable=false を返す（第23回監査 R23-003）"
+  "storageFailureHandling": "読み取りに失敗したら**書かない**（既にある記録を消さないため）。読めないときは「拡張が開いた窓だ」と認めない。書き込みに失敗したら、開いたことは認めても escAvailable=false を返す（第23回監査 R23-003）。記録に失敗した窓は持ち物にせず、Escでは閉じない。第24回監査 R24-003 から、その事実を3つの入口すべてで利用者へ1回だけ伝える（noticeEscUnavailable）。"
 }

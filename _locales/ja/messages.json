@@ -35,6 +35,10 @@
     "message": "Xの投稿画面が開いたかどうかを、ブラウザが返してくれませんでした。開いていた場合、その窓はEscでは閉じられないことがあります。Xへはこれ以上何も送っていません。",
     "description": "Same as noticeOpenUnknown (Japanese)."
   },
+  "noticeEscUnavailable": {
+    "message": "Xの投稿画面は開きましたが、この拡張機能からはEscで閉じられません。書き終えたら、ご自身で閉じてください。",
+    "description": "Same as noticeEscUnavailable (Japanese)."
+  },
   "noticeReloadRequired": {
     "message": "拡張機能が更新されました。このGitHubタブを再読み込みしてから、もう一度お試しください。Xへは何も送っていません。",
     "description": "Same as noticeReloadRequired (Japanese)."

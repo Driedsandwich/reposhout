@@ -188,7 +188,7 @@ admin pages are refused outright and are never shared.
 
 It runs a script on x.com for one reason only: it registers a single keydown
 listener and checks event.key on each press, ignoring anything other than an
-unmodified Escape, so you can dismiss the share window. That script reads no
+unmodified Escape, so you can dismiss the share window. If the extension cannot record the window it just opened, Escape will not close it, and the extension tells you once, so you know to close it yourself. That script reads no
 field values or page content from X, and it will only close a window this
 extension itself opened -- never a tab you opened.
 

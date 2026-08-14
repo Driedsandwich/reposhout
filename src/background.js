@@ -248,6 +248,7 @@ function titleFor(reason) {
   if (reason === 'open_failed') return chrome.i18n.getMessage('noticeOpenFailed');
   if (reason === 'open_unknown') return chrome.i18n.getMessage('noticeOpenUnknown');
   if (reason === 'reload_required') return chrome.i18n.getMessage('noticeReloadRequired');
+  if (reason === 'esc_unavailable') return chrome.i18n.getMessage('noticeEscUnavailable');
   return chrome.i18n.getMessage('noticeUnsupported');
 }
 
@@ -307,8 +308,13 @@ async function flagTab(tabId, reason) {
   return true;
 }
 
-/* 画面内の案内を試し、届かなければバッジへ回す */
-async function announceRefusal(tabId, reason) {
+/*
+ * 画面内の案内を試し、届かなければバッジへ回す。
+ * **利用者に見えるものを出す唯一の場所**——1回の呼び出しで notice か badge の
+ * どちらか一方だけを出す。第24回監査 R24-003 で「開いたが Esc が効かない」でも
+ * 使うようになったので、名前から Refusal を外した（拒否専用ではない）。
+ */
+async function announceOnce(tabId, reason) {
   var delivered = await notifyTab(tabId, reason);
   if (delivered) return 'notice';
   return (await flagTab(tabId, reason)) ? 'badge' : 'none';
@@ -325,11 +331,11 @@ async function announceRefusal(tabId, reason) {
  *
  * false を返す経路は必ずここを通す。ここを通らない `opened: false` を
  * 書かないこと——test/background.test.mjs が経路を数えて落とす。
- * 案内は1回だけ（announceRefusal の中で notice → badge の順に1つ選ぶ）。
+ * 案内は1回だけ（announceOnce の中で notice → badge の順に1つ選ぶ）。
  */
 async function refuse(tab, reason) {
   var why = reason || 'unsupported';
-  var how = await announceRefusal(tab && tab.id, why);
+  var how = await announceOnce(tab && tab.id, why);
   return { opened: false, reason: why, notified: how !== 'none' };
 }
 
@@ -437,8 +443,22 @@ async function shareResolvedTab(tab) {
    * ここで黙って成功を返すと、何も出ていない画面の前で利用者が待つことになる。
    */
   if (opened.state === 'creation_unknown') return refuse(tab, 'open_unknown');
-  /* 開いた。ただし Esc で閉じられるかは別（記録に失敗していることがある） */
-  return { opened: true, state: opened.state, escAvailable: opened.escAvailable === true };
+  /*
+   * 開いた。ただし Esc で閉じられるかは別（記録に失敗していることがある）。
+   *
+   * 第24回監査 R24-003。`popup_confirmed_untracked` は第23回で**内部的には**
+   * 分けたが、3つの入口のどれも利用者へ伝えていなかった（実測: notice 0・badge 0）。
+   * 利用者から見ると「Esc で閉じられる窓」と区別がつかず、閉じ方を探して詰まる。
+   * ここは3入口が必ず通る唯一の場所なので、**ここで1回だけ**伝える。
+   * 窓そのものは開いているので、記録に入れない・閉じない・開き直さない。
+   */
+  if (opened.state === 'popup_confirmed_untracked') {
+    var how = await announceOnce(tab && tab.id, 'esc_unavailable');
+    return { opened: true, state: opened.state, escAvailable: false,
+             notified: how !== 'none' };
+  }
+  return { opened: true, state: opened.state, escAvailable: opened.escAvailable === true,
+           notified: false };
 }
 
 /* 渡されなかったときだけ、いまのタブを引き直す */
@@ -515,6 +535,7 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
     shareResolvedTab(sender.tab).then(function (r) {
       try {
         sendResponse({ ok: !!(r && r.opened), reason: r && r.reason,
+                       state: r && r.state, escAvailable: r && r.escAvailable,
                        notified: !!(r && r.notified) });
       } catch (e) {}
     }, function () {
@@ -594,7 +615,7 @@ self.GXS_BG = {
   flagTab: flagTab,
   titleFor: titleFor,
   BADGE_MS: BADGE_MS,
-  announceRefusal: announceRefusal,
+  announceOnce: announceOnce,
   shareTab: shareTab,
   shareResolvedTab: shareResolvedTab,
   queryActiveTab: queryActiveTab,

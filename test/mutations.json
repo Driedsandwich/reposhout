@@ -310,8 +310,8 @@
       "file": "src/background.js",
       "test": "test/background.test.mjs",
       "desc": "二重通知を許す",
-      "find": "  var how = await announceRefusal(tab && tab.id, why);",
-      "replace": "  await announceRefusal(tab && tab.id, why);\n  var how = await announceRefusal(tab && tab.id, why);",
+      "find": "  var how = await announceOnce(tab && tab.id, why);",
+      "replace": "  await announceOnce(tab && tab.id, why);\n  var how = await announceOnce(tab && tab.id, why);",
       "expectedFailure": {
         "testName": "案内は1回だけ——画面にもバッジにも二重に出さない（R19-004）"
       }
@@ -1337,6 +1337,116 @@
       "desc": "作業ツリーの判定を null 許容へ戻す",
       "expectedFailure": {
         "testName": "作業ツリーが実行前と同じでなければ、成功にしない（R24-002）"
+      }
+    },
+    {
+      "id": "U01",
+      "file": "src/background.js",
+      "find": "  if (opened.state === 'popup_confirmed_untracked') {\n    var how = await announceOnce(tab && tab.id, 'esc_unavailable');",
+      "replace": "  if (false) {\n    var how = await announceOnce(tab && tab.id, 'esc_unavailable');",
+      "test": "test/background.test.mjs",
+      "desc": "Escが効かないことを伝えるのをやめる",
+      "expectedFailure": {
+        "testName": "ツールバーから開いたとき、Escが効かないことを1回だけ伝える（R24-003）"
+      }
+    },
+    {
+      "id": "U02",
+      "file": "src/background.js",
+      "find": "  return { opened: true, state: opened.state, escAvailable: opened.escAvailable === true,\n           notified: false };",
+      "replace": "  return { opened: true, state: opened.state, escAvailable: opened.escAvailable === true,\n           notified: (await announceOnce(tab && tab.id, 'esc_unavailable')) !== 'none' };",
+      "test": "test/background.test.mjs",
+      "desc": "記録できた窓でも案内を出す",
+      "expectedFailure": {
+        "testName": "記録できた窓では、案内を出さない（R24-003の対照）"
+      }
+    },
+    {
+      "id": "U03",
+      "file": "src/background.js",
+      "find": "                       state: r && r.state, escAvailable: r && r.escAvailable,\n",
+      "replace": "",
+      "test": "test/background.test.mjs",
+      "desc": "応答から状態を落とす",
+      "expectedFailure": {
+        "testName": "画面内ボタンからも1回だけ伝え、応答に状態を載せる（R24-003）"
+      }
+    },
+    {
+      "id": "U04",
+      "file": "src/background.js",
+      "find": "  if (reason === 'esc_unavailable') return chrome.i18n.getMessage('noticeEscUnavailable');",
+      "replace": "",
+      "test": "test/background.test.mjs",
+      "desc": "バッジの見出しを既定の文へ戻す",
+      "expectedFailure": {
+        "testName": "画面内の案内が届かないときはバッジへ回す（R24-003）"
+      }
+    },
+    {
+      "id": "U05",
+      "file": "src/content.js",
+      "find": "        else if (res.ok === true && res.escAvailable === false && res.notified !== true) {",
+      "replace": "        else if (false) {",
+      "test": "test/background.test.mjs",
+      "desc": "画面側の受け皿を外す",
+      "expectedFailure": {
+        "testName": "画面側にも、Escが効かないときの受け皿がある（R24-003）"
+      }
+    },
+    {
+      "id": "U06",
+      "file": "src/content.js",
+      "find": "    if (reason === 'esc_unavailable') {",
+      "replace": "    if (false) {",
+      "test": "test/background.test.mjs",
+      "desc": "画面側の専用文をやめる",
+      "expectedFailure": {
+        "testName": "画面側にも、Escが効かないときの受け皿がある（R24-003）"
+      }
+    },
+    {
+      "id": "U07",
+      "file": "_locales/ja/messages.json",
+      "find": "  \"noticeEscUnavailable\": {",
+      "replace": "  \"unusedNoticeEscUnavailable\": {",
+      "test": "test/background.test.mjs",
+      "desc": "日本語の定型文を落とす",
+      "expectedFailure": {
+        "testName": "英日の定型文がそろっていて、値を含まない（R24-003）"
+      }
+    },
+    {
+      "id": "U08",
+      "file": "src/background.js",
+      "find": "    return { opened: true, state: opened.state, escAvailable: false,\n             notified: how !== 'none' };",
+      "replace": "    return { opened: true, state: 'popup_confirmed_tracked', escAvailable: true,\n             notified: how !== 'none' };",
+      "test": "test/background.test.mjs",
+      "desc": "記録できなかった窓を、できたことにする",
+      "expectedFailure": {
+        "testName": "画面内ボタンからも1回だけ伝え、応答に状態を載せる（R24-003）"
+      }
+    },
+    {
+      "id": "U09",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "find": "      \"userNotice\": \"esc_unavailable\",",
+      "replace": "      \"userNotice\": null,",
+      "test": "test/background.test.mjs",
+      "desc": "正本から「Escが効かないと伝える」を落とす",
+      "expectedFailure": {
+        "testName": "開いた結果の一覧（正本）が、実際の挙動と一致している（R24-003）"
+      }
+    },
+    {
+      "id": "U10",
+      "file": "README.md",
+      "find": " Escape will not close it, and the extension tells you once, so you are not left hunting for a close key that does nothing.",
+      "replace": " Escape will not close it.",
+      "test": "test/background.test.mjs",
+      "desc": "READMEから主張を落とす（正本だけ直した形）",
+      "expectedFailure": {
+        "testName": "Escが効かないことの主張が、挙げた文書に実際に載っている（R24-003）"
       }
     },
     {
