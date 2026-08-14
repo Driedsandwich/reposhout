@@ -75,6 +75,15 @@ const timeoutMs = Number(argOf('--timeout') || 300000);
 const specFile = isAbsolute(specPath) ? specPath : join(ROOT, specPath);
 const specText = readFileSync(specFile, 'utf8');
 const spec = JSON.parse(specText);
+/* ⚠️ IDが重複していると、証跡のどの行がどの変異か決まらない（第24回監査 R24-001） */
+const idCount = {};
+for (const m of spec.mutations) idCount[m.id] = (idCount[m.id] || 0) + 1;
+const dupIds = Object.keys(idCount).filter((k) => idCount[k] > 1);
+if (dupIds.length) {
+  console.error(`変異IDが重複している: ${dupIds.join(' ')}`);
+  process.exit(2);
+}
+
 const mutations = spec.mutations.filter((m) => !onlyId || m.id === onlyId);
 if (!mutations.length) {
   console.error(`変異が1件も選ばれていない（--id ${onlyId}）`);
@@ -142,6 +151,25 @@ function validatePath(rel, label) {
 }
 
 /*
+ * ⚠️ **同じ名前のテストが2つあると、どちらが落ちたか決まらない。**（第24回監査 R24-001）
+ * 守りたい方は通り、無関係な同名だけが落ちても、名前の一致は成立してしまう。
+ * 走らせる前に、対象ファイルの中で宣言名が一意であることを確かめる。
+ */
+const TEST_NAME_RE = /(?:^|\s)(?:it|test)\(\s*(['"`])((?:\\.|(?!\1).)*)\1/gm;
+const nameCache = new Map();
+function countTestName(rel, want) {
+  if (!nameCache.has(rel)) {
+    const src = readFileSync(join(ROOT, rel), 'utf8');
+    const names = [];
+    let g;
+    TEST_NAME_RE.lastIndex = 0;
+    while ((g = TEST_NAME_RE.exec(src)) !== null) names.push(g[2]);
+    nameCache.set(rel, names);
+  }
+  return nameCache.get(rel).filter((n) => n === want).length;
+}
+
+/*
  * ⚠️ **テストを起動する環境を、必ず素にする。**（第22回監査 R22-004 の作業中に発見）
  * `node --test` は、自分が別の test runner の子だと判断すると（`NODE_TEST_CONTEXT`）
  * **失敗しても終了コード 0 で終わる**。自己検査がまさにその形で起動するので、
@@ -167,13 +195,61 @@ const CHILD_ENV = (() => {
  * つまり**ファイルごと読めなかったときは、落ちた名前がテストファイルのパスになる**。
  * ここが assertion 失敗との境目。想像で書くと、この境目を取り違える。
  */
-const NOT_OK = /^\s*not ok \d+ - (.+?)\s*$/gm;
+const NOT_OK = /^(\s*)not ok \d+ - (.+?)\s*$/gm;
+
+/*
+ * ⚠️ **名前が一致しただけでは「その検査が落とした」と言えない。**（第24回監査 R24-001）
+ * 宣言したテストが落ちていても、実際には
+ *   ・正本の JSON が壊れて `JSON.parse` が投げた（SyntaxError）
+ *   ・null/undefined を読んで TypeError
+ *   ・unhandledRejection
+ * ということがある。その場合、**守りたい assertion は一度も走っていない**。
+ * 111件を1件ずつ測って、5件がこれだった。
+ *
+ * TAP は `not ok` の直後の YAML に `failureType` / `code` / `name` を書く。
+ * そこまで読んで、`AssertionError`（`ERR_ASSERTION`）だけを検知として認める。
+ */
+function failureDetails(output) {
+  const lines = output.split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^(\s*)not ok \d+ - (.+?)\s*$/.exec(lines[i]);
+    if (!m) continue;
+    const indent = m[1].length;
+    const rec = { name: m[2].trim(), failureType: null, code: null, errName: null };
+    for (let j = i + 1; j < lines.length; j++) {
+      const l = lines[j];
+      if (!l.trim()) continue;
+      const ind = l.length - l.trimStart().length;
+      if (ind <= indent && !/^\s*(---|\.\.\.)\s*$/.test(l)) break;
+      const t = l.trim();
+      let g;
+      if ((g = /^failureType:\s*'?([^']+)'?/.exec(t))) rec.failureType = g[1];
+      else if ((g = /^code:\s*'?([^']+)'?/.exec(t))) rec.code = g[1];
+      else if ((g = /^name:\s*'?([^']+)'?/.exec(t))) rec.errName = g[1];
+      if (/^\.\.\.$/.test(t) && ind <= indent + 2) break;
+    }
+    out.push(rec);
+  }
+  return out;
+}
+const isAssertionFailure = (f) => !!f && (f.errName === 'AssertionError' || f.code === 'ERR_ASSERTION');
+
+/*
+ * 実際の落ち方を、宣言できる語へ落とす。
+ * 既定は `assertion` で、それ以外を検知にしたいときは**変異の側で宣言させる**
+ * （`expectedFailure.kind` ＋ 理由）。宣言の無い種類は検知にしない。
+ */
+const ALLOWED_KINDS = ['assertion', 'unhandledRejection'];
+function actualKind(f) {
+  if (isAssertionFailure(f)) return 'assertion';
+  if (f && f.failureType === 'unhandledRejection') return 'unhandledRejection';
+  return (f && (f.errName || f.failureType)) || 'unknown';
+}
 
 function parseFailure(rel, output) {
-  const names = [];
-  let m;
-  NOT_OK.lastIndex = 0;
-  while ((m = NOT_OK.exec(output)) !== null) names.push(m[1].trim());
+  const details = failureDetails(output);
+  const names = details.map((d) => d.name);
 
   /*
    * ⚠️ **区切り文字と絶対パスに依らず判定する。**（Windows の CI で実測）
@@ -201,7 +277,8 @@ function parseFailure(rel, output) {
   } else {
     kind = 'no_failure_reported';
   }
-  return { failureKind: kind, failedTestNames: testNames, bootstrapNames: bootstrap };
+  return { failureKind: kind, failedTestNames: testNames, bootstrapNames: bootstrap,
+    failedTests: details.filter((d) => !isTargetFile(d.name)) };
 }
 
 /*
@@ -376,6 +453,34 @@ for (const m of mutations) {
       restored: true });
     continue;
   }
+  /*
+   * 落ち方の種類も宣言できる（既定は assertion）。assertion 以外を検知にしたいなら、
+   * **なぜそれが欠陥の姿なのか**を書かせる。書かせないと、ただの逃げ道になる。
+   */
+  const want0 = m.expectedFailure.testName.trim();
+  const wantKind = m.expectedFailure.kind || 'assertion';
+  if (!ALLOWED_KINDS.includes(wantKind)) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
+      error: `expectedFailure.kind が不正: ${wantKind}`, restored: true });
+    continue;
+  }
+  if (wantKind !== 'assertion'
+      && !(typeof m.expectedFailure.why === 'string' && m.expectedFailure.why.trim().length >= 10)) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
+      error: `assertion 以外（${wantKind}）を検知にするなら、理由（why）を書く`, restored: true });
+    continue;
+  }
+
+  /* 宣言した名前が、対象ファイルの中で一意であること */
+  const nameCount = countTestName(m.test, want0);
+  if (nameCount !== 1) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'duplicate_test_name',
+      error: nameCount === 0
+        ? `宣言した名前のテストが ${m.test} に無い`
+        : `宣言した名前のテストが ${m.test} に ${nameCount} 件ある（どれが落ちたか決まらない）`,
+      restored: true });
+    continue;
+  }
 
   /* ③ 変異前に、その対象テストが素で通ること */
   const bl = baselineFor(m.test);
@@ -459,7 +564,8 @@ for (const m of mutations) {
     baseline: { exitCode: bl.exitCode, stdoutSha256: bl.stdoutSha256 },
     exitCode: run.exitCode, signal: run.signal, timedOut: run.timedOut,
     spawnError: run.spawnError, stdoutSha256: run.stdoutSha256, stderrSha256: run.stderrSha256,
-    failedTestNames: run.failedTestNames, sanitizedDiagnostic: run.sanitizedDiagnostic
+    failedTestNames: run.failedTestNames,
+    failedTests: run.failedTests, sanitizedDiagnostic: run.sanitizedDiagnostic
   };
 
   /* ⑤ 落ち方で分ける。**検知にしてよいのは、宣言したテストが落ちたときだけ** */
@@ -490,15 +596,37 @@ for (const m of mutations) {
       bootstrapNames: run.bootstrapNames, expectedFailureMatched: false });
     continue;
   }
-  const want = m.expectedFailure.testName.trim();
-  const matched = run.failedTestNames.some((n) => n === want);
-  if (!matched) {
+  const want = want0;
+  const hits = (run.failedTests || []).filter((f) => f.name === want);
+  if (!hits.length) {
     results.push({ ...withRun, outcome: 'runner_error', failureKind: 'wrong_test_failure',
       error: `宣言したテストが落ちていない（宣言: ${want}）`, expectedFailureMatched: false });
     continue;
   }
-  results.push({ ...withRun, outcome: 'applied_and_killed', failureKind: 'expected_assertion_failure',
-    expectedFailureMatched: true });
+  /*
+   * ⚠️ 同じ名前のテストが2つ以上落ちたら、**どちらが落ちたのか決まらない**。
+   * 「守りたい方は通り、無関係な同名だけが落ちた」でも名前は一致してしまう。
+   */
+  if (hits.length > 1) {
+    results.push({ ...withRun, outcome: 'runner_error', failureKind: 'ambiguous_test_name',
+      error: `同じ名前のテストが ${hits.length} 件落ちていて、どれが落ちたか決まらない（宣言: ${want}）`,
+      expectedFailureMatched: false });
+    continue;
+  }
+  /* ⚠️ **宣言した種類で落ちたときだけ検知にする。**（第24回監査 R24-001） */
+  const gotKind = actualKind(hits[0]);
+  if (gotKind !== wantKind) {
+    results.push({ ...withRun, outcome: 'runner_error', failureKind: 'unexpected_failure_kind',
+      error: `宣言したテストは落ちたが、落ち方が違う（宣言: ${wantKind} / 実際: ${gotKind}）`
+        + '——守りたい検査は走っていない',
+      expectedFailureKind: wantKind, actualFailureKind: gotKind,
+      expectedFailureMatched: false });
+    continue;
+  }
+  results.push({ ...withRun, outcome: 'applied_and_killed',
+    failureKind: wantKind === 'assertion' ? 'expected_assertion_failure' : 'expected_declared_failure',
+    expectedFailureKind: wantKind, actualFailureKind: gotKind,
+    expectedFailureMatched: true, expectedFailureDetail: hits[0] });
 }
 
 /* 作業ツリーが元に戻っているか（第23回監査 R23-002 §6.6） */

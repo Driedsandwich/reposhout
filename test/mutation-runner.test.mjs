@@ -42,7 +42,20 @@ const OTHER = '別の検査: other は 2';
  * ——「リポジトリの外を指している」検査は、外のファイルが実在しないと、
  * 手前の「ファイルが無い」検査に先を越されて空振りする。
  */
-function makeFixture(mutations, files = {}) {
+/*
+ * 題材を git リポジトリにする（第24回監査 R24-002）。
+ * 由来（commit / tree / status）が取れないと走らない仕様にしたので、
+ * 題材の側も**本物の由来を持つ**ようにする。
+ */
+function initGit(dir) {
+  const id = ['-c', 'user.email=t@example.invalid', '-c', 'user.name=fixture'];
+  const run = (...a) => execFileSync('git', a, { cwd: dir, stdio: 'ignore' });
+  run('init', '-q');
+  run(...id, 'add', '-A');
+  run(...id, 'commit', '-qm', 'fixture');
+}
+
+function makeFixture(mutations, files = {}, { git = true } = {}) {
   const outer = mkdtempSync(join(tmpdir(), 'reposhout-mut-'));
   writeFileSync(join(outer, 'outside.txt'), 'SAFE\n');
   writeFileSync(join(outer, 'outside.test.mjs'), `
@@ -106,8 +119,32 @@ if (body.includes('BOOMNOW')) {
 }
 test('題材がふつうなら、ふつうに通る', () => {});
 `);
+  /*
+   * 変異後に **assertion ではなく TypeError** で落ちる題材（第24回監査 R24-001）。
+   * 名前が一致しても、守りたい assertion は一度も走っていない。
+   */
+  writeFileSync(join(dir, 'test/throws.test.mjs'), `
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+const body = readFileSync(new URL('../mod.mjs', import.meta.url), 'utf8');
+test('例外で落ちる検査', () => {
+  if (body.includes('99')) { const o = null; return o.missing.deep; }
+  assert.ok(true);
+});
+`);
+  /* 同じ名前のテストが2つ——守りたい方は通り、無関係な同名だけが落ちる */
+  writeFileSync(join(dir, 'test/dup.test.mjs'), `
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+const body = readFileSync(new URL('../mod.mjs', import.meta.url), 'utf8');
+test('同じ名前', () => { assert.ok(true); });
+test('同じ名前', () => { assert.ok(!body.includes('99'), '無関係な同名が落ちた'); });
+`);
   for (const [rel, body] of Object.entries(files)) writeFileSync(join(dir, rel), body);
   writeFileSync(join(dir, 'test/mutations.json'), JSON.stringify({ mutations }, null, 2));
+  if (git) initGit(dir);
   return { outer, dir };
 }
 
@@ -137,7 +174,17 @@ function runRunner(dir, { receipt = 'receipt.json', timeout = 8000, extra = [], 
     ? JSON.parse(readFileSync(receiptPath, 'utf8')) : null;
   return { exitCode, stdout, receipt: json, dir, receiptPath };
 }
-const of = (r, id) => (r.receipt.results.find((x) => x.id === id) || {});
+/*
+ * ⚠️ 証跡が無いときに **TypeError で落ちない**（第24回監査 R24-001 の趣旨）。
+ * 補助関数が先に倒れると、守りたい assertion は一度も走らないのに
+ * 「落ちた＝検知」に見えてしまう（N19 で実測）。
+ */
+const of = (r, id) => {
+  assert.ok(r.receipt, `証跡が無い（exit=${r.exitCode}）。何を測ったか言えない:\n${r.stdout}`);
+  assert.ok(Array.isArray(r.receipt.results),
+    `証跡に results が無い: ${JSON.stringify(r.receipt).slice(0, 300)}`);
+  return r.receipt.results.find((x) => x.id === id) || {};
+};
 const outcomeOf = (r, id) => of(r, id).outcome;
 const kindOf = (r, id) => of(r, id).failureKind;
 
@@ -178,11 +225,74 @@ test('落ちた理由を区別する——構文・import・setup・別テスト
   assert.equal(r.exitCode, 1, 'これだけ問題があるのに成功で終わっている');
 });
 
+test('名前が合っていても、assertion で落ちていなければ検知にしない（R24-001）', () => {
+  /*
+   * ⚠️ **第24回監査 R24-001。** 名前の一致だけを見ていたので、
+   * 宣言したテストが「JSONが壊れて JSON.parse が投げた」「null を読んで TypeError」
+   * 「unhandledRejection」で落ちても検知に数えていた——**守りたい assertion は
+   * 一度も走っていない**のに。111件を1件ずつ測って、5件がこれだった。
+   */
+  const dir = makeFixture([
+    mut('Q1', { test: 'test/throws.test.mjs', expectedFailure: { testName: '例外で落ちる検査' } }),
+    mut('Q2')   /* 対照: ふつうに assertion で落ちる */
+  ]).dir;
+  const r = runRunner(dir);
+  assert.ok(r.receipt, `証跡が残っていない:\n${r.stdout}`);
+  assert.equal(outcomeOf(r, 'Q1'), 'runner_error',
+    `例外で落ちただけなのに ${outcomeOf(r, 'Q1')} にしている`);
+  assert.equal(kindOf(r, 'Q1'), 'unexpected_failure_kind');
+  assert.equal(of(r, 'Q1').actualFailureKind, 'TypeError',
+    `落ち方を記録していない: ${JSON.stringify(of(r, 'Q1').actualFailureKind)}`);
+  /* 対照が無いと、単に全部を落としているのか区別できない */
+  assert.equal(outcomeOf(r, 'Q2'), 'applied_and_killed');
+  assert.equal(of(r, 'Q2').actualFailureKind, 'assertion');
+});
+
+test('同じ名前のテストが2つ落ちたら、どれが落ちたか決まらない（R24-001）', () => {
+  /*
+   * 守りたい方は通り、**無関係な同名だけ**が落ちても、名前の一致は成立してしまう。
+   */
+  const dir = makeFixture([
+    mut('D1', { test: 'test/dup.test.mjs', expectedFailure: { testName: '同じ名前' } })
+  ]).dir;
+  const r = runRunner(dir);
+  assert.equal(outcomeOf(r, 'D1'), 'runner_error', '同名の取り違えを検知にしている');
+  assert.equal(kindOf(r, 'D1'), 'duplicate_test_name',
+    `想定と違う分類: ${kindOf(r, 'D1')}`);
+  assert.match(of(r, 'D1').error, /2 件ある/);
+});
+
+test('変異IDが重複していたら、走る前に止まる（R24-001）', () => {
+  /* 証跡のどの行がどの変異か決まらないので、測る前に止める */
+  const dir = makeFixture([mut('Z1'), mut('Z1', { find: 'export const other = 2;',
+    replace: 'export const other = 3;', expectedFailure: { testName: OTHER } })]).dir;
+  const r = runRunner(dir);
+  assert.notEqual(r.exitCode, 0, '重複したIDで走り切っている');
+  assert.equal(r.receipt, null, '重複したIDのまま証跡を書いている');
+});
+
+test('assertion 以外を検知にするなら、理由を書かせる（R24-001）', () => {
+  const base = { test: 'test/throws.test.mjs' };
+  const dir = makeFixture([
+    mut('W1', { ...base, expectedFailure: { testName: '例外で落ちる検査', kind: 'unhandledRejection' } }),
+    mut('W2', { ...base, expectedFailure: { testName: '例外で落ちる検査', kind: 'そんな種類は無い',
+      /* ⚠️ 理由は十分に長くする——短いと「理由が無い」検査が先に止めてしまい、
+         種類の検査を外しても何も起きなくなる（変異 Q06 が素通りした） */
+      why: 'この理由は十分に長く書いてあるので、理由の検査では止まらない' } })
+  ]).dir;
+  const r = runRunner(dir);
+  assert.equal(kindOf(r, 'W1'), 'expectation_invalid', '理由なしの宣言を通している');
+  assert.equal(kindOf(r, 'W2'), 'expectation_invalid', '知らない種類の宣言を通している');
+});
+
 test('どのテストが落ちるはずかを宣言していない変異は、測れない（R23-001）', () => {
   const dir = makeFixture([{ id: 'E1', file: 'mod.mjs',
     find: 'export const value = 1;', replace: 'export const value = 99;',
     test: GUARD, desc: '宣言なし' }]).dir;
   const r = runRunner(dir);
+  /* ⚠️ 証跡の有無を**先に**見る。宣言の検査を外すとランナーが落ちて証跡が残らず、
+     証跡を索きに行った所で TypeError になっていた（assertion が走らない・R24-001） */
+  assert.ok(r.receipt, `証跡が残っていない（ランナーが落ちた）:\n${r.stdout}`);
   assert.equal(outcomeOf(r, 'E1'), 'runner_error', '宣言が無いのに検知にしている');
   assert.equal(kindOf(r, 'E1'), 'expectation_missing');
 });

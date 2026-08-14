@@ -300,7 +300,9 @@
       "find": "chrome.action.onClicked.addListener(function (tab) {\n  runShare(tab);\n});",
       "replace": "chrome.action.onClicked.addListener(function (tab) {\n  shareTab(tab);\n});",
       "expectedFailure": {
-        "testName": "ツールバーの押下でも、予期しない例外を握り潰さない（R20-005）"
+        "testName": "ツールバーの押下でも、予期しない例外を握り潰さない（R20-005）",
+        "kind": "unhandledRejection",
+        "why": "この欠陥の姿そのものが「捨てられた Promise の拒否が外へ漏れること」。リスナーが握り潰すと拒否は未処理のまま逃げ、利用者からは無反応に見える。漏れたことを検知として数える（assertion では表せない）"
       }
     },
     {
@@ -669,10 +671,10 @@
     {
       "id": "N12",
       "file": "store/DATA_FLOW_CLAIMS.json",
-      "find": "    \"失効した記録を、次に誰かが読んだとき（isShareWindow / prune）\"\n",
+      "find": ",\n    \"失効した記録を、次に誰かが読んだとき（isShareWindow / prune）\"",
       "replace": "",
       "test": "test/docs.test.mjs",
-      "desc": "実際に消える契機を1つ削る",
+      "desc": "実際に消える契機を1つ削る（JSONは壊さない）",
       "expectedFailure": {
         "testName": "正本の主張が、実際のコードと一致している（R19-001）"
       }
@@ -944,8 +946,8 @@
     {
       "id": "P01",
       "file": "scripts/run-mutations.mjs",
-      "find": "  const want = m.expectedFailure.testName.trim();\n  const matched = run.failedTestNames.some((n) => n === want);",
-      "replace": "  const want = m.expectedFailure.testName.trim();\n  const matched = true;",
+      "find": "  const hits = (run.failedTests || []).filter((f) => f.name === want);",
+      "replace": "  const hits = (run.failedTests || []).filter(() => true);",
       "test": "test/mutation-runner.test.mjs",
       "desc": "宣言したテストとの照合をやめる",
       "expectedFailure": {
@@ -1010,8 +1012,8 @@
     {
       "id": "P07",
       "file": "scripts/run-mutations.mjs",
-      "find": "    failedTestNames: run.failedTestNames, sanitizedDiagnostic: run.sanitizedDiagnostic",
-      "replace": "    sanitizedDiagnostic: run.sanitizedDiagnostic",
+      "find": "    failedTestNames: run.failedTestNames,\n    failedTests: run.failedTests, sanitizedDiagnostic: run.sanitizedDiagnostic",
+      "replace": "    failedTests: run.failedTests, sanitizedDiagnostic: run.sanitizedDiagnostic",
       "test": "test/mutation-runner.test.mjs",
       "desc": "証跡から、落ちたテスト名を落とす",
       "expectedFailure": {
@@ -1225,6 +1227,72 @@
       "desc": "対象ファイルの判定をやめる（ファイルごと読めない失敗を見分けない）",
       "expectedFailure": {
         "testName": "落ちた理由を区別する——構文・import・setup・別テストを検知にしない（R23-001）"
+      }
+    },
+    {
+      "id": "Q01",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (gotKind !== wantKind) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "落ち方の種類を照合しない",
+      "expectedFailure": {
+        "testName": "名前が合っていても、assertion で落ちていなければ検知にしない（R24-001）"
+      }
+    },
+    {
+      "id": "Q02",
+      "file": "scripts/run-mutations.mjs",
+      "find": "const isAssertionFailure = (f) => !!f && (f.errName === 'AssertionError' || f.code === 'ERR_ASSERTION');",
+      "replace": "const isAssertionFailure = (f) => !!f;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "なんでも assertion とみなす",
+      "expectedFailure": {
+        "testName": "名前が合っていても、assertion で落ちていなければ検知にしない（R24-001）"
+      }
+    },
+    {
+      "id": "Q03",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (nameCount !== 1) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "同名テストの拒否をやめる",
+      "expectedFailure": {
+        "testName": "同じ名前のテストが2つ落ちたら、どれが落ちたか決まらない（R24-001）"
+      }
+    },
+    {
+      "id": "Q04",
+      "file": "scripts/run-mutations.mjs",
+      "find": "if (dupIds.length) {",
+      "replace": "if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "重複した変異IDを通す",
+      "expectedFailure": {
+        "testName": "変異IDが重複していたら、走る前に止まる（R24-001）"
+      }
+    },
+    {
+      "id": "Q05",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (wantKind !== 'assertion'\n      && !(typeof m.expectedFailure.why === 'string' && m.expectedFailure.why.trim().length >= 10)) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "理由なしの宣言を通す",
+      "expectedFailure": {
+        "testName": "assertion 以外を検知にするなら、理由を書かせる（R24-001）"
+      }
+    },
+    {
+      "id": "Q06",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (!ALLOWED_KINDS.includes(wantKind)) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "知らない種類の宣言を通す",
+      "expectedFailure": {
+        "testName": "assertion 以外を検知にするなら、理由を書かせる（R24-001）"
       }
     }
   ]

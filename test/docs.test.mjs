@@ -2058,7 +2058,7 @@ test('変異の定義が、落ちるはずのテストを宣言していて、�
     return (file) => {
       if (!cache.has(file)) {
         const src = read(file);
-        cache.set(file, [...src.matchAll(/(?:^|\s)(?:it|test)\(\s*(['`])((?:\\.|(?!\1).)*)\1/gm)]
+        cache.set(file, [...src.matchAll(/(?:^|\s)(?:it|test)\(\s*(['"`])((?:\\.|(?!\1).)*)\1/gm)]
           .map((m) => m[2]));
       }
       return cache.get(file);

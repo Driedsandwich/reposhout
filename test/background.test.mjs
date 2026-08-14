@@ -719,7 +719,14 @@ test('窓のIDが返らなければ、開いたことにしない（R23-003）',
    */
   for (const createResult of ['undefined', 'empty']) {
     const { bg } = mount({ createResult });
-    const r = await bg.openShareWindow('https://x.com/intent/post?text=a');
+    /*
+     * ⚠️ **投げても、assertion で受け止める。**（第24回監査 R24-001）
+     * 検査を外すと `win.id` を undefined から読んで TypeError になり、
+     * テストは「例外で落ちた」扱いになっていた——守りたい assertion は走らないまま。
+     * 例外を値へ畳んでから見れば、落ちるのは必ずこの assertion になる。
+     */
+    const r = await bg.openShareWindow('https://x.com/intent/post?text=a')
+      .catch((e) => ({ state: `★例外: ${e && e.message}`, windowOpened: null, escAvailable: null, windowId: null }));
     assert.equal(r.state, 'creation_unknown', `${createResult}: 状態が違う: ${JSON.stringify(r)}`);
     assert.equal(r.windowOpened, null, '開いたかどうかを断定している');
     assert.equal(r.escAvailable, false);
@@ -773,8 +780,9 @@ test('台帳を読めなかったときは、書かない（既にある記録�
 
 test('台帳を読めなければ、所有を認めない（R23-003）', async () => {
   const { bg } = mount({ getFailsOnce: true, initialRecords: { 99: Date.now() } });
-  assert.equal(await bg.isShareWindow(99), false,
-    '読めていないのに「拡張が開いた窓だ」と認めている');
+  /* ⚠️ 例外を値へ畳んでから見る（投げると assertion が走らない・R24-001） */
+  const got = await bg.isShareWindow(99).catch((e) => `★例外: ${e && e.message}`);
+  assert.equal(got, false, '読めていないのに「拡張が開いた窓だ」と認めている');
   /* 対照: 読めるようになれば認める */
   const { bg: bg2 } = mount({ initialRecords: { 99: Date.now() } });
   assert.equal(await bg2.isShareWindow(99), true, '対照が壊れている（読めても認めない）');
