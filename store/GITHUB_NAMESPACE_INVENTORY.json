@@ -51,7 +51,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/orgs → 404; gh api users/orgs → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/orgs → 404; gh api users/orgs → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "settings",
@@ -73,7 +74,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/settings → 200; gh api users/settings → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/settings → 200; gh api users/settings → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "notifications",
@@ -95,7 +97,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/notifications → 200; gh api users/notifications → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/notifications → 200; gh api users/notifications → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "marketplace",
@@ -117,7 +120,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/marketplace → 400; gh api users/marketplace → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/marketplace → 400; gh api users/marketplace → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "features",
@@ -139,7 +143,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/features → 200; gh api users/features → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/features → 200; gh api users/features → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "topics",
@@ -161,7 +166,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/topics → 200; gh api users/topics → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/topics → 200; gh api users/topics → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "sponsors",
@@ -183,7 +189,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/sponsors → 200; gh api users/sponsors → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/sponsors → 200; gh api users/sponsors → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "collections",
@@ -205,7 +212,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/collections → 200; gh api users/collections → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/collections → 200; gh api users/collections → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "explore",
@@ -227,7 +235,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/explore → 200; gh api users/explore → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/explore → 200; gh api users/explore → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "trending",
@@ -249,7 +258,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/trending → 200; gh api users/trending → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/trending → 200; gh api users/trending → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "search",
@@ -271,7 +281,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/search → 200; gh api users/search → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/search → 200; gh api users/search → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "apps",
@@ -293,7 +304,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/apps → 400; gh api users/apps → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/apps → 400; gh api users/apps → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "codespaces",
@@ -315,7 +327,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/codespaces → 200; gh api users/codespaces → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/codespaces → 200; gh api users/codespaces → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "new",
@@ -337,7 +350,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/new → 200; gh api users/new → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/new → 200; gh api users/new → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "about",
@@ -359,7 +373,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/about → 200; gh api users/about → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/about → 200; gh api users/about → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "pricing",
@@ -381,7 +396,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/pricing → 200; gh api users/pricing → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/pricing → 200; gh api users/pricing → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "enterprise",
@@ -403,7 +419,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/enterprise → 200; gh api users/enterprise → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/enterprise → 200; gh api users/enterprise → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "login",
@@ -425,7 +442,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/login → 200; gh api users/login → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/login → 200; gh api users/login → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "logout",
@@ -447,7 +465,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/logout → 200; gh api users/logout → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/logout → 200; gh api users/logout → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "join",
@@ -469,7 +488,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/join → 403; gh api users/join → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/join → 403; gh api users/join → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "site",
@@ -491,7 +511,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/site → 404; gh api users/site → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/site → 404; gh api users/site → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "account",
@@ -513,7 +534,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/account → 200; gh api users/account → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/account → 200; gh api users/account → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "dashboard",
@@ -535,7 +557,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/dashboard → 200; gh api users/dashboard → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/dashboard → 200; gh api users/dashboard → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "stars",
@@ -557,7 +580,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/stars → 200; gh api users/stars → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/stars → 200; gh api users/stars → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "watching",
@@ -581,7 +605,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "アカウントは在るが公開リポジトリが 0 件。認証・アカウント系の入口を守るため拒否する",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/watching → 200; gh api users/watching → present"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/watching → 200; gh api users/watching → present",
+      "denyCriterionId": "account_present_zero_public_repos_auth_route"
     },
     {
       "namespace": "issues",
@@ -603,7 +628,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/issues → 404; gh api users/issues → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/issues → 404; gh api users/issues → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "pulls",
@@ -625,7 +651,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/pulls → 404; gh api users/pulls → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/pulls → 404; gh api users/pulls → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "discussions",
@@ -647,7 +674,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/discussions → 200; gh api users/discussions → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/discussions → 200; gh api users/discussions → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "security",
@@ -669,7 +697,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/security → 200; gh api users/security → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/security → 200; gh api users/security → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "events",
@@ -691,7 +720,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/events → 200; gh api users/events → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/events → 200; gh api users/events → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "sessions",
@@ -713,7 +743,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/sessions → 404; gh api users/sessions → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/sessions → 404; gh api users/sessions → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "organizations",
@@ -735,7 +766,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/organizations → 404; gh api users/organizations → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/organizations → 404; gh api users/organizations → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "session",
@@ -757,7 +789,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/session → 200; gh api users/session → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/session → 200; gh api users/session → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "signup",
@@ -779,7 +812,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/signup → 403; gh api users/signup → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/signup → 403; gh api users/signup → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "password_reset",
@@ -801,7 +835,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/password_reset → 403; gh api users/password_reset → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/password_reset → 403; gh api users/password_reset → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "auth",
@@ -823,7 +858,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/auth → 404; gh api users/auth → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/auth → 404; gh api users/auth → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "oauth",
@@ -845,7 +881,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/oauth → 404; gh api users/oauth → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/oauth → 404; gh api users/oauth → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "authorize",
@@ -869,7 +906,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "アカウントは在るが公開リポジトリが 0 件。認証・アカウント系の入口を守るため拒否する",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/authorize → 200; gh api users/authorize → present"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/authorize → 200; gh api users/authorize → present",
+      "denyCriterionId": "account_present_zero_public_repos_auth_route"
     },
     {
       "namespace": "sudo",
@@ -891,7 +929,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/sudo → 404; gh api users/sudo → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/sudo → 404; gh api users/sudo → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "two_factor",
@@ -913,7 +952,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/two_factor → 404; gh api users/two_factor → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/two_factor → 404; gh api users/two_factor → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "verify",
@@ -937,7 +977,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "アカウントは在るが公開リポジトリが 0 件。認証・アカウント系の入口を守るため拒否する",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/verify → 200; gh api users/verify → present"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/verify → 200; gh api users/verify → present",
+      "denyCriterionId": "account_present_zero_public_repos_auth_route"
     },
     {
       "namespace": "billing",
@@ -959,7 +1000,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/billing → 404; gh api users/billing → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/billing → 404; gh api users/billing → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "enterprises",
@@ -981,7 +1023,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/enterprises → 404; gh api users/enterprises → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/enterprises → 404; gh api users/enterprises → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "invitations",
@@ -1003,7 +1046,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/invitations → 404; gh api users/invitations → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/invitations → 404; gh api users/invitations → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "account_verifications",
@@ -1025,7 +1069,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/account_verifications → 200; gh api users/account_verifications → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/account_verifications → 200; gh api users/account_verifications → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "advisories",
@@ -1047,7 +1092,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/advisories → 200; gh api users/advisories → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/advisories → 200; gh api users/advisories → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "security-advisories",
@@ -1069,7 +1115,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/security-advisories → 502; gh api users/security-advisories → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/security-advisories → 502; gh api users/security-advisories → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "copilot",
@@ -1091,7 +1138,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/copilot → 200; gh api users/copilot → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/copilot → 200; gh api users/copilot → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "github-copilot",
@@ -1113,7 +1161,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/github-copilot → 200; gh api users/github-copilot → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/github-copilot → 200; gh api users/github-copilot → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "contact",
@@ -1135,7 +1184,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/contact → 200; gh api users/contact → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/contact → 200; gh api users/contact → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "signin",
@@ -1157,7 +1207,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/signin → 404; gh api users/signin → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/signin → 404; gh api users/signin → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "sign_in",
@@ -1179,7 +1230,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/sign_in → 404; gh api users/sign_in → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/sign_in → 404; gh api users/sign_in → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "sign_up",
@@ -1201,7 +1253,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/sign_up → 404; gh api users/sign_up → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/sign_up → 404; gh api users/sign_up → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "customer-stories",
@@ -1227,7 +1280,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "アカウントは在る（公開1件）が、browser で test を開くと 404 でリポジトリUIが出ない＝GitHubの案内ページが名前空間を覆っている。ブラウザで開けないページは共有の対象にならない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/customer-stories → 200; gh api users/customer-stories → present"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/customer-stories → 200; gh api users/customer-stories → present",
+      "denyCriterionId": "route_shadowed"
     },
     {
       "namespace": "resources",
@@ -1249,7 +1303,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/resources → 200; gh api users/resources → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/resources → 200; gh api users/resources → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "education",
@@ -1271,7 +1326,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/education → 200; gh api users/education → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/education → 200; gh api users/education → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "solutions",
@@ -1293,7 +1349,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/solutions → 200; gh api users/solutions → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/solutions → 200; gh api users/solutions → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "readme",
@@ -1315,7 +1372,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/readme → 200; gh api users/readme → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/readme → 200; gh api users/readme → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "git-guides",
@@ -1337,7 +1395,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/git-guides → 200; gh api users/git-guides → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/git-guides → 200; gh api users/git-guides → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "why-github",
@@ -1359,7 +1418,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/why-github → 200; gh api users/why-github → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/why-github → 200; gh api users/why-github → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "newsroom",
@@ -1381,7 +1441,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/newsroom → 200; gh api users/newsroom → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/newsroom → 200; gh api users/newsroom → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "partners",
@@ -1403,7 +1464,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/partners → 200; gh api users/partners → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/partners → 200; gh api users/partners → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "mobile",
@@ -1425,7 +1487,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/mobile → 200; gh api users/mobile → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/mobile → 200; gh api users/mobile → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "team",
@@ -1447,7 +1510,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/team → 200; gh api users/team → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/team → 200; gh api users/team → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "open-source",
@@ -1469,7 +1533,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/open-source → 200; gh api users/open-source → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/open-source → 200; gh api users/open-source → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "social-impact",
@@ -1491,7 +1556,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/social-impact → 200; gh api users/social-impact → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/social-impact → 200; gh api users/social-impact → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "premium-support",
@@ -1513,7 +1579,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/premium-support → 200; gh api users/premium-support → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/premium-support → 200; gh api users/premium-support → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "press",
@@ -1535,7 +1602,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/press → 200; gh api users/press → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/press → 200; gh api users/press → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "trust-center",
@@ -1557,7 +1625,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/trust-center → 200; gh api users/trust-center → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/trust-center → 200; gh api users/trust-center → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "mcp",
@@ -1579,7 +1648,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/mcp → 200; gh api users/mcp → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/mcp → 200; gh api users/mcp → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "newsletter",
@@ -1601,7 +1671,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/newsletter → 200; gh api users/newsletter → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/newsletter → 200; gh api users/newsletter → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "sitemap",
@@ -1623,7 +1694,8 @@
       "suppressesReachableRepo": false,
       "decision": "deny",
       "reason": "users API にアカウントが無い＝この名前ではリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
-      "evidence": "curl -A <Chrome UA> -L https://github.com/sitemap → 200; gh api users/sitemap → absent"
+      "evidence": "curl -A <Chrome UA> -L https://github.com/sitemap → 200; gh api users/sitemap → absent",
+      "denyCriterionId": "account_absent"
     },
     {
       "namespace": "github",
@@ -1649,7 +1721,8 @@
       "suppressesReachableRepo": false,
       "decision": "allow",
       "reason": "実在の所有者で、公開リポジトリが browser でも開ける（github/.github が 200 でリポジトリUIあり）。拒否すると実在のリポジトリを巻き込む",
-      "evidence": "gh api users/github → Organization / 公開557件; curl -L https://github.com/github/.github → 200"
+      "evidence": "gh api users/github → Organization / 公開557件; curl -L https://github.com/github/.github → 200",
+      "denyCriterionId": null
     },
     {
       "namespace": "skills",
@@ -1675,7 +1748,8 @@
       "suppressesReachableRepo": false,
       "decision": "allow",
       "reason": "実在の所有者で、公開リポジトリが browser でも開ける（skills/.github が 200 でリポジトリUIあり）。拒否すると実在のリポジトリを巻き込む",
-      "evidence": "gh api users/skills → Organization / 公開52件; curl -L https://github.com/skills/.github → 200"
+      "evidence": "gh api users/skills → Organization / 公開52件; curl -L https://github.com/skills/.github → 200",
+      "denyCriterionId": null
     },
     {
       "namespace": "accessibility",
@@ -1701,7 +1775,8 @@
       "suppressesReachableRepo": false,
       "decision": "allow",
       "reason": "実在の所有者で、公開リポジトリが browser でも開ける（accessibility/a11y-courses が 200 でリポジトリUIあり）。拒否すると実在のリポジトリを巻き込む",
-      "evidence": "gh api users/accessibility → Organization / 公開16件; curl -L https://github.com/accessibility/a11y-courses → 200"
+      "evidence": "gh api users/accessibility → Organization / 公開16件; curl -L https://github.com/accessibility/a11y-courses → 200",
+      "denyCriterionId": null
     },
     {
       "namespace": "security-lab",
@@ -1727,7 +1802,8 @@
       "suppressesReachableRepo": false,
       "decision": "allow",
       "reason": "実在の所有者で、公開リポジトリが browser でも開ける（security-lab/CheatSheetSeries が 200 でリポジトリUIあり）。拒否すると実在のリポジトリを巻き込む",
-      "evidence": "gh api users/security-lab → Organization / 公開6件; curl -L https://github.com/security-lab/CheatSheetSeries → 200"
+      "evidence": "gh api users/security-lab → Organization / 公開6件; curl -L https://github.com/security-lab/CheatSheetSeries → 200",
+      "denyCriterionId": null
     },
     {
       "namespace": "user",
@@ -1753,7 +1829,8 @@
       "suppressesReachableRepo": false,
       "decision": "allow",
       "reason": "**第20回監査 R20-001 で owner単位の拒否をやめた。** 実在の所有者で、user/bitmap-fonts は browser で 200・リポジトリUIあり。認証系を守るための語だったが、本物の認証ルートは別の仕組みで拒否され続ける（/password_reset は所有者名にアンダースコアを許していないので文法で落ち、/login/* と /settings/* はそれぞれの語が一覧に残る）。外して新たに通るのは /devices/new・/password/new・/user/emails だが、いずれも github.com で 404",
-      "evidence": "gh api users/user → User / 公開11件; curl -L https://github.com/user/bitmap-fonts → 200"
+      "evidence": "gh api users/user → User / 公開11件; curl -L https://github.com/user/bitmap-fonts → 200",
+      "denyCriterionId": null
     },
     {
       "namespace": "devices",
@@ -1779,7 +1856,8 @@
       "suppressesReachableRepo": false,
       "decision": "allow",
       "reason": "**第20回監査 R20-001 で owner単位の拒否をやめた。** 実在の所有者で、devices/submit-site-to-marginalia-search は browser で 200・リポジトリUIあり。認証系を守るための語だったが、本物の認証ルートは別の仕組みで拒否され続ける（/password_reset は所有者名にアンダースコアを許していないので文法で落ち、/login/* と /settings/* はそれぞれの語が一覧に残る）。外して新たに通るのは /devices/new・/password/new・/user/emails だが、いずれも github.com で 404",
-      "evidence": "gh api users/devices → User / 公開1件; curl -L https://github.com/devices/submit-site-to-marginalia-search → 200"
+      "evidence": "gh api users/devices → User / 公開1件; curl -L https://github.com/devices/submit-site-to-marginalia-search → 200",
+      "denyCriterionId": null
     },
     {
       "namespace": "password",
@@ -1805,7 +1883,8 @@
       "suppressesReachableRepo": false,
       "decision": "allow",
       "reason": "**第20回監査 R20-001 で owner単位の拒否をやめた。** 実在の所有者で、password/python-code-shifter は browser で 200・リポジトリUIあり。認証系を守るための語だったが、本物の認証ルートは別の仕組みで拒否され続ける（/password_reset は所有者名にアンダースコアを許していないので文法で落ち、/login/* と /settings/* はそれぞれの語が一覧に残る）。外して新たに通るのは /devices/new・/password/new・/user/emails だが、いずれも github.com で 404",
-      "evidence": "gh api users/password → User / 公開1件; curl -L https://github.com/password/python-code-shifter → 200"
+      "evidence": "gh api users/password → User / 公開1件; curl -L https://github.com/password/python-code-shifter → 200",
+      "denyCriterionId": null
     }
   ],
   "denyCriteria": {
@@ -1813,28 +1892,49 @@
       "deny としてよい理由の正本（第23回監査 R23-004）。",
       "README は『その名前のアカウントが**無い**ことを確かめたものだけ』と書いていたが、",
       "実際には**アカウントが在るのに deny**の語が4つある（実測）。",
-      "採用理由を機械可読にして、README と突き合わせる。"
+      "採用理由を機械可読にして、README と突き合わせる。",
+      "第24回監査 R24-004。3つの branch では **watching / authorize / verify** がどれにも当てはまらなかった（アカウントは在り、routeShadow は not_applicable）。branch を足し、全79語へ denyCriterionId を書いて、branch ごとの件数まで縛る。"
     ],
     "branches": [
       {
         "id": "account_absent",
         "label": "アカウントが無い",
         "decision": "deny を許す",
-        "why": "その名前でリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない"
+        "why": "その名前でリポジトリを作れないので、拒否しても実在のリポジトリを巻き込まない",
+        "expectedCount": 68
+      },
+      {
+        "id": "account_present_zero_public_repos_auth_route",
+        "label": "アカウントは在るが公開リポジトリが0件で、認証・アカウント系の入口",
+        "decision": "deny を許す",
+        "why": "公開リポジトリが0件なので、拒否しても browser で開ける実在のリポジトリを巻き込まない。かつ認証・アカウント系の入口なので、リポジトリとして共有されると誤解を招く",
+        "example": "watching",
+        "expectedCount": 3
       },
       {
         "id": "route_shadowed",
         "label": "アカウントは在るが、browser でリポジトリUIが出ない",
         "decision": "deny を許す",
         "why": "GitHubの案内ページが名前空間を覆っていて、browser では開けない。開けないページは共有の対象にならない",
-        "example": "customer-stories"
+        "example": "customer-stories",
+        "expectedCount": 1
       },
       {
         "id": "reachable_repo",
         "label": "アカウントが在り、browser でもリポジトリUIが出る",
         "decision": "原則 allow",
         "why": "実在して開けるリポジトリを巻き込むため",
-        "exception": "認証・アカウント系の入口を守るために必要なときだけ deny にし、suppressesReachableRepo=true を立てて代償を明記する"
+        "exception": "認証・アカウント系の入口を守るために必要なときだけ deny にし、suppressesReachableRepo=true を立てて代償を明記する",
+        "expectedCount": 7
+      },
+      {
+        "id": "reachable_repo_security_exception",
+        "label": "アカウントが在り、browser でもリポジトリUIが出るが、それでも deny にした",
+        "decision": "deny を許す（例外）",
+        "why": "認証・アカウント系の入口を守るために必要なときだけ。実在して開けるリポジトリを巻き込む代償があるので、suppressesReachableRepo=true を立てて明記する",
+        "reserved": true,
+        "note": "現行 0 件。0 であることを検査が確かめる（枠だけ作って誰も当たらない状態にしない）",
+        "expectedCount": 0
       }
     ],
     "measuredDenyWithAccountPresent": [

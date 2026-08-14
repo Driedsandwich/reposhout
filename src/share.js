@@ -125,12 +125,18 @@
        * 例: `customer-stories/ey` `resources/articles` `education/schools`）。
        *
        * 足す基準は実測した——`github.com/<名前>` が github.com 上で開けて、
-       * かつ users API に**アカウントが無い**もの。アカウントが無ければ、
-       * そこにリポジトリは作れない＝拒否しても実在のリポジトリを巻き込まない。
+       * かつ次の**3つ**のどれかに当てはまるもの。語ごとにどれを使ったかは
+       * `store/GITHUB_NAMESPACE_INVENTORY.json` の `denyCriterionId` に書いてある。
+       *   ① users API に**アカウントが無い**（68語）。リポジトリを作れない＝
+       *      拒否しても実在のリポジトリを巻き込まない。
+       *   ② アカウントは在るが、browser でリポジトリUIが出ない（1語）。
+       *      `customer-stories` は `github.com/customer-stories/test` が 404 になる
+       *      （GitHubの案内ページが同じ名前空間を覆っている）。
+       *   ③ アカウントは在るが公開リポジトリが 0 件で、認証・アカウント系の入口（3語）。
+       *      `watching` `authorize` `verify`。第23回まで①だけを基準として書いていたが、
+       *      この3語は①に当てはまらないまま一覧に載っていた（第24回監査 R24-004）。
        * この基準で `skills`（52）`accessibility`（16）`security-lab`（6）は
        * **足していない**——実在する組織で、公開リポジトリを持っているため。
-       * `customer-stories` だけはアカウントがあるが、`github.com/customer-stories/test`
-       * が 404 になる（GitHubの案内ページが同じ名前空間を覆っている）ので足した。
        */
       'customer-stories', 'resources', 'education', 'solutions', 'readme',
       'git-guides', 'why-github', 'newsroom', 'partners', 'mobile', 'team',
