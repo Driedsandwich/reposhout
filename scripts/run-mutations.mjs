@@ -60,15 +60,80 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const RUNNER_FILE = fileURLToPath(import.meta.url);
 const sha = (s) => createHash('sha256').update(s).digest('hex');
 
+/*
+ * ⚠️ **引数を厳格に読む。**（第24回監査 R24-002）
+ * 前は `Number(argOf('--timeout') || 300000)` だったので:
+ *   ・`--timeout 0` が通り、Node では **0 は「上限なし」**（実測: 打ち切られない）
+ *   ・`--timeout abc` が NaN のまま渡り、実行時に ERR_OUT_OF_RANGE で落ちる
+ *   ・知らない綴りの引数は黙って無視される
+ * 上限は有限の正整数だけ。知らない引数は受け取らない。
+ */
+const KNOWN_FLAGS = ['--id', '--receipt', '--spec', '--timeout'];
+const MAX_TIMEOUT_MS = 3600000;
 const argv = process.argv.slice(2);
-const argOf = (name) => {
-  const i = argv.indexOf(name);
-  return i >= 0 ? argv[i + 1] : null;
-};
-const onlyId = argOf('--id');
-const receiptPath = argOf('--receipt');
-const specPath = argOf('--spec') || 'test/mutations.json';
-const timeoutMs = Number(argOf('--timeout') || 300000);
+function parseArgs() {
+  const out = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (!KNOWN_FLAGS.includes(a)) return { error: `知らない引数: ${a}` };
+    const v = argv[i + 1];
+    if (v === undefined || KNOWN_FLAGS.includes(v)) return { error: `${a} に値が無い` };
+    out[a] = v;
+    i++;
+  }
+  return { out };
+}
+const parsed = parseArgs();
+if (parsed.error) {
+  console.error(`${parsed.error}\n使える引数: ${KNOWN_FLAGS.join(' ')}`);
+  process.exit(2);
+}
+const onlyId = parsed.out['--id'] || null;
+const receiptPath = parsed.out['--receipt'] || null;
+
+/*
+ * ⚠️ **証跡を書かずに死ぬ経路を残さない。**（第24回監査 R24-002 の続き・N19 で実測）
+ * 途中で予期しない例外が出ると、ここまでの分も含めて**証跡が1行も残らなかった**。
+ * 受け取る側から見ると「まだ走っていない」と「途中で死んだ」が区別できない
+ * （実際、N19 の変異で受け取り側は null を読んで TypeError になり、
+ *   守りたい検査は一度も走らなかった）。
+ * どんな終わり方でも、最後に必ず何か書く。
+ */
+let receiptWritten = false;
+function saveReceipt(obj) {
+  if (!receiptPath) { receiptWritten = true; return true; }
+  try {
+    writeFileSync(receiptPath, JSON.stringify(obj, null, 2) + '\n');
+    receiptWritten = true;
+    return true;
+  } catch (e) {
+    console.error(`★ 証跡を書けなかった: ${receiptPath}\n  ${e && e.message}`);
+    return false;
+  }
+}
+process.on('exit', (code) => {
+  if (receiptWritten || !receiptPath) return;
+  try {
+    writeFileSync(receiptPath, JSON.stringify({
+      spec: parsed.out['--spec'] || 'test/mutations.json', total: 0,
+      precondition: 'aborted',
+      error: `証跡を書く前に終了した（exit ${code}）。結果は何も言えない`,
+      results: []
+    }, null, 2) + '\n');
+  } catch (e) { /* 書けないなら、そのまま落とす */ }
+});
+const specPath = parsed.out['--spec'] || 'test/mutations.json';
+let timeoutMs = 300000;
+if (parsed.out['--timeout'] !== undefined) {
+  const raw = parsed.out['--timeout'];
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0 || n > MAX_TIMEOUT_MS) {
+    console.error(`--timeout は 1〜${MAX_TIMEOUT_MS} の整数（受け取った値: ${JSON.stringify(raw)}）`
+      + '\n※ 0 は Node では「上限なし」になるので受け付けない');
+    process.exit(2);
+  }
+  timeoutMs = n;
+}
 
 /* --spec は絶対パスでも渡せる（対照用の定義を repo の外へ置けるため）。
    ただし **spec が指す対象は repo の中だけ**（下の validatePath）。 */
@@ -100,10 +165,32 @@ function gitOut(args) {
   }
 }
 const gitStatusStart = gitOut(['status', '--porcelain']);
+const sourceCommit = gitOut(['rev-parse', 'HEAD']);
+const sourceTree = gitOut(['rev-parse', 'HEAD^{tree}']);
+/*
+ * ⚠️ **由来が取れないまま成功させない。**（第24回監査 R24-002）
+ * `gitOut` は git の失敗をすべて null に変えるので、`.git` の無い複製や
+ * git の入っていない環境でも、commit も tree も dirty も null のまま走り切り、
+ * 最後の条件（`workspaceUnchanged !== false`）は **null を成功側**として扱っていた。
+ * 何を測ったのか言えない証跡は、証跡ではない。
+ */
+if (sourceCommit === null || sourceTree === null || gitStatusStart === null) {
+  const missing = [['sourceCommit', sourceCommit], ['sourceTree', sourceTree],
+    ['gitStatus', gitStatusStart]].filter(([, v]) => v === null).map(([k]) => k);
+  const msg = `git から由来を取れない（${missing.join(' / ')}）。何を測ったか言えないので走らない`;
+  console.error(`★ ${msg}`);
+  saveReceipt({
+    spec: specPath, total: 0, precondition: 'failed', error: msg,
+    provenance: { sourceCommit, sourceTree, nodeVersion: process.version,
+      platform: process.platform, timeoutMs, startedAt, completedAt: new Date().toISOString() },
+    results: []
+  });
+  process.exit(2);
+}
 const provenance = {
-  sourceCommit: gitOut(['rev-parse', 'HEAD']),
-  sourceTree: gitOut(['rev-parse', 'HEAD^{tree}']),
-  workingTreeDirty: gitStatusStart === null ? null : gitStatusStart !== '',
+  sourceCommit,
+  sourceTree,
+  workingTreeDirty: gitStatusStart !== '',
   runnerSha256: sha(readFileSync(RUNNER_FILE, 'utf8')),
   specSha256: sha(specText),
   nodeVersion: process.version,
@@ -674,15 +761,10 @@ const summary = {
 if (fatal) summary.fatal = fatal;
 
 if (receiptPath) {
-  try {
-    writeFileSync(receiptPath, JSON.stringify(summary, null, 2) + '\n');
-    console.log(`証跡: ${receiptPath}`);
-  } catch (e) {
-    console.error(`★ 証跡を書けなかった: ${receiptPath}\n  ${e && e.message}`);
-    process.exit(2);
-  }
+  if (!saveReceipt(summary)) process.exit(2);
+  console.log(`証跡: ${receiptPath}`);
 }
 
 const ok = survived.length === 0 && notApplied.length === 0
-  && errors.length === 0 && badRestore.length === 0 && workspaceUnchanged !== false;
+  && errors.length === 0 && badRestore.length === 0 && workspaceUnchanged === true;
 process.exit(ok ? 0 : 1);

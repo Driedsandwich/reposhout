@@ -847,8 +847,8 @@
     {
       "id": "N28",
       "file": "scripts/run-mutations.mjs",
-      "find": "    console.error(`★ 証跡を書けなかった: ${receiptPath}\\n  ${e && e.message}`);\n    process.exit(2);",
-      "replace": "    console.error(`★ 証跡を書けなかった: ${receiptPath}`);",
+      "find": "  if (!saveReceipt(summary)) process.exit(2);",
+      "replace": "  saveReceipt(summary);",
       "test": "test/mutation-runner.test.mjs",
       "desc": "証跡を書けなくても成功で終わる",
       "expectedFailure": {
@@ -1293,6 +1293,72 @@
       "desc": "知らない種類の宣言を通す",
       "expectedFailure": {
         "testName": "assertion 以外を検知にするなら、理由を書かせる（R24-001）"
+      }
+    },
+    {
+      "id": "T01",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (!Number.isInteger(n) || n <= 0 || n > MAX_TIMEOUT_MS) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "上限の検査をやめる",
+      "expectedFailure": {
+        "testName": "上限は有限の正整数だけ——0 や文字列や範囲外を受け取らない（R24-002）"
+      }
+    },
+    {
+      "id": "T02",
+      "file": "scripts/run-mutations.mjs",
+      "find": "    if (!KNOWN_FLAGS.includes(a)) return { error: `知らない引数: ${a}` };",
+      "replace": "    if (false) return { error: `知らない引数: ${a}` };",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "知らない引数を通す",
+      "expectedFailure": {
+        "testName": "知らない引数は受け取らない（R24-002）"
+      }
+    },
+    {
+      "id": "T03",
+      "file": "scripts/run-mutations.mjs",
+      "find": "if (sourceCommit === null || sourceTree === null || gitStatusStart === null) {",
+      "replace": "if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "由来が取れなくても走る",
+      "expectedFailure": {
+        "testName": "git から由来を取れないなら走らない（R24-002）"
+      }
+    },
+    {
+      "id": "T04",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  && errors.length === 0 && badRestore.length === 0 && workspaceUnchanged === true;",
+      "replace": "  && errors.length === 0 && badRestore.length === 0 && workspaceUnchanged !== false;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "作業ツリーの判定を null 許容へ戻す",
+      "expectedFailure": {
+        "testName": "作業ツリーが実行前と同じでなければ、成功にしない（R24-002）"
+      }
+    },
+    {
+      "id": "T05",
+      "file": "scripts/run-mutations.mjs",
+      "find": "process.on('exit', (code) => {\n  if (receiptWritten || !receiptPath) return;",
+      "replace": "process.on('exit', (code) => {\n  if (true) return;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "倒れたときの証跡を書かない",
+      "expectedFailure": {
+        "testName": "どんな終わり方でも、証跡を1行は残す（R24-002）"
+      }
+    },
+    {
+      "id": "T06",
+      "file": "test/mutation-runner.test.mjs",
+      "find": "  assert.ok(r.receipt, `証跡が無い（exit=${r.exitCode}）。何を測ったか言えない:\\n${r.stdout}`);",
+      "replace": "  if (!r.receipt) return {};",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "補助関数が、証跡が無いことを黙って通す",
+      "expectedFailure": {
+        "testName": "証跡が無いとき、補助関数は assertion で止まる（R24-001）"
       }
     }
   ]

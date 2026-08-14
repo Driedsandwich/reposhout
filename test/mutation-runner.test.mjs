@@ -268,7 +268,14 @@ test('変異IDが重複していたら、走る前に止まる（R24-001）', ()
     replace: 'export const other = 3;', expectedFailure: { testName: OTHER } })]).dir;
   const r = runRunner(dir);
   assert.notEqual(r.exitCode, 0, '重複したIDで走り切っている');
-  assert.equal(r.receipt, null, '重複したIDのまま証跡を書いている');
+  /*
+   * 証跡は必ず残る（第24回監査 R24-002 の続き）。残るのは「測っていない」という記録で、
+   * 結果ではない——`results` が空で、なぜ止まったかが書いてあること。
+   */
+  assert.ok(r.receipt, '証跡が1行も残っていない');
+  assert.deepEqual(r.receipt.results, [], '重複したIDのまま測っている');
+  assert.match(String(r.receipt.precondition), /aborted|failed/,
+    `止まった理由が証跡に書かれていない: ${JSON.stringify(r.receipt).slice(0, 200)}`);
 });
 
 test('assertion 以外を検知にするなら、理由を書かせる（R24-001）', () => {
@@ -420,7 +427,92 @@ test('書いたのに読み戻せなければ、戻したうえでランナー�
 });
 
 /* ============================================================
- * ③ 第22回までの分類（引き続き効いていること）
+ * ③ 引数と由来（第24回監査 R24-002）
+ * ============================================================ */
+
+test('上限は有限の正整数だけ——0 や文字列や範囲外を受け取らない（R24-002）', () => {
+  /*
+   * ⚠️ Node の `timeout: 0` は「上限なし」（実測: 打ち切られない）。
+   * 前は `--timeout 0` が通ったので、**上限を外したまま**走らせられた。
+   */
+  const dir = makeFixture([mut('T0')]).dir;
+  for (const bad of ['0', '-1', 'abc', '1.5', '3600001']) {
+    const r = runRunner(dir, { timeout: bad });
+    assert.notEqual(r.exitCode, 0, `--timeout ${bad} を受け取っている`);
+    assert.deepEqual(r.receipt && r.receipt.results, [], `--timeout ${bad} で走ってしまっている`);
+  }
+  /* 対照: まっとうな値なら走る */
+  const ok = runRunner(dir, { timeout: 8000, receipt: 'ok.json' });
+  assert.equal(ok.exitCode, 0, `対照が落ちている:\n${ok.stdout}`);
+  assert.equal(ok.receipt.provenance.timeoutMs, 8000);
+});
+
+test('知らない引数は受け取らない（R24-002）', () => {
+  const dir = makeFixture([mut('T1')]).dir;
+  const r = runRunner(dir, { extra: ['--bogus', 'x'] });
+  assert.notEqual(r.exitCode, 0, '知らない引数を黙って無視している');
+  /*
+   * ⚠️ ここだけ証跡が**残らない**のが正しい。引数そのものを解釈できていないので、
+   * どこへ書けばよいかも決まっていない（--receipt の値を信じてよい根拠が無い）。
+   * 「引数は受け取ったが途中で止まった」＝証跡を残す、と分けている。
+   */
+  assert.equal(r.receipt, null, '解釈できない引数なのに、書き先を決めて証跡を書いている');
+  /* 対照: その引数を外せば走る */
+  const ok = runRunner(dir, { receipt: 'ok.json' });
+  assert.equal(ok.exitCode, 0, `対照が落ちている:\n${ok.stdout}`);
+});
+
+test('git から由来を取れないなら走らない（R24-002）', () => {
+  /*
+   * ⚠️ `gitOut` は git の失敗を全部 null に変える。前はそのまま走り切り、
+   * 最後の条件が **null を成功側**として扱っていた——何を測ったか言えない証跡になる。
+   */
+  const dir = makeFixture([mut('G0')], {}, { git: false }).dir;
+  const r = runRunner(dir);
+  assert.notEqual(r.exitCode, 0, '由来が取れないのに走り切っている');
+  assert.ok(r.receipt, '前提で止まったのに、証跡を1行も残していない');
+  assert.equal(r.receipt.precondition, 'failed');
+  assert.equal(r.receipt.total, 0);
+  assert.match(r.receipt.error, /由来/);
+});
+
+test('作業ツリーが実行前と同じでなければ、成功にしない（R24-002）', () => {
+  /*
+   * ⚠️ `workspaceUnchanged` は true / false / **null**（実行中に git が使えなくなった）
+   * の3値。`!== false` だと null を成功側として扱う——**確かめられなかった**のに
+   * 「変わっていない」と同じ扱いになる。
+   * 実行の途中で `.git` が消える題材で、その差を作る。
+   */
+  const dir = makeFixture([mut('G2', { test: 'test/nukegit.test.mjs',
+    expectedFailure: { testName: '変異したら .git を消してから落ちる' } })], {
+    'test/nukegit.test.mjs': `
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, rmSync } from 'node:fs';
+const body = readFileSync(new URL('../mod.mjs', import.meta.url), 'utf8');
+test('変異したら .git を消してから落ちる', () => {
+  if (!body.includes('99')) return;
+  rmSync(new URL('../.git', import.meta.url), { recursive: true, force: true });
+  assert.fail('わざと落とす');
+});
+`
+  }).dir;
+  const r = runRunner(dir);
+  assert.ok(r.receipt, `証跡が残っていない:\n${r.stdout}`);
+  assert.equal(r.receipt.workspaceUnchanged, null,
+    `題材が効いていない（git が生きたまま）: ${r.receipt.workspaceUnchanged}`);
+  assert.equal(r.receipt.applied_and_killed, 1, '変異そのものは検知されているはず');
+  assert.notEqual(r.exitCode, 0,
+    '作業ツリーを確かめられていないのに成功で終わっている');
+
+  /* 対照: ふつうは true で成功する */
+  const ok = runRunner(makeFixture([mut('G1')]).dir);
+  assert.equal(ok.receipt.workspaceUnchanged, true);
+  assert.equal(ok.exitCode, 0);
+});
+
+/* ============================================================
+ * ④ 第22回までの分類（引き続き効いていること）
  * ============================================================ */
 
 test('前提が崩れている状態を、検知として数えない（R22-004）', () => {
@@ -591,4 +683,36 @@ test('呼ばれ方（NODE_TEST_CONTEXT）で判定が変わらない（R22-004�
   assert.equal(outcomeOf(r, 'H1'), 'applied_and_killed',
     '呼び出し元の環境変数で、検知が素通りに化けている');
   assert.equal(outcomeOf(r, 'H2'), 'applied_but_survived');
+});
+
+test('どんな終わり方でも、証跡を1行は残す（R24-002）', () => {
+  /*
+   * ⚠️ N19（対象の存在検査を外す変異）で実測——ランナーが途中の例外で死に、
+   * **証跡が1行も残らなかった**。受け取る側は null を読んで TypeError になり、
+   * 「まだ走っていない」と「途中で死んだ」を区別できないまま、
+   * 守りたい assertion は一度も走らなかった。
+   */
+  const dir = makeFixture([mut('X1')]).dir;
+  /* 途中で必ず倒れる状態を作る: spec を JSON として壊す */
+  writeFileSync(join(dir, 'test/mutations.json'), '{ これはJSONではない');
+  const r = runRunner(dir);
+  assert.notEqual(r.exitCode, 0, '壊れた指示で成功している');
+  assert.ok(r.receipt, '倒れたときに証跡が1行も残っていない');
+  assert.deepEqual(r.receipt.results, [], '測っていないのに結果が書かれている');
+  assert.ok(r.receipt.precondition, '止まったことが証跡に書かれていない');
+});
+
+test('証跡が無いとき、補助関数は assertion で止まる（R24-001）', () => {
+  /*
+   * ⚠️ 「落ちる」だけでは足りない。**どう落ちるか**まで決める。
+   * 補助関数が TypeError で倒れると、このランナー自身の分類では
+   * `unexpected_failure_kind`（＝結果は何も言えない）になり、
+   * 守りたい assertion は一度も走っていないのに「落ちた」ように見える。
+   */
+  assert.throws(() => of({ receipt: null, exitCode: 2, stdout: '' }, 'X1'),
+    (e) => e instanceof assert.AssertionError,
+    '証跡が無いのに assertion 以外で倒れている（または止まらずに通している）');
+  /* 対照: 証跡があれば素通りする */
+  assert.deepEqual(of({ receipt: { results: [{ id: 'X1', outcome: 'ok' }] } }, 'X1'),
+    { id: 'X1', outcome: 'ok' });
 });
