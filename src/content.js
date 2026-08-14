@@ -201,6 +201,14 @@
          * service worker 側でも例外で案内が出ないと、押しても無反応に見えた。
          */
         if (res.ok === false && res.notified !== true) showNotice(res.reason || 'unsupported');
+        /*
+         * 第24回監査 R24-003。開いてはいるが Esc が効かないとき、
+         * service worker が案内を出せなかった場合だけ、ここで出す
+         * （出せていれば `notified` が true なので重ねない）。
+         */
+        else if (res.ok === true && res.escAvailable === false && res.notified !== true) {
+          showNotice('esc_unavailable');
+        }
       });
     } catch (e) {
       showNotice('reload_required');
@@ -248,6 +256,15 @@
        */
       return t('noticeReloadRequired',
         'The extension was updated. Reload this GitHub tab and try again. Nothing was sent to X.');
+    }
+    if (reason === 'esc_unavailable') {
+      /*
+       * 窓は開いている。閉じる操作だけが効かない（第24回監査 R24-003）。
+       * 「送っていない」とは言えないので、そこは書かない。
+       */
+      return t('noticeEscUnavailable',
+        'The X composer window opened, but this extension cannot close it with Escape. ' +
+        'Close the window yourself when you are done.');
     }
     return t('noticeUnsupported', 'This page cannot be shared. Nothing was sent to X.');
   }

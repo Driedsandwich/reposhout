@@ -79,7 +79,7 @@ function mount({ queryResult = null, contentScript = true,
         log.titles.push(o);
       }
     },
-    commands: { onCommand: { addListener() {} } },
+    commands: { onCommand: { addListener(fn) { log.onCommand = fn; } } },
     runtime: {
       /* 第16回監査 R16-003。メッセージの入口を実際に呼べるようにする */
       onMessage: { addListener(fn) { listeners.push(fn); } },
@@ -228,7 +228,7 @@ test('タブも引き直しの結果も無ければ、何もしない（R14-002�
 
 test('画面へ案内が届けば、バッジは出さない（R14-003）', async () => {
   const { bg, log } = mount({ contentScript: true });
-  const how = await bg.announceRefusal(7, 'credential_like');
+  const how = await bg.announceOnce(7, 'credential_like');
   assert.equal(how, 'notice');
   assert.equal(log.notified.length, 1);
   assert.equal(log.notified[0].tabId, 7);
@@ -242,7 +242,7 @@ test('content script がいなければ、バッジで伝える（R14-003）', a
    * 1.1.8 はここで黙って終わっていたので、利用者には壊れたようにしか見えなかった。
    */
   const { bg, log } = mount({ contentScript: false });
-  const how = await bg.announceRefusal(7, 'credential_like');
+  const how = await bg.announceOnce(7, 'credential_like');
   assert.equal(how, 'badge', '届かないのにバッジを出していない');
   const set = log.badges.filter((b) => b.text);
   assert.equal(set.length, 1);
@@ -253,7 +253,7 @@ test('content script がいなければ、バッジで伝える（R14-003）', a
 
 test('バッジにも見出しにも、URLや値を出さない（R14-003）', async () => {
   const { bg, log } = mount({ contentScript: false });
-  await bg.announceRefusal(7, 'credential_like');
+  await bg.announceOnce(7, 'credential_like');
   const shown = JSON.stringify(log.badges) + JSON.stringify(log.titles);
   for (const leak of ['http', 'github.com', 'access_token', 'dummy']) {
     assert.ok(!shown.includes(leak), `バッジに ${leak} が出ている: ${shown}`);
@@ -331,7 +331,7 @@ test('開けなかった案内が届かなければ、バッジで伝える（R1
 
 test('タブIDが数でなければ、案内もバッジも試さない（R14-003）', async () => {
   const { bg, log } = mount({ contentScript: true });
-  assert.equal(await bg.announceRefusal(undefined, 'unsupported'), 'none');
+  assert.equal(await bg.announceOnce(undefined, 'unsupported'), 'none');
   assert.deepEqual(log.notified, []);
   assert.deepEqual(log.badges, []);
 });
@@ -537,31 +537,44 @@ test('開かずに終わる出口が、すべて refuse を通っている（R19
   const refuseBody = src.match(/async function refuse\s*\([^)]*\)\s*\{[\s\S]*?\n\}/);
   assert.ok(refuseBody, 'refuse() が見つからない');
   assert.match(refuseBody[0], /opened:\s*false/, 'refuse() が opened:false を返していない');
-  assert.match(refuseBody[0], /announceRefusal/, 'refuse() が案内を出していない');
+  assert.match(refuseBody[0], /announceOnce/, 'refuse() が案内を出していない');
   /*
-   * 案内を出す口は refuse ひとつだけ。行番号で範囲を出し、
-   * refuse の外から announceRefusal を呼んでいないことを見る
-   * （定義そのものと、末尾の公開一覧は数えない）。
+   * 案内を出してよい関数は**名指しの2つだけ**で、それぞれ**1回だけ**呼ぶ。
+   *
+   * 第24回監査 R24-003 まで、出口は refuse ひとつだったので「refuse の外なら
+   * 全部だめ」で足りた。開いたが Esc が効かないときも伝えるようになったので、
+   * 「refuse 以外は禁止」を単に緩めると、**どこからでも呼べる**ことになる。
+   * 許す先を数え上げ、増えたらここで落ちる形にする。
    */
   const lines = src.split('\n');
-  const defLine = lines.findIndex((l) => /async function refuse\s*\(/.test(l));
-  assert.ok(defLine >= 0, 'refuse() の定義が見つからない');
-  let depth = 0, endLine = -1;
-  for (let i = defLine; i < lines.length; i++) {
-    depth += (lines[i].match(/\{/g) || []).length - (lines[i].match(/\}/g) || []).length;
-    if (depth === 0 && i > defLine) { endLine = i; break; }
-  }
-  assert.ok(endLine > defLine, 'refuse() の終わりが見つからない');
-  const strays = [];
+  const ALLOWED = ['refuse', 'shareResolvedTab'];
+  const spans = ALLOWED.map((name) => {
+    const defLine = lines.findIndex((l) =>
+      new RegExp(`^async function ${name}\\s*\\(`).test(l));
+    assert.ok(defLine >= 0, `${name}() の定義が見つからない`);
+    let depth = 0, endLine = -1;
+    for (let i = defLine; i < lines.length; i++) {
+      depth += (lines[i].match(/\{/g) || []).length - (lines[i].match(/\}/g) || []).length;
+      if (depth === 0 && i > defLine) { endLine = i; break; }
+    }
+    assert.ok(endLine > defLine, `${name}() の終わりが見つからない`);
+    return { name, defLine, endLine };
+  });
+  const strays = [], counts = Object.fromEntries(ALLOWED.map((n) => [n, 0]));
   lines.forEach((l, i) => {
-    if (!/announceRefusal\s*\(/.test(l)) return;         // 呼び出しだけを見る
-    if (/^async function announceRefusal/.test(l)) return; // 定義そのもの
-    if (/^\s*announceRefusal:\s*announceRefusal,?\s*$/.test(l)) return; // 公開一覧
-    if (i >= defLine && i <= endLine) return;             // refuse の中
+    if (!/announceOnce\s*\(/.test(l)) return;          // 呼び出しだけを見る
+    if (/^async function announceOnce/.test(l)) return;  // 定義そのもの
+    if (/^\s*announceOnce:\s*announceOnce,?\s*$/.test(l)) return; // 公開一覧
+    const own = spans.find((s) => i >= s.defLine && i <= s.endLine);
+    if (own) { counts[own.name] += 1; return; }
     strays.push(`${i + 1}: ${l.trim()}`);
   });
   assert.deepEqual(strays, [],
-    'refuse() の外から announceRefusal を呼んでいる（二重通知と数え漏れの元）:\n' + strays.join('\n'));
+    `${ALLOWED.join(' / ')} の外から announceOnce を呼んでいる（二重通知と数え漏れの元）:\n`
+    + strays.join('\n'));
+  for (const n of ALLOWED) {
+    assert.equal(counts[n], 1, `${n}() が announceOnce を ${counts[n]} 回呼んでいる（1回にする）`);
+  }
 });
 
 /* ============================================================
@@ -673,12 +686,12 @@ test('バッジ本体が失敗したときだけ、通知の失敗として扱�
 
 test('色が失敗しても案内は1回だけ（二重に出さない・R22-005）', async () => {
   /*
-   * announceRefusal は「画面の案内 → 届かなければバッジ」の順。バッジが
+   * announceOnce は「画面の案内 → 届かなければバッジ」の順。バッジが
    * 成立しているのに false を返すと、呼び出し元は**まだ誰も知らせていない**と
    * 判断して別の経路をもう一度たどる。出口が1つであることを確かめる。
    */
   const { bg, log } = mount({ contentScript: false, fakeTimers: true, badgeFault: 'color' });
-  const how = await bg.announceRefusal(7, 'unsupported');
+  const how = await bg.announceOnce(7, 'unsupported');
   assert.equal(how, 'badge', `色の失敗で案内なし扱いになっている: ${how}`);
   assert.equal(log.badges.filter((b) => b.text === '!').length, 1, 'バッジが2回出ている');
   assert.deepEqual(log.notified, [], '画面の案内とバッジが二重に出ている');
@@ -719,7 +732,14 @@ test('窓のIDが返らなければ、開いたことにしない（R23-003）',
    */
   for (const createResult of ['undefined', 'empty']) {
     const { bg } = mount({ createResult });
-    const r = await bg.openShareWindow('https://x.com/intent/post?text=a');
+    /*
+     * ⚠️ **投げても、assertion で受け止める。**（第24回監査 R24-001）
+     * 検査を外すと `win.id` を undefined から読んで TypeError になり、
+     * テストは「例外で落ちた」扱いになっていた——守りたい assertion は走らないまま。
+     * 例外を値へ畳んでから見れば、落ちるのは必ずこの assertion になる。
+     */
+    const r = await bg.openShareWindow('https://x.com/intent/post?text=a')
+      .catch((e) => ({ state: `★例外: ${e && e.message}`, windowOpened: null, escAvailable: null, windowId: null }));
     assert.equal(r.state, 'creation_unknown', `${createResult}: 状態が違う: ${JSON.stringify(r)}`);
     assert.equal(r.windowOpened, null, '開いたかどうかを断定している');
     assert.equal(r.escAvailable, false);
@@ -773,8 +793,9 @@ test('台帳を読めなかったときは、書かない（既にある記録�
 
 test('台帳を読めなければ、所有を認めない（R23-003）', async () => {
   const { bg } = mount({ getFailsOnce: true, initialRecords: { 99: Date.now() } });
-  assert.equal(await bg.isShareWindow(99), false,
-    '読めていないのに「拡張が開いた窓だ」と認めている');
+  /* ⚠️ 例外を値へ畳んでから見る（投げると assertion が走らない・R24-001） */
+  const got = await bg.isShareWindow(99).catch((e) => `★例外: ${e && e.message}`);
+  assert.equal(got, false, '読めていないのに「拡張が開いた窓だ」と認めている');
   /* 対照: 読めるようになれば認める */
   const { bg: bg2 } = mount({ initialRecords: { 99: Date.now() } });
   assert.equal(await bg2.isShareWindow(99), true, '対照が壊れている（読めても認めない）');
@@ -800,4 +821,160 @@ test('ポップアップを作れなければタブで開き、Escの対象に�
   /* 対照: どちらも開けなければ failed */
   const { bg: bg2 } = mount({ openFails: true });
   assert.equal((await bg2.openShareWindow('https://x.com/intent/post?text=a')).state, 'failed');
+});
+
+/* ============================================================
+ * 第24回監査 R24-003 — 開いたが Esc が効かないことを、3入口とも1回だけ伝える
+ * ============================================================
+ *
+ * 第23回で `popup_confirmed_untracked`（窓は開いたが記録できず、Esc が効かない）を
+ * **内部的には**分けた。だが利用者へは何も出ていなかった——実測で
+ * notice 0 / badge 0 / 応答 `{ok:true, notified:false}`。
+ * 画面の上では「Esc で閉じられる窓」と区別がつかない。
+ */
+
+const UNTRACKED = { setFails: true };          // 窓は開くが session への記録が失敗する
+const GH_TAB = (id) => ({ id: id, url: 'https://github.com/o/r' });
+
+test('ツールバーから開いたとき、Escが効かないことを1回だけ伝える（R24-003）', async () => {
+  const { log } = mount(UNTRACKED);
+  log.onClicked(GH_TAB(9));
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(log.opened.length, 1, '窓が開いていない＝前提が違う');
+  assert.equal(announced(log), 1,
+    `案内が1回でない: notice=${JSON.stringify(log.notified)} badge=${JSON.stringify(log.badges)}`);
+  assert.equal(log.notified[0].reason, 'esc_unavailable',
+    `理由が違う: ${JSON.stringify(log.notified)}`);
+  assert.equal(log.notified[0].tabId, 9, '別のタブへ伝えている');
+});
+
+test('ショートカットから開いたときも、同じく1回だけ伝える（R24-003）', async () => {
+  const { log } = mount(UNTRACKED);
+  assert.ok(log.onCommand, 'ショートカットのリスナーが登録されていない');
+  log.onCommand('share-to-x', GH_TAB(9));
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(log.opened.length, 1, '窓が開いていない＝前提が違う');
+  assert.equal(announced(log), 1, `案内が1回でない: ${JSON.stringify(log.notified)}`);
+  assert.equal(log.notified[0].reason, 'esc_unavailable');
+});
+
+test('画面内ボタンからも1回だけ伝え、応答に状態を載せる（R24-003）', async () => {
+  const { log, send } = mount(UNTRACKED);
+  const res = await send({ type: 'gxs:request-share' }, { tab: GH_TAB(5) });
+  assert.equal(log.opened.length, 1, '窓が開いていない＝前提が違う');
+  assert.equal(res.ok, true, '開いたのに失敗として返している');
+  assert.equal(res.state, 'popup_confirmed_untracked', `状態を返していない: ${JSON.stringify(res)}`);
+  assert.equal(res.escAvailable, false, 'Escが効かないことを応答で伝えていない');
+  assert.equal(res.notified, true, '案内を出したことを応答で伝えていない');
+  assert.equal(announced(log), 1, `案内が1回でない: ${JSON.stringify(log.notified)}`);
+  assert.equal(log.notified[0].reason, 'esc_unavailable');
+});
+
+test('画面内の案内が届かないときはバッジへ回す（R24-003）', async () => {
+  /* content script が居ない画面。notice は届かないので badge がちょうど1つ */
+  const { log, send } = mount({ setFails: true, contentScript: false });
+  const res = await send({ type: 'gxs:request-share' }, { tab: GH_TAB(5) });
+  assert.equal(log.opened.length, 1, '窓が開いていない＝前提が違う');
+  assert.deepEqual(log.notified, [], '届かないはずの notice が記録されている');
+  assert.equal(announced(log), 1, `バッジが1つでない: ${JSON.stringify(log.badges)}`);
+  assert.ok(log.titles.some((x) => x.title === '[noticeEscUnavailable]'),
+    `見出しが専用の定型文でない: ${JSON.stringify(log.titles)}`);
+  assert.equal(res.notified, true, 'バッジで伝えたのに notified が false');
+});
+
+test('記録できた窓では、案内を出さない（R24-003の対照）', async () => {
+  /*
+   * ⚠️ この対照が無いと、上の4件は「常に案内を出す」実装でも全部通る。
+   */
+  const { log, send } = mount({});
+  const res = await send({ type: 'gxs:request-share' }, { tab: GH_TAB(5) });
+  assert.equal(log.opened.length, 1, '窓が開いていない＝前提が違う');
+  assert.equal(res.state, 'popup_confirmed_tracked');
+  assert.equal(res.escAvailable, true);
+  assert.equal(res.notified, false, '記録できているのに案内を出している');
+  assert.equal(announced(log), 0, `案内を出している: ${JSON.stringify(log.notified)}`);
+});
+
+test('記録できなかった窓を、持ち物の記録へ入れない（R24-003）', async () => {
+  /*
+   * 伝えるようになったからといって、記録へ入れてはいけない。
+   * 入れると `isShareWindow` が true を返し、**利用者のふつうの窓を閉じうる**。
+   */
+  const { bg, log, send } = mount(UNTRACKED);
+  await send({ type: 'gxs:request-share' }, { tab: GH_TAB(5) });
+  assert.equal(log.opened.length, 1);
+  const owned = await bg.isShareWindow(99).catch((e) => `★例外: ${e && e.message}`);
+  assert.equal(owned, false, `記録できなかった窓を持ち物にしている: ${owned}`);
+});
+
+test('英日の定型文がそろっていて、値を含まない（R24-003）', () => {
+  const en = JSON.parse(readFileSync(join(ROOT, '_locales/en/messages.json'), 'utf8'));
+  const ja = JSON.parse(readFileSync(join(ROOT, '_locales/ja/messages.json'), 'utf8'));
+  for (const [name, m] of [['en', en], ['ja', ja]]) {
+    assert.ok(m.noticeEscUnavailable, `${name} に noticeEscUnavailable が無い`);
+    const s = m.noticeEscUnavailable.message;
+    assert.ok(s.length > 10, `${name} の文が短すぎる`);
+    assert.ok(!/https?:|\?|=|github\.com|x\.com/.test(s),
+      `${name} の文に値やアドレスが混ざっている: ${s}`);
+  }
+});
+
+test('画面側にも、Escが効かないときの受け皿がある（R24-003）', () => {
+  /*
+   * service worker が案内を出せなかったときの最後の受け皿。
+   * `notified !== true` を見ていなければ、二重に出る。
+   */
+  const src = stripComments(readFileSync(join(ROOT, 'src/content.js'), 'utf8'));
+  assert.match(src, /res\.escAvailable === false && res\.notified !== true/,
+    '画面側に Esc 不能の受け皿が無い（service worker が倒れたら誰も伝えない）');
+  assert.match(src, /reason === 'esc_unavailable'/, '画面側に専用の定型文が無い');
+});
+
+test('開いた結果の一覧（正本）が、実際の挙動と一致している（R24-003）', async () => {
+  /*
+   * ⚠️ `store/DATA_FLOW_CLAIMS.json` の openOutcomes は、第23回まで
+   * **どの検査からも読まれていなかった**（名前があるだけで、誰も当てていない）。
+   * 5つの状態を1つずつ実際に作り、状態・Escの可否・利用者へ出す案内を突き合わせる。
+   */
+  const C = JSON.parse(readFileSync(join(ROOT, 'store/DATA_FLOW_CLAIMS.json'), 'utf8'));
+  const outcomes = C.openOutcomes;
+  assert.equal(outcomes.length, 5, `正本の状態数が変わっている: ${outcomes.length}`);
+  const seen = [];
+  for (const o of outcomes) {
+    assert.ok(o.probeMountOption, `${o.state}: 作り方が正本に書かれていない`);
+    const { log, send } = mount(o.probeMountOption);
+    const res = await send({ type: 'gxs:request-share' }, { tab: GH_TAB(5) });
+    const got = {
+      state: res.ok ? res.state : (res.reason === 'open_failed' ? 'failed' :
+             res.reason === 'open_unknown' ? 'creation_unknown' : res.reason),
+      notice: log.notified.length ? log.notified[0].reason : null,
+      count: announced(log)
+    };
+    assert.equal(got.state, o.state, `${o.state}: 作れていない（できたのは ${got.state}）`);
+    assert.equal(got.notice, o.userNotice,
+      `${o.state}: 正本は案内 ${o.userNotice} と言うが、実物は ${got.notice}`);
+    assert.equal(got.count, o.userNotice ? 1 : 0,
+      `${o.state}: 案内の回数が違う（${got.count}）`);
+    if (o.state !== 'tab_confirmed') {
+      assert.equal(res.escAvailable === true, o.escAvailable,
+        `${o.state}: 正本は Esc ${o.escAvailable} と言うが、実物は ${res.escAvailable}`);
+    }
+    seen.push(o.state);
+  }
+  /* ★対照: 案内を出す状態と出さない状態が、両方この一覧に入っていること */
+  assert.ok(outcomes.some((o) => o.userNotice), '案内を出す状態が1つも無い');
+  assert.ok(outcomes.some((o) => !o.userNotice), '案内を出さない状態が1つも無い');
+  assert.equal(new Set(seen).size, 5, '同じ状態を2回数えている');
+});
+
+test('Escが効かないことの主張が、挙げた文書に実際に載っている（R24-003）', () => {
+  const C = JSON.parse(readFileSync(join(ROOT, 'store/DATA_FLOW_CLAIMS.json'), 'utf8'));
+  const o = C.openOutcomes.find((x) => x.state === 'popup_confirmed_untracked');
+  assert.ok(o.docToken, '文書に載せる形（docToken）が正本に無い');
+  assert.ok(Array.isArray(o.appearsIn) && o.appearsIn.length >= 3,
+    `載せる文書が少なすぎる: ${o.appearsIn && o.appearsIn.length}`);
+  for (const f of o.appearsIn) {
+    assert.ok(readFileSync(join(ROOT, f), 'utf8').includes(o.docToken),
+      `${f} に「${o.docToken}」が無い（正本だけ直して文書を直し忘れている）`);
+  }
 });

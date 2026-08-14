@@ -1205,7 +1205,8 @@ test('履歴で囲って検査を逃れていない——囲いの数と大き�
    * 第18回の語句推測では、9塊が**誰にも見えないまま**外れていた。
    */
   const EXPECTED = {
-    'PRIVACY.md': 2,
+    /* 第24回監査 R24-003 で1つ増えた（1.1.7 までは黙っていた、という履歴） */
+    'PRIVACY.md': 3,
     'README.md': 2,
     'README.ja.md': 2,
     'store/LISTING.md': 2,
@@ -1745,10 +1746,64 @@ test('READMEの採用理由が、台帳の実際の判定と食い違ってい�
    */
   const inv = JSON.parse(read('store/GITHUB_NAMESPACE_INVENTORY.json'));
   const crit = inv.denyCriteria;
-  assert.ok(crit && Array.isArray(crit.branches) && crit.branches.length === 3,
-    '台帳が採用理由を3つに分けていない');
+  /*
+   * 第24回監査 R24-004。3つの branch では **watching / authorize / verify** が
+   * どれにも当てはまらなかった（アカウントは在り、routeShadow は not_applicable）。
+   * 「アカウントありで deny が4語ある」ことは書いてあったのに、**その4語を
+   * どの理由で採ったかは、どこにも書かれていなかった**。
+   */
+  assert.ok(crit && Array.isArray(crit.branches) && crit.branches.length === 5,
+    `台帳が採用理由を5つに分けていない: ${crit && crit.branches && crit.branches.length}`);
   assert.deepEqual(crit.branches.map((b) => b.id).sort(),
-    ['account_absent', 'reachable_repo', 'route_shadowed'].sort());
+    ['account_absent', 'account_present_zero_public_repos_auth_route',
+     'reachable_repo', 'reachable_repo_security_exception', 'route_shadowed'].sort());
+
+  /*
+   * 全79語が、どれか1つの理由を**名指し**していること。
+   * 「どれにも当てはまらない」を作れないように、deny は非nullを必須にする。
+   */
+  const byId = Object.fromEntries(crit.branches.map((b) => [b.id, b]));
+  const count = Object.fromEntries(crit.branches.map((b) => [b.id, 0]));
+  for (const e of inv.namespaces) {
+    assert.ok('denyCriterionId' in e, `${e.namespace}: denyCriterionId が無い`);
+    if (e.decision === 'deny') {
+      assert.ok(e.denyCriterionId, `${e.namespace}: deny なのに理由を名指ししていない`);
+      const b = byId[e.denyCriterionId];
+      assert.ok(b, `${e.namespace}: 台帳に無い理由を指している: ${e.denyCriterionId}`);
+      assert.match(b.decision, /deny/, `${e.namespace}: allow 側の理由で deny にしている`);
+      count[e.denyCriterionId] += 1;
+    } else {
+      assert.equal(e.denyCriterionId, null,
+        `${e.namespace}: allow なのに deny の理由を持っている`);
+      count.reachable_repo += 1;
+    }
+  }
+  /*
+   * ★理由ごとの陽性対照。**枠だけ作って誰も当たらない状態**を作らせない。
+   * 0 でよいのは、0 だと宣言した枠（reachable_repo_security_exception）だけ。
+   */
+  for (const b of crit.branches) {
+    assert.equal(typeof b.expectedCount, 'number', `${b.id}: 件数が宣言されていない`);
+    assert.equal(count[b.id], b.expectedCount,
+      `${b.id}: 宣言 ${b.expectedCount} 件に対し実測 ${count[b.id]} 件`);
+    if (b.expectedCount === 0) {
+      assert.equal(b.reserved, true,
+        `${b.id}: 当たる語が1つも無いのに、予約枠だと書いていない`);
+    } else {
+      assert.ok(!b.reserved, `${b.id}: 予約枠なのに ${count[b.id]} 語が当たっている`);
+    }
+  }
+  assert.equal(Object.values(count).reduce((a, n) => a + n, 0), inv.namespaces.length,
+    '理由の合計が語数と合っていない');
+
+  /* 新しい理由の例が、本当にその形であること（アカウント在り・公開0件） */
+  for (const n of ['watching', 'authorize', 'verify']) {
+    const x = inv.namespaces.find((e) => e.namespace === n);
+    assert.ok(x, `台帳に ${n} が無い`);
+    assert.equal(x.denyCriterionId, 'account_present_zero_public_repos_auth_route');
+    assert.equal(x.accountApi.present, true, `${n}: アカウントが無いなら、この理由に当たらない`);
+    assert.equal(x.accountApi.publicRepos, 0, `${n}: 公開リポジトリがあるなら、この理由に当たらない`);
+  }
 
   /* 台帳が挙げる「アカウントが在るのに deny」が、実測と1語も違わないこと */
   const measured = inv.namespaces
@@ -1771,12 +1826,19 @@ test('READMEの採用理由が、台帳の実際の判定と食い違ってい�
   for (const [file, phrases] of Object.entries({
     /* ⚠️ 語だけを見ると、「either（2つのうちどちらか）」を「only when（〜のときだけ）」へ
        書き換える変異が素通りする（P21 で実測）。**2条件を並べた形ごと**要求する */
-    'README.md': ['may be added under one of two conditions',
-                  'either **no account holds the name**',
-                  'or **an account exists but the browser does not render a repository UI under it**', ex],
-    'README.ja.md': ['一覧へ足してよいのは次の2つ',
+    'README.md': ['may be added under one of **three** conditions',
+                  '**(1) no account holds the name**',
+                  '**(2) an account exists but the browser does not render a repository UI under it**',
+                  '**(3) an account exists but holds no public repository and the name is an account or authentication entry point**',
+                  '`denyCriterionId`', ex],
+    'README.ja.md': ['一覧へ足してよいのは次の**3つ**',
                      '**①その名前のアカウントが無い**',
-                     '**②アカウントは在るが、ブラウザでリポジトリの画面が出ない**', ex]
+                     '**②アカウントは在るが、ブラウザでリポジトリの画面が出ない**',
+                     '**③アカウントは在るが公開リポジトリが0件で、認証・アカウント系の入口である**',
+                     '`denyCriterionId`', ex],
+    /* 出荷するコードのコメントも同じ理由を持つ（第24回監査 R24-004） */
+    'src/share.js': ['次の**3つ**のどれかに当てはまるもの', 'denyCriterionId',
+                     '認証・アカウント系の入口']
   })) {
     const body = activeText(file);          // 履歴の囲いの中に書いて済ませられない
     for (const p of phrases) {
@@ -2058,7 +2120,7 @@ test('変異の定義が、落ちるはずのテストを宣言していて、�
     return (file) => {
       if (!cache.has(file)) {
         const src = read(file);
-        cache.set(file, [...src.matchAll(/(?:^|\s)(?:it|test)\(\s*(['`])((?:\\.|(?!\1).)*)\1/gm)]
+        cache.set(file, [...src.matchAll(/(?:^|\s)(?:it|test)\(\s*(['"`])((?:\\.|(?!\1).)*)\1/gm)]
           .map((m) => m[2]));
       }
       return cache.get(file);

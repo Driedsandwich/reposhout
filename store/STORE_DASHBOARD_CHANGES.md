@@ -104,7 +104,7 @@ viewing, together with that page's link. The page title is not read or sent.
 
 **① Authentication information**: cookie もフォームの入力値も読みません。**1.1.8 で、共有URLに残るクエリの値も検査し、資格情報の形をしていればURLごと拒否するようにしました**（第11回監査 R11-001。<!-- HISTORICAL_CLAIM:start reason="1.1.7までの挙動。現在の仕様ではない" -->1.1.7 までは名前しか見ておらず、`q`・`body`・`title` の値に入った資格情報がXへ渡っていました<!-- HISTORICAL_CLAIM:end -->）。ただし**操作された時点では現在のタブのURL全体をいったん受け取り**（ツールバー/ショートカットは `activeTab` 経由）、拒否の判定はそのあとで行います。資格情報そのものを保存したり送ったりはしないので **No と判断**しましたが、`handle` には use が含まれるので、現行の設問文を読んで最終確認してください。
 
-**② User activity**: `x.com` 側で capture phase の `keydown` listener を1つ登録しており、**すべての keydown の `key` を見ます**。未修飾の Escape 以外は直ちに無視し、入力欄の値やページの中身は読まず、保存も集計も送信もしません（拡張が自分で開いた投稿画面を閉じるためです）。この欄は「操作の監視（クリック・マウス位置・スクロール・キーロギング等）」を指すので **No と判断**しましたが、「Escapeだけを聞いている」という書き方は技術的に狭いので、事実として上のとおり書いておきます（第11回監査 R11-003）。ダッシュボードの現行の説明文を読んで、最終的には本人が決めてください。
+**② User activity**: `x.com` 側で capture phase の `keydown` listener を1つ登録しており、**すべての keydown の `key` を見ます**。未修飾の Escape 以外は直ちに無視し、入力欄の値やページの中身は読まず、保存も集計も送信もしません（拡張が自分で開いた投稿画面を閉じるためです）。なお 1.1.8 では、**投稿画面の窓を記録できなかったとき**（Escで閉じられない状態）に、3つの入口すべてでその場に定型の案内を1回だけ出します（第24回監査 R24-003）。案内の文にURLも値も入れず、外へは何も送りません。この欄は「操作の監視（クリック・マウス位置・スクロール・キーロギング等）」を指すので **No と判断**しましたが、「Escapeだけを聞いている」という書き方は技術的に狭いので、事実として上のとおり書いておきます（第11回監査 R11-003）。ダッシュボードの現行の説明文を読んで、最終的には本人が決めてください。
 
 **Web history / Website content を Yes と推奨する理由**: Googleの User Data FAQ は「handle」に collect だけでなく **transmit** を含め、URL やドメインを web browsing activity の例に挙げています。今回のように「機能として第三者へ渡す」場合、No のままにする合理的な根拠がありません。Yes にしても、プライバシーポリシー（`PRIVACY.md`）は既に用意してあり、要件は満たせます。
 
@@ -141,11 +141,14 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 今回出すもの:
 
 ```
-成果物 : reposhout-package-7086c0a77decd164fb469c6fdceb1abcc540ca55
+status : pending_main_ci（成果物がまだありません）
 中のZIP : reposhout-1.1.8.zip
-大きさ : 44,385 B / 11ファイル
-SHA-256 : 392416b4026d2c1338ceca1d0961ab38479fab3fe653137db796d56e70fb7ce0
 ```
+
+第24回監査の是正で出荷物（`src/background.js` / `src/content.js` / `_locales`）が変わったため、
+前の候補は却下しました（`SUBMISSION_CANDIDATE.json` の history に理由つきで残しています）。
+**成果物名・大きさ・SHA-256 は、main の CI が作ってから実測して書きます。**
+いま「それらしい値」を書くと、必ず作り話になります。
 
 正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) です。
 却下した成果物は提出しません（理由も同ファイルにあります）。

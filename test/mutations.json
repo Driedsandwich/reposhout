@@ -300,7 +300,9 @@
       "find": "chrome.action.onClicked.addListener(function (tab) {\n  runShare(tab);\n});",
       "replace": "chrome.action.onClicked.addListener(function (tab) {\n  shareTab(tab);\n});",
       "expectedFailure": {
-        "testName": "ツールバーの押下でも、予期しない例外を握り潰さない（R20-005）"
+        "testName": "ツールバーの押下でも、予期しない例外を握り潰さない（R20-005）",
+        "kind": "unhandledRejection",
+        "why": "この欠陥の姿そのものが「捨てられた Promise の拒否が外へ漏れること」。リスナーが握り潰すと拒否は未処理のまま逃げ、利用者からは無反応に見える。漏れたことを検知として数える（assertion では表せない）"
       }
     },
     {
@@ -308,8 +310,8 @@
       "file": "src/background.js",
       "test": "test/background.test.mjs",
       "desc": "二重通知を許す",
-      "find": "  var how = await announceRefusal(tab && tab.id, why);",
-      "replace": "  await announceRefusal(tab && tab.id, why);\n  var how = await announceRefusal(tab && tab.id, why);",
+      "find": "  var how = await announceOnce(tab && tab.id, why);",
+      "replace": "  await announceOnce(tab && tab.id, why);\n  var how = await announceOnce(tab && tab.id, why);",
       "expectedFailure": {
         "testName": "案内は1回だけ——画面にもバッジにも二重に出さない（R19-004）"
       }
@@ -669,10 +671,10 @@
     {
       "id": "N12",
       "file": "store/DATA_FLOW_CLAIMS.json",
-      "find": "    \"失効した記録を、次に誰かが読んだとき（isShareWindow / prune）\"\n",
+      "find": ",\n    \"失効した記録を、次に誰かが読んだとき（isShareWindow / prune）\"",
       "replace": "",
       "test": "test/docs.test.mjs",
-      "desc": "実際に消える契機を1つ削る",
+      "desc": "実際に消える契機を1つ削る（JSONは壊さない）",
       "expectedFailure": {
         "testName": "正本の主張が、実際のコードと一致している（R19-001）"
       }
@@ -845,8 +847,8 @@
     {
       "id": "N28",
       "file": "scripts/run-mutations.mjs",
-      "find": "    console.error(`★ 証跡を書けなかった: ${receiptPath}\\n  ${e && e.message}`);\n    process.exit(2);",
-      "replace": "    console.error(`★ 証跡を書けなかった: ${receiptPath}`);",
+      "find": "  if (!saveReceipt(summary)) process.exit(2);",
+      "replace": "  saveReceipt(summary);",
       "test": "test/mutation-runner.test.mjs",
       "desc": "証跡を書けなくても成功で終わる",
       "expectedFailure": {
@@ -944,8 +946,8 @@
     {
       "id": "P01",
       "file": "scripts/run-mutations.mjs",
-      "find": "  const want = m.expectedFailure.testName.trim();\n  const matched = run.failedTestNames.some((n) => n === want);",
-      "replace": "  const want = m.expectedFailure.testName.trim();\n  const matched = true;",
+      "find": "  const hits = (run.failedTests || []).filter((f) => f.name === want);",
+      "replace": "  const hits = (run.failedTests || []).filter(() => true);",
       "test": "test/mutation-runner.test.mjs",
       "desc": "宣言したテストとの照合をやめる",
       "expectedFailure": {
@@ -1010,8 +1012,8 @@
     {
       "id": "P07",
       "file": "scripts/run-mutations.mjs",
-      "find": "    failedTestNames: run.failedTestNames, sanitizedDiagnostic: run.sanitizedDiagnostic",
-      "replace": "    sanitizedDiagnostic: run.sanitizedDiagnostic",
+      "find": "    failedTestNames: run.failedTestNames,\n    failedTests: run.failedTests, sanitizedDiagnostic: run.sanitizedDiagnostic",
+      "replace": "    failedTests: run.failedTests, sanitizedDiagnostic: run.sanitizedDiagnostic",
       "test": "test/mutation-runner.test.mjs",
       "desc": "証跡から、落ちたテスト名を落とす",
       "expectedFailure": {
@@ -1164,8 +1166,8 @@
     {
       "id": "P21",
       "file": "README.md",
-      "find": "either **no account holds the name**",
-      "replace": "only when **no account holds the name**",
+      "find": "may be added under one of **three** conditions",
+      "replace": "may be added only when no account holds the name",
       "test": "test/docs.test.mjs",
       "desc": "README(英)の採用理由を「アカウントが無い語だけ」へ戻す",
       "expectedFailure": {
@@ -1225,6 +1227,315 @@
       "desc": "対象ファイルの判定をやめる（ファイルごと読めない失敗を見分けない）",
       "expectedFailure": {
         "testName": "落ちた理由を区別する——構文・import・setup・別テストを検知にしない（R23-001）"
+      }
+    },
+    {
+      "id": "Q01",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (gotKind !== wantKind) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "落ち方の種類を照合しない",
+      "expectedFailure": {
+        "testName": "名前が合っていても、assertion で落ちていなければ検知にしない（R24-001）"
+      }
+    },
+    {
+      "id": "Q02",
+      "file": "scripts/run-mutations.mjs",
+      "find": "const isAssertionFailure = (f) => !!f && (f.errName === 'AssertionError' || f.code === 'ERR_ASSERTION');",
+      "replace": "const isAssertionFailure = (f) => !!f;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "なんでも assertion とみなす",
+      "expectedFailure": {
+        "testName": "名前が合っていても、assertion で落ちていなければ検知にしない（R24-001）"
+      }
+    },
+    {
+      "id": "Q03",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (nameCount !== 1) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "同名テストの拒否をやめる",
+      "expectedFailure": {
+        "testName": "同じ名前のテストが2つ落ちたら、どれが落ちたか決まらない（R24-001）"
+      }
+    },
+    {
+      "id": "Q04",
+      "file": "scripts/run-mutations.mjs",
+      "find": "if (dupIds.length) {",
+      "replace": "if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "重複した変異IDを通す",
+      "expectedFailure": {
+        "testName": "変異IDが重複していたら、走る前に止まる（R24-001）"
+      }
+    },
+    {
+      "id": "Q05",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (wantKind !== 'assertion'\n      && !(typeof m.expectedFailure.why === 'string' && m.expectedFailure.why.trim().length >= 10)) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "理由なしの宣言を通す",
+      "expectedFailure": {
+        "testName": "assertion 以外を検知にするなら、理由を書かせる（R24-001）"
+      }
+    },
+    {
+      "id": "Q06",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (!ALLOWED_KINDS.includes(wantKind)) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "知らない種類の宣言を通す",
+      "expectedFailure": {
+        "testName": "assertion 以外を検知にするなら、理由を書かせる（R24-001）"
+      }
+    },
+    {
+      "id": "T01",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (!Number.isInteger(n) || n <= 0 || n > MAX_TIMEOUT_MS) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "上限の検査をやめる",
+      "expectedFailure": {
+        "testName": "上限は有限の正整数だけ——0 や文字列や範囲外を受け取らない（R24-002）"
+      }
+    },
+    {
+      "id": "T02",
+      "file": "scripts/run-mutations.mjs",
+      "find": "    if (!KNOWN_FLAGS.includes(a)) return { error: `知らない引数: ${a}` };",
+      "replace": "    if (false) return { error: `知らない引数: ${a}` };",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "知らない引数を通す",
+      "expectedFailure": {
+        "testName": "知らない引数は受け取らない（R24-002）"
+      }
+    },
+    {
+      "id": "T03",
+      "file": "scripts/run-mutations.mjs",
+      "find": "if (sourceCommit === null || sourceTree === null || gitStatusStart === null) {",
+      "replace": "if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "由来が取れなくても走る",
+      "expectedFailure": {
+        "testName": "git から由来を取れないなら走らない（R24-002）"
+      }
+    },
+    {
+      "id": "T04",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  && errors.length === 0 && badRestore.length === 0 && workspaceUnchanged === true;",
+      "replace": "  && errors.length === 0 && badRestore.length === 0 && workspaceUnchanged !== false;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "作業ツリーの判定を null 許容へ戻す",
+      "expectedFailure": {
+        "testName": "作業ツリーが実行前と同じでなければ、成功にしない（R24-002）"
+      }
+    },
+    {
+      "id": "U01",
+      "file": "src/background.js",
+      "find": "  if (opened.state === 'popup_confirmed_untracked') {\n    var how = await announceOnce(tab && tab.id, 'esc_unavailable');",
+      "replace": "  if (false) {\n    var how = await announceOnce(tab && tab.id, 'esc_unavailable');",
+      "test": "test/background.test.mjs",
+      "desc": "Escが効かないことを伝えるのをやめる",
+      "expectedFailure": {
+        "testName": "ツールバーから開いたとき、Escが効かないことを1回だけ伝える（R24-003）"
+      }
+    },
+    {
+      "id": "U02",
+      "file": "src/background.js",
+      "find": "  return { opened: true, state: opened.state, escAvailable: opened.escAvailable === true,\n           notified: false };",
+      "replace": "  return { opened: true, state: opened.state, escAvailable: opened.escAvailable === true,\n           notified: (await announceOnce(tab && tab.id, 'esc_unavailable')) !== 'none' };",
+      "test": "test/background.test.mjs",
+      "desc": "記録できた窓でも案内を出す",
+      "expectedFailure": {
+        "testName": "記録できた窓では、案内を出さない（R24-003の対照）"
+      }
+    },
+    {
+      "id": "U03",
+      "file": "src/background.js",
+      "find": "                       state: r && r.state, escAvailable: r && r.escAvailable,\n",
+      "replace": "",
+      "test": "test/background.test.mjs",
+      "desc": "応答から状態を落とす",
+      "expectedFailure": {
+        "testName": "画面内ボタンからも1回だけ伝え、応答に状態を載せる（R24-003）"
+      }
+    },
+    {
+      "id": "U04",
+      "file": "src/background.js",
+      "find": "  if (reason === 'esc_unavailable') return chrome.i18n.getMessage('noticeEscUnavailable');",
+      "replace": "",
+      "test": "test/background.test.mjs",
+      "desc": "バッジの見出しを既定の文へ戻す",
+      "expectedFailure": {
+        "testName": "画面内の案内が届かないときはバッジへ回す（R24-003）"
+      }
+    },
+    {
+      "id": "U05",
+      "file": "src/content.js",
+      "find": "        else if (res.ok === true && res.escAvailable === false && res.notified !== true) {",
+      "replace": "        else if (false) {",
+      "test": "test/background.test.mjs",
+      "desc": "画面側の受け皿を外す",
+      "expectedFailure": {
+        "testName": "画面側にも、Escが効かないときの受け皿がある（R24-003）"
+      }
+    },
+    {
+      "id": "U06",
+      "file": "src/content.js",
+      "find": "    if (reason === 'esc_unavailable') {",
+      "replace": "    if (false) {",
+      "test": "test/background.test.mjs",
+      "desc": "画面側の専用文をやめる",
+      "expectedFailure": {
+        "testName": "画面側にも、Escが効かないときの受け皿がある（R24-003）"
+      }
+    },
+    {
+      "id": "U07",
+      "file": "_locales/ja/messages.json",
+      "find": "  \"noticeEscUnavailable\": {",
+      "replace": "  \"unusedNoticeEscUnavailable\": {",
+      "test": "test/background.test.mjs",
+      "desc": "日本語の定型文を落とす",
+      "expectedFailure": {
+        "testName": "英日の定型文がそろっていて、値を含まない（R24-003）"
+      }
+    },
+    {
+      "id": "U08",
+      "file": "src/background.js",
+      "find": "    return { opened: true, state: opened.state, escAvailable: false,\n             notified: how !== 'none' };",
+      "replace": "    return { opened: true, state: 'popup_confirmed_tracked', escAvailable: true,\n             notified: how !== 'none' };",
+      "test": "test/background.test.mjs",
+      "desc": "記録できなかった窓を、できたことにする",
+      "expectedFailure": {
+        "testName": "画面内ボタンからも1回だけ伝え、応答に状態を載せる（R24-003）"
+      }
+    },
+    {
+      "id": "U09",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "find": "      \"userNotice\": \"esc_unavailable\",",
+      "replace": "      \"userNotice\": null,",
+      "test": "test/background.test.mjs",
+      "desc": "正本から「Escが効かないと伝える」を落とす",
+      "expectedFailure": {
+        "testName": "開いた結果の一覧（正本）が、実際の挙動と一致している（R24-003）"
+      }
+    },
+    {
+      "id": "U10",
+      "file": "README.md",
+      "find": " Escape will not close it, and the extension tells you once, so you are not left hunting for a close key that does nothing.",
+      "replace": " Escape will not close it.",
+      "test": "test/background.test.mjs",
+      "desc": "READMEから主張を落とす（正本だけ直した形）",
+      "expectedFailure": {
+        "testName": "Escが効かないことの主張が、挙げた文書に実際に載っている（R24-003）"
+      }
+    },
+    {
+      "id": "V01",
+      "file": "store/GITHUB_NAMESPACE_INVENTORY.json",
+      "find": "\"denyCriterionId\": \"account_present_zero_public_repos_auth_route\"",
+      "replace": "\"denyCriterionId\": \"account_absent\"",
+      "test": "test/docs.test.mjs",
+      "desc": "認証入口の3語を「アカウントが無い」へ付け替える",
+      "expectedFailure": {
+        "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）"
+      },
+      "expectMatches": 3
+    },
+    {
+      "id": "V02",
+      "file": "store/GITHUB_NAMESPACE_INVENTORY.json",
+      "find": "        \"id\": \"account_present_zero_public_repos_auth_route\",",
+      "replace": "        \"id\": \"unused_branch_id\",",
+      "test": "test/docs.test.mjs",
+      "desc": "新しい理由の名前を、誰も指さない名前へ変える",
+      "expectedFailure": {
+        "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）"
+      }
+    },
+    {
+      "id": "V03",
+      "file": "store/GITHUB_NAMESPACE_INVENTORY.json",
+      "find": "        \"expectedCount\": 3",
+      "replace": "        \"expectedCount\": 4",
+      "test": "test/docs.test.mjs",
+      "desc": "理由ごとの件数を実測とずらす",
+      "expectedFailure": {
+        "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）"
+      }
+    },
+    {
+      "id": "V04",
+      "file": "store/GITHUB_NAMESPACE_INVENTORY.json",
+      "find": "        \"reserved\": true,",
+      "replace": "",
+      "test": "test/docs.test.mjs",
+      "desc": "当たる語が0件の枠から「予約」の宣言を外す",
+      "expectedFailure": {
+        "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）"
+      }
+    },
+    {
+      "id": "V05",
+      "file": "README.ja.md",
+      "find": "一覧へ足してよいのは次の**3つ**",
+      "replace": "一覧へ足してよいのは次の2つ",
+      "test": "test/docs.test.mjs",
+      "desc": "README(日)の採用理由を2つへ戻す",
+      "expectedFailure": {
+        "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）"
+      }
+    },
+    {
+      "id": "V06",
+      "file": "src/share.js",
+      "find": "次の**3つ**のどれかに当てはまるもの",
+      "replace": "次のどれかに当てはまるもの",
+      "test": "test/docs.test.mjs",
+      "desc": "出荷コメントから理由の数を落とす",
+      "expectedFailure": {
+        "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）"
+      }
+    },
+    {
+      "id": "T05",
+      "file": "scripts/run-mutations.mjs",
+      "find": "process.on('exit', (code) => {\n  if (receiptWritten || !receiptPath) return;",
+      "replace": "process.on('exit', (code) => {\n  if (true) return;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "倒れたときの証跡を書かない",
+      "expectedFailure": {
+        "testName": "どんな終わり方でも、証跡を1行は残す（R24-002）"
+      }
+    },
+    {
+      "id": "T06",
+      "file": "test/mutation-runner.test.mjs",
+      "find": "  assert.ok(r.receipt, `証跡が無い（exit=${r.exitCode}）。何を測ったか言えない:\\n${r.stdout}`);",
+      "replace": "  if (!r.receipt) return {};",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "補助関数が、証跡が無いことを黙って通す",
+      "expectedFailure": {
+        "testName": "証跡が無いとき、補助関数は assertion で止まる（R24-001）"
       }
     }
   ]

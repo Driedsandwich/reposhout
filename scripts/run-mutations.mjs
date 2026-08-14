@@ -60,21 +60,95 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const RUNNER_FILE = fileURLToPath(import.meta.url);
 const sha = (s) => createHash('sha256').update(s).digest('hex');
 
+/*
+ * ⚠️ **引数を厳格に読む。**（第24回監査 R24-002）
+ * 前は `Number(argOf('--timeout') || 300000)` だったので:
+ *   ・`--timeout 0` が通り、Node では **0 は「上限なし」**（実測: 打ち切られない）
+ *   ・`--timeout abc` が NaN のまま渡り、実行時に ERR_OUT_OF_RANGE で落ちる
+ *   ・知らない綴りの引数は黙って無視される
+ * 上限は有限の正整数だけ。知らない引数は受け取らない。
+ */
+const KNOWN_FLAGS = ['--id', '--receipt', '--spec', '--timeout'];
+const MAX_TIMEOUT_MS = 3600000;
 const argv = process.argv.slice(2);
-const argOf = (name) => {
-  const i = argv.indexOf(name);
-  return i >= 0 ? argv[i + 1] : null;
-};
-const onlyId = argOf('--id');
-const receiptPath = argOf('--receipt');
-const specPath = argOf('--spec') || 'test/mutations.json';
-const timeoutMs = Number(argOf('--timeout') || 300000);
+function parseArgs() {
+  const out = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (!KNOWN_FLAGS.includes(a)) return { error: `知らない引数: ${a}` };
+    const v = argv[i + 1];
+    if (v === undefined || KNOWN_FLAGS.includes(v)) return { error: `${a} に値が無い` };
+    out[a] = v;
+    i++;
+  }
+  return { out };
+}
+const parsed = parseArgs();
+if (parsed.error) {
+  console.error(`${parsed.error}\n使える引数: ${KNOWN_FLAGS.join(' ')}`);
+  process.exit(2);
+}
+const onlyId = parsed.out['--id'] || null;
+const receiptPath = parsed.out['--receipt'] || null;
+
+/*
+ * ⚠️ **証跡を書かずに死ぬ経路を残さない。**（第24回監査 R24-002 の続き・N19 で実測）
+ * 途中で予期しない例外が出ると、ここまでの分も含めて**証跡が1行も残らなかった**。
+ * 受け取る側から見ると「まだ走っていない」と「途中で死んだ」が区別できない
+ * （実際、N19 の変異で受け取り側は null を読んで TypeError になり、
+ *   守りたい検査は一度も走らなかった）。
+ * どんな終わり方でも、最後に必ず何か書く。
+ */
+let receiptWritten = false;
+function saveReceipt(obj) {
+  if (!receiptPath) { receiptWritten = true; return true; }
+  try {
+    writeFileSync(receiptPath, JSON.stringify(obj, null, 2) + '\n');
+    receiptWritten = true;
+    return true;
+  } catch (e) {
+    console.error(`★ 証跡を書けなかった: ${receiptPath}\n  ${e && e.message}`);
+    return false;
+  }
+}
+process.on('exit', (code) => {
+  if (receiptWritten || !receiptPath) return;
+  try {
+    writeFileSync(receiptPath, JSON.stringify({
+      spec: parsed.out['--spec'] || 'test/mutations.json', total: 0,
+      precondition: 'aborted',
+      error: `証跡を書く前に終了した（exit ${code}）。結果は何も言えない`,
+      results: []
+    }, null, 2) + '\n');
+  } catch (e) { /* 書けないなら、そのまま落とす */ }
+});
+const specPath = parsed.out['--spec'] || 'test/mutations.json';
+let timeoutMs = 300000;
+if (parsed.out['--timeout'] !== undefined) {
+  const raw = parsed.out['--timeout'];
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0 || n > MAX_TIMEOUT_MS) {
+    console.error(`--timeout は 1〜${MAX_TIMEOUT_MS} の整数（受け取った値: ${JSON.stringify(raw)}）`
+      + '\n※ 0 は Node では「上限なし」になるので受け付けない');
+    process.exit(2);
+  }
+  timeoutMs = n;
+}
 
 /* --spec は絶対パスでも渡せる（対照用の定義を repo の外へ置けるため）。
    ただし **spec が指す対象は repo の中だけ**（下の validatePath）。 */
 const specFile = isAbsolute(specPath) ? specPath : join(ROOT, specPath);
 const specText = readFileSync(specFile, 'utf8');
 const spec = JSON.parse(specText);
+/* ⚠️ IDが重複していると、証跡のどの行がどの変異か決まらない（第24回監査 R24-001） */
+const idCount = {};
+for (const m of spec.mutations) idCount[m.id] = (idCount[m.id] || 0) + 1;
+const dupIds = Object.keys(idCount).filter((k) => idCount[k] > 1);
+if (dupIds.length) {
+  console.error(`変異IDが重複している: ${dupIds.join(' ')}`);
+  process.exit(2);
+}
+
 const mutations = spec.mutations.filter((m) => !onlyId || m.id === onlyId);
 if (!mutations.length) {
   console.error(`変異が1件も選ばれていない（--id ${onlyId}）`);
@@ -91,10 +165,32 @@ function gitOut(args) {
   }
 }
 const gitStatusStart = gitOut(['status', '--porcelain']);
+const sourceCommit = gitOut(['rev-parse', 'HEAD']);
+const sourceTree = gitOut(['rev-parse', 'HEAD^{tree}']);
+/*
+ * ⚠️ **由来が取れないまま成功させない。**（第24回監査 R24-002）
+ * `gitOut` は git の失敗をすべて null に変えるので、`.git` の無い複製や
+ * git の入っていない環境でも、commit も tree も dirty も null のまま走り切り、
+ * 最後の条件（`workspaceUnchanged !== false`）は **null を成功側**として扱っていた。
+ * 何を測ったのか言えない証跡は、証跡ではない。
+ */
+if (sourceCommit === null || sourceTree === null || gitStatusStart === null) {
+  const missing = [['sourceCommit', sourceCommit], ['sourceTree', sourceTree],
+    ['gitStatus', gitStatusStart]].filter(([, v]) => v === null).map(([k]) => k);
+  const msg = `git から由来を取れない（${missing.join(' / ')}）。何を測ったか言えないので走らない`;
+  console.error(`★ ${msg}`);
+  saveReceipt({
+    spec: specPath, total: 0, precondition: 'failed', error: msg,
+    provenance: { sourceCommit, sourceTree, nodeVersion: process.version,
+      platform: process.platform, timeoutMs, startedAt, completedAt: new Date().toISOString() },
+    results: []
+  });
+  process.exit(2);
+}
 const provenance = {
-  sourceCommit: gitOut(['rev-parse', 'HEAD']),
-  sourceTree: gitOut(['rev-parse', 'HEAD^{tree}']),
-  workingTreeDirty: gitStatusStart === null ? null : gitStatusStart !== '',
+  sourceCommit,
+  sourceTree,
+  workingTreeDirty: gitStatusStart !== '',
   runnerSha256: sha(readFileSync(RUNNER_FILE, 'utf8')),
   specSha256: sha(specText),
   nodeVersion: process.version,
@@ -142,6 +238,25 @@ function validatePath(rel, label) {
 }
 
 /*
+ * ⚠️ **同じ名前のテストが2つあると、どちらが落ちたか決まらない。**（第24回監査 R24-001）
+ * 守りたい方は通り、無関係な同名だけが落ちても、名前の一致は成立してしまう。
+ * 走らせる前に、対象ファイルの中で宣言名が一意であることを確かめる。
+ */
+const TEST_NAME_RE = /(?:^|\s)(?:it|test)\(\s*(['"`])((?:\\.|(?!\1).)*)\1/gm;
+const nameCache = new Map();
+function countTestName(rel, want) {
+  if (!nameCache.has(rel)) {
+    const src = readFileSync(join(ROOT, rel), 'utf8');
+    const names = [];
+    let g;
+    TEST_NAME_RE.lastIndex = 0;
+    while ((g = TEST_NAME_RE.exec(src)) !== null) names.push(g[2]);
+    nameCache.set(rel, names);
+  }
+  return nameCache.get(rel).filter((n) => n === want).length;
+}
+
+/*
  * ⚠️ **テストを起動する環境を、必ず素にする。**（第22回監査 R22-004 の作業中に発見）
  * `node --test` は、自分が別の test runner の子だと判断すると（`NODE_TEST_CONTEXT`）
  * **失敗しても終了コード 0 で終わる**。自己検査がまさにその形で起動するので、
@@ -167,13 +282,61 @@ const CHILD_ENV = (() => {
  * つまり**ファイルごと読めなかったときは、落ちた名前がテストファイルのパスになる**。
  * ここが assertion 失敗との境目。想像で書くと、この境目を取り違える。
  */
-const NOT_OK = /^\s*not ok \d+ - (.+?)\s*$/gm;
+const NOT_OK = /^(\s*)not ok \d+ - (.+?)\s*$/gm;
+
+/*
+ * ⚠️ **名前が一致しただけでは「その検査が落とした」と言えない。**（第24回監査 R24-001）
+ * 宣言したテストが落ちていても、実際には
+ *   ・正本の JSON が壊れて `JSON.parse` が投げた（SyntaxError）
+ *   ・null/undefined を読んで TypeError
+ *   ・unhandledRejection
+ * ということがある。その場合、**守りたい assertion は一度も走っていない**。
+ * 111件を1件ずつ測って、5件がこれだった。
+ *
+ * TAP は `not ok` の直後の YAML に `failureType` / `code` / `name` を書く。
+ * そこまで読んで、`AssertionError`（`ERR_ASSERTION`）だけを検知として認める。
+ */
+function failureDetails(output) {
+  const lines = output.split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^(\s*)not ok \d+ - (.+?)\s*$/.exec(lines[i]);
+    if (!m) continue;
+    const indent = m[1].length;
+    const rec = { name: m[2].trim(), failureType: null, code: null, errName: null };
+    for (let j = i + 1; j < lines.length; j++) {
+      const l = lines[j];
+      if (!l.trim()) continue;
+      const ind = l.length - l.trimStart().length;
+      if (ind <= indent && !/^\s*(---|\.\.\.)\s*$/.test(l)) break;
+      const t = l.trim();
+      let g;
+      if ((g = /^failureType:\s*'?([^']+)'?/.exec(t))) rec.failureType = g[1];
+      else if ((g = /^code:\s*'?([^']+)'?/.exec(t))) rec.code = g[1];
+      else if ((g = /^name:\s*'?([^']+)'?/.exec(t))) rec.errName = g[1];
+      if (/^\.\.\.$/.test(t) && ind <= indent + 2) break;
+    }
+    out.push(rec);
+  }
+  return out;
+}
+const isAssertionFailure = (f) => !!f && (f.errName === 'AssertionError' || f.code === 'ERR_ASSERTION');
+
+/*
+ * 実際の落ち方を、宣言できる語へ落とす。
+ * 既定は `assertion` で、それ以外を検知にしたいときは**変異の側で宣言させる**
+ * （`expectedFailure.kind` ＋ 理由）。宣言の無い種類は検知にしない。
+ */
+const ALLOWED_KINDS = ['assertion', 'unhandledRejection'];
+function actualKind(f) {
+  if (isAssertionFailure(f)) return 'assertion';
+  if (f && f.failureType === 'unhandledRejection') return 'unhandledRejection';
+  return (f && (f.errName || f.failureType)) || 'unknown';
+}
 
 function parseFailure(rel, output) {
-  const names = [];
-  let m;
-  NOT_OK.lastIndex = 0;
-  while ((m = NOT_OK.exec(output)) !== null) names.push(m[1].trim());
+  const details = failureDetails(output);
+  const names = details.map((d) => d.name);
 
   /*
    * ⚠️ **区切り文字と絶対パスに依らず判定する。**（Windows の CI で実測）
@@ -201,7 +364,8 @@ function parseFailure(rel, output) {
   } else {
     kind = 'no_failure_reported';
   }
-  return { failureKind: kind, failedTestNames: testNames, bootstrapNames: bootstrap };
+  return { failureKind: kind, failedTestNames: testNames, bootstrapNames: bootstrap,
+    failedTests: details.filter((d) => !isTargetFile(d.name)) };
 }
 
 /*
@@ -376,6 +540,34 @@ for (const m of mutations) {
       restored: true });
     continue;
   }
+  /*
+   * 落ち方の種類も宣言できる（既定は assertion）。assertion 以外を検知にしたいなら、
+   * **なぜそれが欠陥の姿なのか**を書かせる。書かせないと、ただの逃げ道になる。
+   */
+  const want0 = m.expectedFailure.testName.trim();
+  const wantKind = m.expectedFailure.kind || 'assertion';
+  if (!ALLOWED_KINDS.includes(wantKind)) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
+      error: `expectedFailure.kind が不正: ${wantKind}`, restored: true });
+    continue;
+  }
+  if (wantKind !== 'assertion'
+      && !(typeof m.expectedFailure.why === 'string' && m.expectedFailure.why.trim().length >= 10)) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
+      error: `assertion 以外（${wantKind}）を検知にするなら、理由（why）を書く`, restored: true });
+    continue;
+  }
+
+  /* 宣言した名前が、対象ファイルの中で一意であること */
+  const nameCount = countTestName(m.test, want0);
+  if (nameCount !== 1) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'duplicate_test_name',
+      error: nameCount === 0
+        ? `宣言した名前のテストが ${m.test} に無い`
+        : `宣言した名前のテストが ${m.test} に ${nameCount} 件ある（どれが落ちたか決まらない）`,
+      restored: true });
+    continue;
+  }
 
   /* ③ 変異前に、その対象テストが素で通ること */
   const bl = baselineFor(m.test);
@@ -459,7 +651,8 @@ for (const m of mutations) {
     baseline: { exitCode: bl.exitCode, stdoutSha256: bl.stdoutSha256 },
     exitCode: run.exitCode, signal: run.signal, timedOut: run.timedOut,
     spawnError: run.spawnError, stdoutSha256: run.stdoutSha256, stderrSha256: run.stderrSha256,
-    failedTestNames: run.failedTestNames, sanitizedDiagnostic: run.sanitizedDiagnostic
+    failedTestNames: run.failedTestNames,
+    failedTests: run.failedTests, sanitizedDiagnostic: run.sanitizedDiagnostic
   };
 
   /* ⑤ 落ち方で分ける。**検知にしてよいのは、宣言したテストが落ちたときだけ** */
@@ -490,15 +683,37 @@ for (const m of mutations) {
       bootstrapNames: run.bootstrapNames, expectedFailureMatched: false });
     continue;
   }
-  const want = m.expectedFailure.testName.trim();
-  const matched = run.failedTestNames.some((n) => n === want);
-  if (!matched) {
+  const want = want0;
+  const hits = (run.failedTests || []).filter((f) => f.name === want);
+  if (!hits.length) {
     results.push({ ...withRun, outcome: 'runner_error', failureKind: 'wrong_test_failure',
       error: `宣言したテストが落ちていない（宣言: ${want}）`, expectedFailureMatched: false });
     continue;
   }
-  results.push({ ...withRun, outcome: 'applied_and_killed', failureKind: 'expected_assertion_failure',
-    expectedFailureMatched: true });
+  /*
+   * ⚠️ 同じ名前のテストが2つ以上落ちたら、**どちらが落ちたのか決まらない**。
+   * 「守りたい方は通り、無関係な同名だけが落ちた」でも名前は一致してしまう。
+   */
+  if (hits.length > 1) {
+    results.push({ ...withRun, outcome: 'runner_error', failureKind: 'ambiguous_test_name',
+      error: `同じ名前のテストが ${hits.length} 件落ちていて、どれが落ちたか決まらない（宣言: ${want}）`,
+      expectedFailureMatched: false });
+    continue;
+  }
+  /* ⚠️ **宣言した種類で落ちたときだけ検知にする。**（第24回監査 R24-001） */
+  const gotKind = actualKind(hits[0]);
+  if (gotKind !== wantKind) {
+    results.push({ ...withRun, outcome: 'runner_error', failureKind: 'unexpected_failure_kind',
+      error: `宣言したテストは落ちたが、落ち方が違う（宣言: ${wantKind} / 実際: ${gotKind}）`
+        + '——守りたい検査は走っていない',
+      expectedFailureKind: wantKind, actualFailureKind: gotKind,
+      expectedFailureMatched: false });
+    continue;
+  }
+  results.push({ ...withRun, outcome: 'applied_and_killed',
+    failureKind: wantKind === 'assertion' ? 'expected_assertion_failure' : 'expected_declared_failure',
+    expectedFailureKind: wantKind, actualFailureKind: gotKind,
+    expectedFailureMatched: true, expectedFailureDetail: hits[0] });
 }
 
 /* 作業ツリーが元に戻っているか（第23回監査 R23-002 §6.6） */
@@ -546,15 +761,10 @@ const summary = {
 if (fatal) summary.fatal = fatal;
 
 if (receiptPath) {
-  try {
-    writeFileSync(receiptPath, JSON.stringify(summary, null, 2) + '\n');
-    console.log(`証跡: ${receiptPath}`);
-  } catch (e) {
-    console.error(`★ 証跡を書けなかった: ${receiptPath}\n  ${e && e.message}`);
-    process.exit(2);
-  }
+  if (!saveReceipt(summary)) process.exit(2);
+  console.log(`証跡: ${receiptPath}`);
 }
 
 const ok = survived.length === 0 && notApplied.length === 0
-  && errors.length === 0 && badRestore.length === 0 && workspaceUnchanged !== false;
+  && errors.length === 0 && badRestore.length === 0 && workspaceUnchanged === true;
 process.exit(ok ? 0 : 1);
