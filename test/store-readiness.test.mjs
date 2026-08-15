@@ -834,7 +834,7 @@ test('strict: Web Intent の判断が未確認なら通らない（R16-005）', 
       webIntentDecision: goodWebIntent(cand, { status })
     }));
     assert.ok(r.problems.some((p) => p.includes('Web Intent')),
-      `status=${status} で通っている: ${r.problems.join(' / ')}`);
+      `status=${status}: Web Intent が未確認なのに strict を通した`);
   }
 });
 

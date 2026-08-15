@@ -1393,7 +1393,7 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
     assert.ok(!/document\.title|tab\.title/.test(code),
       `${f} がタイトルを読んでいるのに、正本は titleRead=${C.titleRead}`);
   }
-  assert.equal(C.titleRead, false);
+  assert.equal(C.titleRead, false, '正本の titleRead が実コードと違う（R19-001）');
   assert.equal(C.titleSent, false);
 
   /* 画面側は合図だけ。URLも投稿文も組み立てない */
@@ -1460,7 +1460,7 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
    * GitHubのページを開いている間ずっと動く確認（1秒ごと）を説明していなかった。
    * 正本へ書いた以上、それがコードと合っていることをここで測る。
    */
-  assert.equal(C.contentScriptReadsDom, true);
+  assert.equal(C.contentScriptReadsDom, true, '正本の contentScriptReadsDom が実コードと違う（R19-001）');
   assert.match(content, /querySelector/, '正本はDOMを見ると言うが、見ていない');
   assert.match(C.domReadTiming, /1秒|1000/, '見る間隔が正本に書かれていない');
   assert.match(content, /setInterval\(\s*inject\s*,\s*1000\s*\)/,
@@ -1503,7 +1503,7 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
   }
 
   /* 通知要素を足すことを、正本が認めていること */
-  assert.equal(C.contentScriptMayInsertNotice, true);
+  assert.equal(C.contentScriptMayInsertNotice, true, '正本の contentScriptMayInsertNotice が実コードと違う（R19-001）');
   assert.match(content, /createElement\('div'\)/, 'content.js が要素を作っていない');
   assert.match(content, /body\.appendChild/, 'content.js が body へ足していない');
   assert.ok(C.contentScriptInsertsInto.includes('gxs-notice'),
@@ -1903,7 +1903,7 @@ test('実在のリポジトリを巻き込む拒否が、台帳に明記して�
   /* 外した3語が、allow として実測つきで記録されていること */
   for (const n of ['user', 'devices', 'password']) {
     const e = inv.namespaces.find((x) => x.namespace === n);
-    assert.ok(e, `台帳に ${n} の記録が無い`);
+    assert.ok(e, `${n}: 外した3語が台帳から消えている（R20-001）`);
     assert.equal(e.decision, 'allow', `${n} が allow になっていない`);
     assert.equal(e.repositoryProbe.repositoryUiRendered, true,
       `${n}: 開けることを確かめずに allow にしている`);
@@ -2181,3 +2181,5 @@ test('変異ランナーが、当たらなかった変異を素通りと数え�
   assert.match(src, /survived\.length === 0[\s\S]{0,160}notApplied\.length === 0/,
     'ランナーが、当たらなかった変異を成功として終えている');
 });
+
+
