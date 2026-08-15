@@ -179,10 +179,18 @@ function mut(id, over = {}) {
   return m;
 }
 
-function runRunner(dir, { receipt = 'receipt.json', timeout = 8000, extra = [], env = null } = {}) {
+/*
+ * ⚠️ 題材は**証拠ではない**ので、既定で `--allow-dirty` を付ける
+ *（第25回監査 R25-002）。題材はテストの途中で書き換えるものが多く、
+ * そこで「汚れているから走らない」と止まると、測りたいものが測れない。
+ * 汚れた木を拒む挙動そのものは、専用の検査が `allowDirty: false` で見る。
+ */
+function runRunner(dir, { receipt = 'receipt.json', timeout = 8000, extra = [],
+                          env = null, allowDirty = true } = {}) {
   const receiptPath = receipt === null ? null : join(dir, receipt);
   const args = [join(dir, 'scripts/run-mutations.mjs'),
-    '--spec', join(dir, 'test/mutations.json'), '--timeout', String(timeout), ...extra];
+    '--spec', join(dir, 'test/mutations.json'), '--timeout', String(timeout),
+    ...(allowDirty ? ['--allow-dirty'] : []), ...extra];
   if (receiptPath) args.push('--receipt', receiptPath);
   let exitCode = 0, stdout = '';
   try {
@@ -742,7 +750,40 @@ test('証跡が無いとき、補助関数は assertion で止まる（R24-001�
     { id: 'X1', outcome: 'ok' });
 });
 
+/* ============================================================
+ * ⑤ 証拠として使える形か（第25回監査 R25-002 / R25-003）
+ * ============================================================ */
 
+test('測る前から汚れている木では、証跡を作らない（R25-002）', () => {
+  /*
+   * ⚠️ 前は `workingTreeDirty` を記録するだけで、成功条件は「実行前後で同じか」
+   * だけを見ていた。**汚れたまま戻れば成功**なので、`sourceCommit` が指すバイト列と
+   * 実際に測ったバイト列が違う。第三者はそのコミットから証跡を再現できない。
+   */
+  const dir = makeFixture([mut('W1')]).dir;
+  writeFileSync(join(dir, 'mod.mjs'),
+    readFileSync(join(dir, 'mod.mjs'), 'utf8') + '\n/* 手で汚した */\n');
+  const r = runRunner(dir, { allowDirty: false });
+  assert.notEqual(r.exitCode, 0, '汚れた木で走り切っている');
+  assert.ok(r.receipt, '止まったのに証跡が1行も残っていない');
+  assert.deepEqual(r.receipt.results, [], '汚れた木で測っている');
+  assert.equal(r.receipt.evidenceEligible, false, '証拠として使えないと書いていない');
+  assert.match(String(r.receipt.error), /汚れ/, '止まった理由が書かれていない');
+
+  /* 対照: 汚れを取れば走る */
+  const clean = makeFixture([mut('W2')]).dir;
+  const ok = runRunner(clean, { allowDirty: false });
+  assert.equal(ok.exitCode, 0, `対照が落ちている:\n${ok.stdout}`);
+  assert.equal(ok.receipt.evidenceEligible, true, '綺麗な木なのに証拠にならないと言っている');
+});
+
+test('--allow-dirty で走らせた証跡は、証拠にしない（R25-002）', () => {
+  const dir = makeFixture([mut('W3')]).dir;
+  const r = runRunner(dir, { allowDirty: true });
+  assert.equal(r.exitCode, 0, `走れていない:\n${r.stdout}`);
+  assert.equal(r.receipt.evidenceEligible, false,
+    '--allow-dirty で走らせたのに、証拠として使えることになっている');
+});
 
 
 

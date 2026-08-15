@@ -69,12 +69,14 @@ const sha = (s) => createHash('sha256').update(s).digest('hex');
  * 上限は有限の正整数だけ。知らない引数は受け取らない。
  */
 const KNOWN_FLAGS = ['--id', '--receipt', '--spec', '--timeout'];
+const KNOWN_SWITCHES = ['--allow-dirty'];
 const MAX_TIMEOUT_MS = 3600000;
 const argv = process.argv.slice(2);
 function parseArgs() {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
+    if (KNOWN_SWITCHES.includes(a)) { out[a] = true; continue; }
     if (!KNOWN_FLAGS.includes(a)) return { error: `知らない引数: ${a}` };
     const v = argv[i + 1];
     if (v === undefined || KNOWN_FLAGS.includes(v)) return { error: `${a} に値が無い` };
@@ -174,6 +176,30 @@ const sourceTree = gitOut(['rev-parse', 'HEAD^{tree}']);
  * 最後の条件（`workspaceUnchanged !== false`）は **null を成功側**として扱っていた。
  * 何を測ったのか言えない証跡は、証跡ではない。
  */
+/*
+ * ⚠️ **測る前から汚れている木では、証跡を作らない。**（第25回監査 R25-002）
+ * 前は `workingTreeDirty` を記録するだけで、成功条件は
+ * 「実行前後で同じか」だけを見ていた。**汚れたまま戻れば成功**なので、
+ * `sourceCommit` / `sourceTree` が指すバイト列と、実際に測ったバイト列が違う。
+ * 第三者はそのコミットから証跡を再現できない。
+ * 手元で試すときだけ `--allow-dirty` を明示し、その証跡は証拠にしない。
+ */
+const allowDirty = parsed.out['--allow-dirty'] === true;
+if (gitStatusStart !== null && gitStatusStart !== '' && !allowDirty) {
+  const msg = '測る前から作業ツリーが汚れている。'
+    + 'commit した状態で走らせるか、手元で試すだけなら --allow-dirty を付ける';
+  console.error(`★ ${msg}\n${gitStatusStart.split('\n').slice(0, 10).join('\n')}`);
+  saveReceipt({
+    spec: specPath, total: 0, precondition: 'failed', error: msg,
+    evidenceEligible: false,
+    provenance: { sourceCommit, sourceTree, workingTreeDirty: true,
+      nodeVersion: process.version, platform: process.platform, timeoutMs,
+      startedAt, completedAt: new Date().toISOString() },
+    results: []
+  });
+  process.exit(2);
+}
+
 if (sourceCommit === null || sourceTree === null || gitStatusStart === null) {
   const missing = [['sourceCommit', sourceCommit], ['sourceTree', sourceTree],
     ['gitStatus', gitStatusStart]].filter(([, v]) => v === null).map(([k]) => k);
@@ -835,6 +861,7 @@ if (workspaceUnchanged === false) {
 
 const summary = {
   spec: specPath,
+  evidenceEligible: !allowDirty && provenance.workingTreeDirty === false,
   total: results.length,
   applied_and_killed: killed.length, applied_but_survived: survived.length,
   not_applied: notApplied.length, runner_error: errors.length,

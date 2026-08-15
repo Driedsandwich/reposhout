@@ -1712,6 +1712,30 @@
         "testName": "目印がテスト内で一意でなければ、測れない（R25-001）",
         "diagnosticMarker": "一意でない目印を受け取っている"
       }
+    },
+    {
+      "id": "W06",
+      "file": "scripts/run-mutations.mjs",
+      "find": "if (gitStatusStart !== null && gitStatusStart !== '' && !allowDirty) {",
+      "replace": "if (false) {",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "汚れた木でも走る",
+      "expectedFailure": {
+        "testName": "測る前から汚れている木では、証跡を作らない（R25-002）",
+        "diagnosticMarker": "汚れた木で走り切っている"
+      }
+    },
+    {
+      "id": "W07",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  evidenceEligible: !allowDirty && provenance.workingTreeDirty === false,",
+      "replace": "  evidenceEligible: true,",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "--allow-dirty の証跡も証拠だと言う",
+      "expectedFailure": {
+        "testName": "--allow-dirty で走らせた証跡は、証拠にしない（R25-002）",
+        "diagnosticMarker": "--allow-dirty で走らせたのに、証拠として使えることになっている"
+      }
     }
   ]
 }
