@@ -94,15 +94,15 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 **今回出す正本**（正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json)）:
 
 ```
-status : pending_main_ci（成果物がまだありません）
+成果物 : reposhout-package-e517976dd1d9e9fa2d08aaf0c17ee8771322dc0c
 中のZIP : reposhout-1.1.8.zip
+大きさ : 45,404 B / 11ファイル
+SHA-256 : 82439a7b52c89deabde4ad863dedc26e07315789230a646b81a3eea8be780896
 ```
 
-第25回監査の是正で出荷物（`src/content.js` の注釈）が変わったため、前の候補は却下しました
-（`SUBMISSION_CANDIDATE.json` の history に理由つきで残しています）。
-**成果物名・大きさ・SHA-256 は、main の CI が作ってから実測して書きます。**
-いま「それらしい値」を書くと、必ず作り話になります。
-
+main への push で走った CI（run 31871301360）が作ったものを、ダウンロードして実測した値です
+（外側の成果物のバイト数とハッシュも、GitHub の API が申告する digest と一致することを
+確かめました）。同じコミットを独立にクローンして作り直したZIPとも**バイト一致**します。
 **タグはまだ打っていません**（外部監査に合格してから打ちます）。
 却下した成果物は提出しません（理由は正本の `history` にあります）。
 

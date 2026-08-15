@@ -141,14 +141,11 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 今回出すもの:
 
 ```
-status : pending_main_ci（成果物がまだありません）
+成果物 : reposhout-package-e517976dd1d9e9fa2d08aaf0c17ee8771322dc0c
 中のZIP : reposhout-1.1.8.zip
+大きさ : 45,404 B / 11ファイル
+SHA-256 : 82439a7b52c89deabde4ad863dedc26e07315789230a646b81a3eea8be780896
 ```
-
-第25回監査の是正で出荷物（`src/content.js` の注釈）が変わったため、前の候補は却下しました
-（`SUBMISSION_CANDIDATE.json` の history に理由つきで残しています）。
-**成果物名・大きさ・SHA-256 は、main の CI が作ってから実測して書きます。**
-いま「それらしい値」を書くと、必ず作り話になります。
 
 正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) です。
 却下した成果物は提出しません（理由も同ファイルにあります）。
