@@ -1393,7 +1393,7 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
     assert.ok(!/document\.title|tab\.title/.test(code),
       `${f} がタイトルを読んでいるのに、正本は titleRead=${C.titleRead}`);
   }
-  assert.equal(C.titleRead, false);
+  assert.equal(C.titleRead, false, '正本の titleRead が実コードと違う（R19-001）');
   assert.equal(C.titleSent, false);
 
   /* 画面側は合図だけ。URLも投稿文も組み立てない */
@@ -1460,7 +1460,7 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
    * GitHubのページを開いている間ずっと動く確認（1秒ごと）を説明していなかった。
    * 正本へ書いた以上、それがコードと合っていることをここで測る。
    */
-  assert.equal(C.contentScriptReadsDom, true);
+  assert.equal(C.contentScriptReadsDom, true, '正本の contentScriptReadsDom が実コードと違う（R19-001）');
   assert.match(content, /querySelector/, '正本はDOMを見ると言うが、見ていない');
   assert.match(C.domReadTiming, /1秒|1000/, '見る間隔が正本に書かれていない');
   assert.match(content, /setInterval\(\s*inject\s*,\s*1000\s*\)/,
@@ -1503,7 +1503,7 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
   }
 
   /* 通知要素を足すことを、正本が認めていること */
-  assert.equal(C.contentScriptMayInsertNotice, true);
+  assert.equal(C.contentScriptMayInsertNotice, true, '正本の contentScriptMayInsertNotice が実コードと違う（R19-001）');
   assert.match(content, /createElement\('div'\)/, 'content.js が要素を作っていない');
   assert.match(content, /body\.appendChild/, 'content.js が body へ足していない');
   assert.ok(C.contentScriptInsertsInto.includes('gxs-notice'),
@@ -1903,7 +1903,7 @@ test('実在のリポジトリを巻き込む拒否が、台帳に明記して�
   /* 外した3語が、allow として実測つきで記録されていること */
   for (const n of ['user', 'devices', 'password']) {
     const e = inv.namespaces.find((x) => x.namespace === n);
-    assert.ok(e, `台帳に ${n} の記録が無い`);
+    assert.ok(e, `${n}: 外した3語が台帳から消えている（R20-001）`);
     assert.equal(e.decision, 'allow', `${n} が allow になっていない`);
     assert.equal(e.repositoryProbe.repositoryUiRendered, true,
       `${n}: 開けることを確かめずに allow にしている`);
@@ -2180,4 +2180,61 @@ test('変異ランナーが、当たらなかった変異を素通りと数え�
   /* 素通り・不適用・ランナー失敗のどれかがあれば、終了コードが0にならないこと */
   assert.match(src, /survived\.length === 0[\s\S]{0,160}notApplied\.length === 0/,
     'ランナーが、当たらなかった変異を成功として終えている');
+});
+
+test('案内の用途が、実挙動と一致している（R25-004）', () => {
+  /*
+   * ⚠️ 第24回で「開いたが Esc が効かない」ときも案内を出すようにしたのに、
+   * 正本の一般欄は「共有できなかった理由」だけを用途として書いていた。
+   * `openOutcomes` の個別表だけが正しく、同じ正本の中で説明範囲が食い違っていた。
+   */
+  const C = JSON.parse(read('store/DATA_FLOW_CLAIMS.json'));
+  const ids = (C.noticePurposes || []).map((x) => x.id).sort();
+  assert.deepEqual(ids, ['popup_opened_without_esc_tracking', 'share_refusal'],
+    `案内の用途が2つに分かれていない: ${ids.join(' / ')}`);
+
+  /* 用途が挙げる状態と、openOutcomes が言う「案内を出す状態」が一致すること */
+  const declaredStates = new Set((C.noticePurposes || []).flatMap((x) => x.states));
+  const notifying = C.openOutcomes.filter((o) => o.userNotice).map((o) => o.state);
+  for (const s of notifying) {
+    assert.ok(declaredStates.has(s), `${s} で案内を出すのに、どの用途にも入っていない`);
+  }
+  /* ★対照: 案内を出さない状態が、用途に紛れ込んでいないこと */
+  for (const o of C.openOutcomes.filter((x) => !x.userNotice)) {
+    assert.ok(!declaredStates.has(o.state),
+      `${o.state} は案内を出さないのに、用途に入っている`);
+  }
+
+  /* 申告と、画面へ足す要素の説明が、同じ2つを言っていること */
+  assert.match(C.contentScriptInsertsInto, /Esc で閉じられないとき/,
+    '足す要素の説明が、degraded-state の案内を覆っていない');
+  const disc = read('store/DATA_DISCLOSURE.json');
+  assert.match(disc, /Escでは閉じられないとき/,
+    'Website content の説明が、degraded-state の案内を覆っていない');
+});
+
+test('Escが効く条件が、すべての面で同じことを言っている（R25-004）', () => {
+  /*
+   * README は無条件に「Esc で閉じます」と書いていた。実際に効くのは
+   * **記録できたポップアップ窓だけ**で、タブで開いた場合は対象外。
+   */
+  const C = JSON.parse(read('store/DATA_FLOW_CLAIMS.json'));
+  assert.ok(C.escAvailability && C.escAvailability.length > 40,
+    '正本が Esc の条件を持っていない');
+  assert.match(C.escAvailability, /tab_confirmed/, '正本がタブで開いた場合に触れていない');
+
+  /* 実挙動: Esc が効くのは popup_confirmed_tracked だけ */
+  const escOk = C.openOutcomes.filter((o) => o.escAvailable).map((o) => o.state);
+  assert.deepEqual(escOk, ['popup_confirmed_tracked'],
+    `Esc が効く状態が想定と違う: ${escOk.join(' / ')}`);
+
+  for (const [file, needle] of [
+    ['README.md', 'this works for the popup window the extension opened and recorded'],
+    ['README.ja.md', '記録できたポップアップ窓だけ'],
+    ['store/LISTING.md', 'this works for the popup window the extension opened and recorded'],
+    ['PRIVACY.md', "that tab is not recorded as the extension's own"]
+  ]) {
+    assert.ok(activeText(file).includes(needle),
+      `${file} が Esc の条件を無条件のまま書いている（「${needle}」が無い）`);
+  }
 });

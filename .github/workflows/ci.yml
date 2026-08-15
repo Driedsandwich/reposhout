@@ -60,13 +60,9 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    # 変異対照が伸びたので上限を上げた（第24回監査の是正時に実測）。
-    # 前回CI: 111件で10分40秒＝1件あたり5.8秒。139件なら約13.4分かかる。
-    # 単体2.5分＋E2E1分＋準備と配布物で、ジョブ全体は約20分。15分では
-    # 変異ステップが打ち切られ、証跡が残らずジョブが赤になっていた。
-    # ⚠️ これは走ってよい時間の天井で、検査そのものは1つも緩めていない。
-    # 件数は毎回増えるので、いずれ変異を独立したジョブへ分ける。
-    timeout-minutes: 30
+    # 変異対照は独立したジョブへ分けた（第25回監査）。件数が
+    # 49→85→111→139 と増え続けるので、同じジョブに置くと上限を上げ続けることになる。
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -108,11 +104,40 @@ jobs:
       - name: 実拡張E2E
         run: npm run test:e2e
 
+  # ============================================================
+  # 変異対照だけを持つジョブ（第25回監査）
+  # ============================================================
+  # 件数が増え続けるので、単体・E2E・配布物と同じ時間予算を奪い合わせない。
+  # ⚠️ **代表だけを走らせる形にはしない。** 提出候補を作る前に全件を通す。
+  mutations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # チェックアウト後にトークンを .git/config へ残さない
+          persist-credentials: false
+          # 履歴とタグを全部取る（第7回監査 R7-003）
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - run: npm ci --ignore-scripts
       # 第21回監査 R21-004。検査が「落ちるべきときに落ちる」ことを毎回確かめる。
       # ⚠️ 変異が当たらなかったものは「素通り」と区別して**失敗**にする
       #    （第20回に、当たっていない変異15件を素通りと読み違えた）。
       - name: 変異対照（検査が効いていることの確認）
         run: npm run test:mutations -- --receipt mutation-receipt.json
+
+      # ⚠️ ランナーの終了コードだけを信じない（第25回監査 R25-003）。
+      # 途中で強制終了されると証跡は running のままか、そもそも残らない。
+      # **読む側**が、完了していること・綺麗な木で測ったこと・件数が合うことを見る。
+      - name: 証跡が証拠として使える形か、外から確かめる
+        run: node scripts/verify-mutation-receipt.mjs mutation-receipt.json --expected-commit "$GITHUB_SHA"
 
       - name: 変異対照の証跡を残す
         if: always()
@@ -121,9 +146,33 @@ jobs:
           name: mutation-receipt-${{ github.sha }}
           path: mutation-receipt.json
           # ⚠️ warn ではなく error（第22回監査 R22-004）。
-          # 証跡が1つも無くてもこのステップは緑になっていたので、
-          # 「毎回証跡が残っている」ことを誰も保証していなかった。
+          # 第25回監査 R25-003 で確認したとおり、SIGKILL・ホスト消失では
+          # ランナー側が証跡を残せない。**ここが唯一の受け皿**なので外さない。
           if-no-files-found: error
+
+  # ============================================================
+  # 提出候補を作るジョブ（第25回監査）
+  # ============================================================
+  # 3つのジョブが全部通ってからでないと、候補になりうる成果物を作らない。
+  package-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [test, windows, mutations]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # チェックアウト後にトークンを .git/config へ残さない
+          persist-credentials: false
+          # 履歴とタグを全部取る（第7回監査 R7-003）
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - run: npm ci --ignore-scripts
 
       # PRのときは GITHUB_SHA が「PR検証用の一時マージコミット」を指す。
       # release-manifest.json にそのまま入ると、main由来の提出候補と見分けがつかない。

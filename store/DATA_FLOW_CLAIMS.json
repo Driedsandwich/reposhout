@@ -117,10 +117,10 @@
     "  ownerConfirmationStatus        → store/DATA_DISCLOSURE.json の確認状態と一致"
   ],
   "contentScriptMayInsertNotice": true,
-  "noticePurpose": "共有できなかった理由を、値を出さずに利用者へ伝えるため（第12回監査 R12-002）",
+  "noticePurpose": "画面へ短い案内を出す用途は2つ（第25回監査 R25-004）。① share_refusal＝共有できなかった理由を、値を出さずに伝える（第12回監査 R12-002）。② popup_opened_without_esc_tracking＝**開いたが Esc では閉じられない**ことを伝える（第24回監査 R24-003・状態は popup_confirmed_untracked）。②は共有そのものは成功しているので「送っていない」とは言わない",
   "noticeData": "理由ごとの定型文だけ。URL・パラメータ名・値・所有者名・リポジトリ名は入れない",
   "noticeLifetime": "一定時間で自分を取り除く。GitHub の既存要素は削除も置換もしない",
-  "contentScriptInsertsInto": "document.head へ <style> 1つ、操作列へボタンの入れ物1つ、および拒否の案内が必要なときだけ document.body へ <div id=\"gxs-notice\"> 1つ",
+  "contentScriptInsertsInto": "document.head へ <style> 1つ、操作列へボタンの入れ物1つ、および**拒否の案内が必要なとき、または開いた窓が Esc で閉じられないとき**に document.body へ <div id=\"gxs-notice\"> 1つ（第25回監査 R25-004）",
   "noticeIndependentOfActionRow": "操作列（挿入先の目印）が無いページでも、拒否の案内は body へ足す。「目印が無ければ何もしない」のはボタンの設置だけで、案内はそれとは別の経路（第22回監査 R22-001）",
   "storageStores": [
     "拡張自身が開いたウィンドウのID（chrome.windows.create が返す数値）",
@@ -388,5 +388,24 @@
       }
     }
   ],
-  "storageFailureHandling": "読み取りに失敗したら**書かない**（既にある記録を消さないため）。読めないときは「拡張が開いた窓だ」と認めない。書き込みに失敗したら、開いたことは認めても escAvailable=false を返す（第23回監査 R23-003）。記録に失敗した窓は持ち物にせず、Escでは閉じない。第24回監査 R24-003 から、その事実を3つの入口すべてで利用者へ1回だけ伝える（noticeEscUnavailable）。"
+  "storageFailureHandling": "読み取りに失敗したら**書かない**（既にある記録を消さないため）。読めないときは「拡張が開いた窓だ」と認めない。書き込みに失敗したら、開いたことは認めても escAvailable=false を返す（第23回監査 R23-003）。記録に失敗した窓は持ち物にせず、Escでは閉じない。第24回監査 R24-003 から、その事実を3つの入口すべてで利用者へ1回だけ伝える（noticeEscUnavailable）。",
+  "noticePurposes": [
+    {
+      "id": "share_refusal",
+      "states": [
+        "failed",
+        "creation_unknown",
+        "unsupported"
+      ],
+      "meaning": "共有できなかった理由を伝える"
+    },
+    {
+      "id": "popup_opened_without_esc_tracking",
+      "states": [
+        "popup_confirmed_untracked"
+      ],
+      "meaning": "開いたが Esc では閉じられないことを伝える"
+    }
+  ],
+  "escAvailability": "Esc で閉じられるのは、拡張が自分で開いた**ポップアップ窓のうち、ウィンドウIDを記録できたもの**だけ（popup_confirmed_tracked）。ポップアップを作れずタブで開いた場合（tab_confirmed）は、利用者が自分で開いたタブと見分けがつかないので Esc の対象にせず、通知も出さない——ふつうのタブとして閉じる"
 }

@@ -23,7 +23,7 @@ Share GitHub repos, issues and PRs to X with a pre-filled post.
 
 The toolbar icon and the shortcut work on shareable GitHub pages, including the ones that already show a button. **Sensitive pages — authentication, account, settings and organisation administration — are refused at every entry point**. Pressing the icon or the shortcut there does not open the composer; the page shows a short notice instead, and if that notice cannot be delivered the toolbar icon shows a `!` badge for a few seconds. Neither one repeats the URL or any value.
 
-Changed your mind? Press <kbd>Esc</kbd> in the share window to dismiss it.
+Changed your mind? Press <kbd>Esc</kbd> in the share window to dismiss it — **this works for the popup window the extension opened and recorded**. If the window could not be recorded, the extension says so once and you close the window yourself. If a popup could not be created at all and the composer opened in an ordinary tab, that tab is not treated as the extension's own: close it like any other tab.
 
 The post text adapts to the page:
 

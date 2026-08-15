@@ -50,7 +50,7 @@
  *   npm run test:mutations -- --receipt out.json    証跡をJSONで残す
  *   npm run test:mutations -- --timeout 5000        1件あたりの上限（既定 300000ms）
  */
-import { readFileSync, writeFileSync, lstatSync, realpathSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, unlinkSync, lstatSync, realpathSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -69,12 +69,14 @@ const sha = (s) => createHash('sha256').update(s).digest('hex');
  * 上限は有限の正整数だけ。知らない引数は受け取らない。
  */
 const KNOWN_FLAGS = ['--id', '--receipt', '--spec', '--timeout'];
+const KNOWN_SWITCHES = ['--allow-dirty'];
 const MAX_TIMEOUT_MS = 3600000;
 const argv = process.argv.slice(2);
 function parseArgs() {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
+    if (KNOWN_SWITCHES.includes(a)) { out[a] = true; continue; }
     if (!KNOWN_FLAGS.includes(a)) return { error: `知らない引数: ${a}` };
     const v = argv[i + 1];
     if (v === undefined || KNOWN_FLAGS.includes(v)) return { error: `${a} に値が無い` };
@@ -97,16 +99,27 @@ const receiptPath = parsed.out['--receipt'] || null;
  * 受け取る側から見ると「まだ走っていない」と「途中で死んだ」が区別できない
  * （実際、N19 の変異で受け取り側は null を読んで TypeError になり、
  *   守りたい検査は一度も走らなかった）。
- * どんな終わり方でも、最後に必ず何か書く。
+ * **JavaScript が普通に終わるとき**（正常終了・未捕捉の例外）は、最後に必ず何か書く。
+ * ⚠️ SIGKILL・電源断・ホスト消失では listener 自体が動かないので**保証できない**
+ *（第25回監査 R25-003。実測でも SIGKILL では証跡が1つも残らなかった）。
+ * その穴は CI 側の `if-no-files-found: error` が外から塞ぐ。
  */
 let receiptWritten = false;
+/*
+ * ⚠️ **途中の状態が「完了」に見えないようにする。**（第25回監査 R25-003）
+ * 一時ファイルへ書いてから rename する。rename は同じファイルシステム上で
+ * 不可分なので、読み手が半分だけ書かれた JSON を読むことがない。
+ */
 function saveReceipt(obj) {
   if (!receiptPath) { receiptWritten = true; return true; }
+  const tmp = `${receiptPath}.tmp-${process.pid}`;
   try {
-    writeFileSync(receiptPath, JSON.stringify(obj, null, 2) + '\n');
+    writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n');
+    renameSync(tmp, receiptPath);
     receiptWritten = true;
     return true;
   } catch (e) {
+    try { unlinkSync(tmp); } catch (e2) { /* 消せなくても本題ではない */ }
     console.error(`★ 証跡を書けなかった: ${receiptPath}\n  ${e && e.message}`);
     return false;
   }
@@ -174,13 +187,37 @@ const sourceTree = gitOut(['rev-parse', 'HEAD^{tree}']);
  * 最後の条件（`workspaceUnchanged !== false`）は **null を成功側**として扱っていた。
  * 何を測ったのか言えない証跡は、証跡ではない。
  */
+/*
+ * ⚠️ **測る前から汚れている木では、証跡を作らない。**（第25回監査 R25-002）
+ * 前は `workingTreeDirty` を記録するだけで、成功条件は
+ * 「実行前後で同じか」だけを見ていた。**汚れたまま戻れば成功**なので、
+ * `sourceCommit` / `sourceTree` が指すバイト列と、実際に測ったバイト列が違う。
+ * 第三者はそのコミットから証跡を再現できない。
+ * 手元で試すときだけ `--allow-dirty` を明示し、その証跡は証拠にしない。
+ */
+const allowDirty = parsed.out['--allow-dirty'] === true;
+if (gitStatusStart !== null && gitStatusStart !== '' && !allowDirty) {
+  const msg = '測る前から作業ツリーが汚れている。'
+    + 'commit した状態で走らせるか、手元で試すだけなら --allow-dirty を付ける';
+  console.error(`★ ${msg}\n${gitStatusStart.split('\n').slice(0, 10).join('\n')}`);
+  saveReceipt({
+    spec: specPath, total: 0, precondition: 'failed', error: msg,
+    evidenceEligible: false,
+    provenance: { sourceCommit, sourceTree, workingTreeDirty: true,
+      nodeVersion: process.version, platform: process.platform, timeoutMs,
+      startedAt, completedAt: new Date().toISOString() },
+    results: []
+  });
+  process.exit(2);
+}
+
 if (sourceCommit === null || sourceTree === null || gitStatusStart === null) {
   const missing = [['sourceCommit', sourceCommit], ['sourceTree', sourceTree],
     ['gitStatus', gitStatusStart]].filter(([, v]) => v === null).map(([k]) => k);
   const msg = `git から由来を取れない（${missing.join(' / ')}）。何を測ったか言えないので走らない`;
   console.error(`★ ${msg}`);
   saveReceipt({
-    spec: specPath, total: 0, precondition: 'failed', error: msg,
+    spec: specPath, state: 'aborted', total: 0, precondition: 'failed', error: msg,
     provenance: { sourceCommit, sourceTree, nodeVersion: process.version,
       platform: process.platform, timeoutMs, startedAt, completedAt: new Date().toISOString() },
     results: []
@@ -244,6 +281,17 @@ function validatePath(rel, label) {
  */
 const TEST_NAME_RE = /(?:^|\s)(?:it|test)\(\s*(['"`])((?:\\.|(?!\1).)*)\1/gm;
 const nameCache = new Map();
+/* 対象テストのソースに、その文字列がいくつあるか（目印の一意性を静的に見る） */
+const fileTextCache = new Map();
+function countInFile(rel, needle) {
+  if (!fileTextCache.has(rel)) {
+    try { fileTextCache.set(rel, readFileSync(resolve(ROOT, rel), 'utf8')); }
+    catch (e) { fileTextCache.set(rel, null); }
+  }
+  const src = fileTextCache.get(rel);
+  return src === null ? 0 : src.split(needle).length - 1;
+}
+
 function countTestName(rel, want) {
   if (!nameCache.has(rel)) {
     const src = readFileSync(join(ROOT, rel), 'utf8');
@@ -303,19 +351,33 @@ function failureDetails(output) {
     const m = /^(\s*)not ok \d+ - (.+?)\s*$/.exec(lines[i]);
     if (!m) continue;
     const indent = m[1].length;
-    const rec = { name: m[2].trim(), failureType: null, code: null, errName: null };
+    const rec = { name: m[2].trim(), failureType: null, code: null, errName: null, body: '' };
+    /*
+     * ⚠️ **その `not ok` の中だけ**を読む（第25回監査 R25-001）。
+     * 目印を出力全体から探すと、別のテストが出した同じ文字列で満たされてしまう。
+     */
+    const body = [];
+    let inError = false, errIndent = 0;
     for (let j = i + 1; j < lines.length; j++) {
       const l = lines[j];
-      if (!l.trim()) continue;
+      if (!l.trim()) { if (inError) body.push(''); continue; }
       const ind = l.length - l.trimStart().length;
       if (ind <= indent && !/^\s*(---|\.\.\.)\s*$/.test(l)) break;
       const t = l.trim();
+      if (inError) {
+        /* error: |- の続き。より浅い字下げのキーが来たら終わり */
+        if (ind > errIndent) { body.push(l.slice(errIndent + 2)); continue; }
+        inError = false;
+      }
       let g;
-      if ((g = /^failureType:\s*'?([^']+)'?/.exec(t))) rec.failureType = g[1];
+      if (/^error:\s*\|-?\s*$/.test(t)) { inError = true; errIndent = ind; continue; }
+      if ((g = /^error:\s*(.+)$/.exec(t))) body.push(g[1].replace(/^'|'$/g, ''));
+      else if ((g = /^failureType:\s*'?([^']+)'?/.exec(t))) rec.failureType = g[1];
       else if ((g = /^code:\s*'?([^']+)'?/.exec(t))) rec.code = g[1];
       else if ((g = /^name:\s*'?([^']+)'?/.exec(t))) rec.errName = g[1];
       if (/^\.\.\.$/.test(t) && ind <= indent + 2) break;
     }
+    rec.body = body.join('\n');
     out.push(rec);
   }
   return out;
@@ -326,12 +388,20 @@ const isAssertionFailure = (f) => !!f && (f.errName === 'AssertionError' || f.co
  * 実際の落ち方を、宣言できる語へ落とす。
  * 既定は `assertion` で、それ以外を検知にしたいときは**変異の側で宣言させる**
  * （`expectedFailure.kind` ＋ 理由）。宣言の無い種類は検知にしない。
+ *
+ * ⚠️ **`failureType` を先に見る**（第25回監査 R25-001）。
+ * 未処理の rejection の中で assertion が落ちると、TAP は
+ *   failureType: unhandledRejection / code: ERR_ASSERTION / name: AssertionError
+ * を**同時に**出す（Node 22 実測）。error 名や code を先に見ると、
+ * **テスト本体では一度も assertion を通っていない**のに assertion と分類できてしまう。
  */
 const ALLOWED_KINDS = ['assertion', 'unhandledRejection'];
 function actualKind(f) {
-  if (isAssertionFailure(f)) return 'assertion';
-  if (f && f.failureType === 'unhandledRejection') return 'unhandledRejection';
-  return (f && (f.errName || f.failureType)) || 'unknown';
+  if (!f) return 'unknown';
+  if (f.failureType === 'unhandledRejection') return 'unhandledRejection';
+  if (f.failureType === 'testCodeFailure' && isAssertionFailure(f)) return 'assertion';
+  if (!f.failureType && isAssertionFailure(f)) return 'assertion';
+  return f.errName || f.failureType || 'unknown';
 }
 
 function parseFailure(rel, output) {
@@ -364,6 +434,10 @@ function parseFailure(rel, output) {
   } else {
     kind = 'no_failure_reported';
   }
+  /*
+   * ⚠️ **生の本文を証跡へ載せない**（第23回監査 R23-002 で塞いだ穴を戻さない）。
+   * 目印の照合は生の本文で行い、**残すのは伏字にしたもの**だけにする。
+   */
   return { failureKind: kind, failedTestNames: testNames, bootstrapNames: bootstrap,
     failedTests: details.filter((d) => !isTargetFile(d.name)) };
 }
@@ -401,7 +475,16 @@ function sanitizeDiagnostic(output, limit = 600) {
       }
     }
   }
-  let text = lines.slice(0, 24).join('\n');
+  return maskSecrets(lines.slice(0, 24).join('\n'), limit);
+}
+
+/*
+ * 伏字だけを行う（第25回監査 R25-001）。
+ * ⚠️ `sanitizeDiagnostic` は **TAP の形から本文を抜き出す**器なので、
+ * すでに抜き出した本文に通すと**空になる**（実測: matchedBody が 152 件とも空だった）。
+ * 伏字の規則はここ一箇所に持たせ、両方から呼ぶ。
+ */
+function maskSecrets(text, limit = 600) {
   /* ⚠️ `/` だけ見ていたので、Windows の `D:\a\…` が伏せられていなかった（CIで実測） */
   text = text.replace(/(\/[^\s'"]+){2,}/g, '<path>');
   /* ⚠️ 2つの規則で同じ入力を覆っていたので、片方を外しても何も起きなかった
@@ -517,6 +600,24 @@ function restoreExact(m, before) {
   return readFileSync(path, 'utf8') === before;
 }
 
+/*
+ * ⚠️ **測り始める前に「走っている」と書く。**（第25回監査 R25-003）
+ * これが無いと、途中で強制終了された痕跡が「まだ始まっていない」と区別できない。
+ * 正常に終わったときだけ state=complete へ置き換える。
+ */
+saveReceipt({
+  spec: specPath, state: 'running', evidenceEligible: !allowDirty,
+  startedAt, currentMutationId: null, lastCompletedMutationId: null,
+  provenance: { ...provenance }, total: mutations.length, results: []
+});
+receiptWritten = false;   // 完了で必ず上書きさせる（ここで止まったら exit 側が aborted を書く）
+
+/*
+ * ⚠️ 実行前後の比較は、**証跡を書いたあと**を基準にする。
+ * 証跡そのものは、この実行が意図して作る出力なので「残した」に数えない。
+ */
+const workspaceBaseline = gitOut(['status', '--porcelain']);
+
 const results = [];
 let fatal = null;
 
@@ -555,6 +656,29 @@ for (const m of mutations) {
       && !(typeof m.expectedFailure.why === 'string' && m.expectedFailure.why.trim().length >= 10)) {
     results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
       error: `assertion 以外（${wantKind}）を検知にするなら、理由（why）を書く`, restored: true });
+    continue;
+  }
+
+  /*
+   * ⚠️ **どの assertion が落ちたのかまで決める。**（第25回監査 R25-001）
+   * 一意なテスト名の中に独立した assertion が2つあると、守りたい方が通って
+   * 無関係な方だけが落ちても、名前と種類は一致してしまう。
+   * 変異ごとに「その assertion のメッセージにしか出ない目印」を宣言させ、
+   * **その `not ok` の本文の中だけ**で照合する。
+   */
+  const marker = m.expectedFailure.diagnosticMarker;
+  if (typeof marker !== 'string' || marker.trim().length < 6) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
+      error: 'expectedFailure.diagnosticMarker（6文字以上）が要る', restored: true });
+    continue;
+  }
+  const markerCount = countInFile(m.test, marker);
+  if (markerCount !== 1) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
+      error: markerCount === 0
+        ? `目印「${marker}」が ${m.test} に無い`
+        : `目印「${marker}」が ${m.test} に ${markerCount} 個あり、どの assertion か決まらない`,
+      restored: true });
     continue;
   }
 
@@ -652,7 +776,8 @@ for (const m of mutations) {
     exitCode: run.exitCode, signal: run.signal, timedOut: run.timedOut,
     spawnError: run.spawnError, stdoutSha256: run.stdoutSha256, stderrSha256: run.stderrSha256,
     failedTestNames: run.failedTestNames,
-    failedTests: run.failedTests, sanitizedDiagnostic: run.sanitizedDiagnostic
+    failedTests: (run.failedTests || []).map(({ body, ...rest }) => rest),
+    sanitizedDiagnostic: run.sanitizedDiagnostic
   };
 
   /* ⑤ 落ち方で分ける。**検知にしてよいのは、宣言したテストが落ちたときだけ** */
@@ -710,16 +835,32 @@ for (const m of mutations) {
       expectedFailureMatched: false });
     continue;
   }
+  /*
+   * ⚠️ **目印は、その `not ok` の本文の中だけ**で探す（第25回監査 R25-001）。
+   * 出力全体から探すと、別のテストが出した同じ文字列で満たされてしまう。
+   */
+  if (!String(hits[0].body || '').includes(marker)) {
+    results.push({ ...withRun, outcome: 'runner_error', failureKind: 'marker_not_found',
+      error: `宣言したテストは宣言した種類で落ちたが、目印「${marker}」が本文に無い`
+        + '——同じテストの別の assertion が落ちた疑い',
+      expectedFailureKind: wantKind, actualFailureKind: gotKind,
+      expectedFailureMatched: false,
+      matchedBody: maskSecrets(String(hits[0].body || ''), 600) });
+    continue;
+  }
   results.push({ ...withRun, outcome: 'applied_and_killed',
     failureKind: wantKind === 'assertion' ? 'expected_assertion_failure' : 'expected_declared_failure',
     expectedFailureKind: wantKind, actualFailureKind: gotKind,
-    expectedFailureMatched: true, expectedFailureDetail: hits[0] });
+    expectedFailureMatched: true,
+    expectedFailureDetail: { name: hits[0].name, failureType: hits[0].failureType,
+      code: hits[0].code, errName: hits[0].errName },
+    matchedBody: maskSecrets(String(hits[0].body || ''), 600) });
 }
 
 /* 作業ツリーが元に戻っているか（第23回監査 R23-002 §6.6） */
 const gitStatusEnd = gitOut(['status', '--porcelain']);
-const workspaceUnchanged = gitStatusStart === null || gitStatusEnd === null
-  ? null : gitStatusStart === gitStatusEnd;
+const workspaceUnchanged = workspaceBaseline === null || gitStatusEnd === null
+  ? null : workspaceBaseline === gitStatusEnd;
 
 const by = (o) => results.filter((r) => r.outcome === o);
 const killed = by('applied_and_killed'), survived = by('applied_but_survived');
@@ -743,12 +884,14 @@ if (errors.length) console.log('★ ランナー失敗（結果は何も言え�
 if (badRestore.length) console.log('★ 復旧できなかったファイルがある:\n  ' + badRestore.map((r) => r.file).join('\n  '));
 if (workspaceUnchanged === false) {
   console.log('★ 作業ツリーが実行前と違う（何かを残している）');
-  console.log(`  実行前: ${JSON.stringify(gitStatusStart).slice(0, 200)}`);
+  console.log(`  実行前: ${JSON.stringify(workspaceBaseline).slice(0, 200)}`);
   console.log(`  実行後: ${JSON.stringify(gitStatusEnd).slice(0, 200)}`);
 }
 
 const summary = {
-  spec: specPath, total: results.length,
+  spec: specPath, state: 'complete',
+  evidenceEligible: !allowDirty && provenance.workingTreeDirty === false,
+  total: results.length,
   applied_and_killed: killed.length, applied_but_survived: survived.length,
   not_applied: notApplied.length, runner_error: errors.length,
   workspaceUnchanged,

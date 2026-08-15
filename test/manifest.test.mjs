@@ -379,3 +379,19 @@ test('配布物にテスト・ストア素材・文書を含めない', () => {
     assert.ok(!f.endsWith('.md'), f);
   }
 });
+
+test('CIが、変異の証跡を外から検証している（R25-003）', () => {
+  /*
+   * ⚠️ ランナーの終了コードだけを信じると、途中で強制終了された run を
+   * 「走った」と読んでしまう（SIGKILL では証跡が1つも残らないことを実測）。
+   * 証跡を**読む側**が、完了・綺麗な木・件数一致を独立に判定する。
+   */
+  const wf = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8').replace(/\r\n/g, '\n');
+  assert.match(wf, /verify-mutation-receipt\.mjs/,
+    'CIが証跡を外から検証していない（ランナーの終了コードだけを信じている）');
+  assert.match(wf, /--expected-commit/,
+    '証跡がどのコミットを測ったかを、CIが突き合わせていない');
+  /* 提出候補は、3つのジョブが通ってからでないと作らない */
+  assert.match(wf, /needs:\s*\[test, windows, mutations\]/,
+    '提出候補を作るジョブが、単体・Windows・変異の全部を待っていない');
+});

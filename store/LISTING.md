@@ -94,15 +94,15 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 **今回出す正本**（正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json)）:
 
 ```
-成果物 : reposhout-package-77af9419e0cf05ab9548813ead4a98cb35adeb07
+status : pending_main_ci（成果物がまだありません）
 中のZIP : reposhout-1.1.8.zip
-大きさ : 45,314 B / 11ファイル
-SHA-256 : f418933a355f9c820ba4dd057b9f627fa0b032c41f3e278f611c1832b3931f39
 ```
 
-main への push で走った CI（run 31851685436）が作ったものを、ダウンロードして実測した値です
-（外側の成果物のバイト数とハッシュも、GitHub の API が申告する digest と一致することを
-確かめました）。同じコミットを独立にクローンして作り直したZIPとも**バイト一致**します。
+第25回監査の是正で出荷物（`src/content.js` の注釈）が変わったため、前の候補は却下しました
+（`SUBMISSION_CANDIDATE.json` の history に理由つきで残しています）。
+**成果物名・大きさ・SHA-256 は、main の CI が作ってから実測して書きます。**
+いま「それらしい値」を書くと、必ず作り話になります。
+
 **タグはまだ打っていません**（外部監査に合格してから打ちます）。
 却下した成果物は提出しません（理由は正本の `history` にあります）。
 
@@ -145,7 +145,7 @@ or pull request to X without copying and pasting.
 Click it and X's post composer opens with a one-line description of the page and
 its link already filled in.
 Edit it however you like, then press Post yourself. RepoShout never posts for you.
-Changed your mind? Press Escape in the share window to dismiss it.
+Changed your mind? Press Escape in the share window to dismiss it — this works for the popup window the extension opened and recorded. If it could not be recorded, the extension tells you once and you close the window yourself; if the composer opened in an ordinary tab, close it like any other tab.
 
 ── What you get ──
 

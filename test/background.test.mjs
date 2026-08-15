@@ -271,7 +271,7 @@ test('バッジは 6000ms で消える（R15-005: 予約を実際に走らせて
   const { bg, log, advance, pending } = mount({ contentScript: false, fakeTimers: true });
   await bg.flagTab(7, 'unsupported');
   assert.ok(log.badges.some((b) => b.text === '!'), 'そもそも付いていない');
-  assert.equal(pending(), 1, '消す予約が入っていない');
+  assert.equal(pending(), 1, '6000ms で消す予約が入っていない（R15-005）');
 
   advance(5999);
   assert.ok(!log.badges.some((b) => b.text === ''), '早く消えすぎている');
