@@ -145,7 +145,7 @@ or pull request to X without copying and pasting.
 Click it and X's post composer opens with a one-line description of the page and
 its link already filled in.
 Edit it however you like, then press Post yourself. RepoShout never posts for you.
-Changed your mind? Press Escape in the share window to dismiss it.
+Changed your mind? Press Escape in the share window to dismiss it — this works for the popup window the extension opened and recorded. If it could not be recorded, the extension tells you once and you close the window yourself; if the composer opened in an ordinary tab, close it like any other tab.
 
 ── What you get ──
 

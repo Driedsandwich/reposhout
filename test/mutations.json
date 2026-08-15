@@ -1762,6 +1762,54 @@
       }
     },
     {
+      "id": "W10",
+      "file": "store/DATA_FLOW_CLAIMS.json",
+      "find": "\"id\": \"popup_opened_without_esc_tracking\"",
+      "replace": "\"id\": \"unused_purpose\"",
+      "test": "test/docs.test.mjs",
+      "desc": "正本から degraded-state の用途を消す",
+      "expectedFailure": {
+        "testName": "案内の用途が、実挙動と一致している（R25-004）",
+        "diagnosticMarker": "'popup_opened_without_esc_tracking',"
+      }
+    },
+    {
+      "id": "W11",
+      "file": "README.md",
+      "find": "this works for the popup window the extension opened and recorded",
+      "replace": "this always works",
+      "test": "test/docs.test.mjs",
+      "desc": "README(英)のEscを無条件へ戻す",
+      "expectedFailure": {
+        "testName": "Escが効く条件が、すべての面で同じことを言っている（R25-004）",
+        "diagnosticMarker": " が Esc の条件を無条件のまま書いている（「"
+      }
+    },
+    {
+      "id": "W12",
+      "file": "README.ja.md",
+      "find": "記録できたポップアップ窓だけ",
+      "replace": "どの窓でも",
+      "test": "test/docs.test.mjs",
+      "desc": "README(日)のEscを無条件へ戻す",
+      "expectedFailure": {
+        "testName": "Escが効く条件が、すべての面で同じことを言っている（R25-004）",
+        "diagnosticMarker": " が Esc の条件を無条件のまま書いている（「"
+      }
+    },
+    {
+      "id": "W13",
+      "file": "store/DATA_DISCLOSURE.json",
+      "find": "②**投稿画面は開いたがEscでは閉じられないとき**（第25回監査 R25-004）の2つ",
+      "replace": "②はもう無い",
+      "test": "test/docs.test.mjs",
+      "desc": "申告から degraded-state 通知を落とす",
+      "expectedFailure": {
+        "testName": "案内の用途が、実挙動と一致している（R25-004）",
+        "diagnosticMarker": "Website content の説明が、degraded-state の案内を覆っていない"
+      }
+    },
+    {
       "id": "W14",
       "file": "scripts/run-mutations.mjs",
       "find": "    writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\\n');\n    renameSync(tmp, receiptPath);",
