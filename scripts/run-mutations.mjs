@@ -50,7 +50,7 @@
  *   npm run test:mutations -- --receipt out.json    証跡をJSONで残す
  *   npm run test:mutations -- --timeout 5000        1件あたりの上限（既定 300000ms）
  */
-import { readFileSync, writeFileSync, lstatSync, realpathSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, unlinkSync, lstatSync, realpathSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -99,16 +99,27 @@ const receiptPath = parsed.out['--receipt'] || null;
  * 受け取る側から見ると「まだ走っていない」と「途中で死んだ」が区別できない
  * （実際、N19 の変異で受け取り側は null を読んで TypeError になり、
  *   守りたい検査は一度も走らなかった）。
- * どんな終わり方でも、最後に必ず何か書く。
+ * **JavaScript が普通に終わるとき**（正常終了・未捕捉の例外）は、最後に必ず何か書く。
+ * ⚠️ SIGKILL・電源断・ホスト消失では listener 自体が動かないので**保証できない**
+ *（第25回監査 R25-003。実測でも SIGKILL では証跡が1つも残らなかった）。
+ * その穴は CI 側の `if-no-files-found: error` が外から塞ぐ。
  */
 let receiptWritten = false;
+/*
+ * ⚠️ **途中の状態が「完了」に見えないようにする。**（第25回監査 R25-003）
+ * 一時ファイルへ書いてから rename する。rename は同じファイルシステム上で
+ * 不可分なので、読み手が半分だけ書かれた JSON を読むことがない。
+ */
 function saveReceipt(obj) {
   if (!receiptPath) { receiptWritten = true; return true; }
+  const tmp = `${receiptPath}.tmp-${process.pid}`;
   try {
-    writeFileSync(receiptPath, JSON.stringify(obj, null, 2) + '\n');
+    writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n');
+    renameSync(tmp, receiptPath);
     receiptWritten = true;
     return true;
   } catch (e) {
+    try { unlinkSync(tmp); } catch (e2) { /* 消せなくても本題ではない */ }
     console.error(`★ 証跡を書けなかった: ${receiptPath}\n  ${e && e.message}`);
     return false;
   }
@@ -206,7 +217,7 @@ if (sourceCommit === null || sourceTree === null || gitStatusStart === null) {
   const msg = `git から由来を取れない（${missing.join(' / ')}）。何を測ったか言えないので走らない`;
   console.error(`★ ${msg}`);
   saveReceipt({
-    spec: specPath, total: 0, precondition: 'failed', error: msg,
+    spec: specPath, state: 'aborted', total: 0, precondition: 'failed', error: msg,
     provenance: { sourceCommit, sourceTree, nodeVersion: process.version,
       platform: process.platform, timeoutMs, startedAt, completedAt: new Date().toISOString() },
     results: []
@@ -589,6 +600,24 @@ function restoreExact(m, before) {
   return readFileSync(path, 'utf8') === before;
 }
 
+/*
+ * ⚠️ **測り始める前に「走っている」と書く。**（第25回監査 R25-003）
+ * これが無いと、途中で強制終了された痕跡が「まだ始まっていない」と区別できない。
+ * 正常に終わったときだけ state=complete へ置き換える。
+ */
+saveReceipt({
+  spec: specPath, state: 'running', evidenceEligible: !allowDirty,
+  startedAt, currentMutationId: null, lastCompletedMutationId: null,
+  provenance: { ...provenance }, total: mutations.length, results: []
+});
+receiptWritten = false;   // 完了で必ず上書きさせる（ここで止まったら exit 側が aborted を書く）
+
+/*
+ * ⚠️ 実行前後の比較は、**証跡を書いたあと**を基準にする。
+ * 証跡そのものは、この実行が意図して作る出力なので「残した」に数えない。
+ */
+const workspaceBaseline = gitOut(['status', '--porcelain']);
+
 const results = [];
 let fatal = null;
 
@@ -830,8 +859,8 @@ for (const m of mutations) {
 
 /* 作業ツリーが元に戻っているか（第23回監査 R23-002 §6.6） */
 const gitStatusEnd = gitOut(['status', '--porcelain']);
-const workspaceUnchanged = gitStatusStart === null || gitStatusEnd === null
-  ? null : gitStatusStart === gitStatusEnd;
+const workspaceUnchanged = workspaceBaseline === null || gitStatusEnd === null
+  ? null : workspaceBaseline === gitStatusEnd;
 
 const by = (o) => results.filter((r) => r.outcome === o);
 const killed = by('applied_and_killed'), survived = by('applied_but_survived');
@@ -855,12 +884,12 @@ if (errors.length) console.log('★ ランナー失敗（結果は何も言え�
 if (badRestore.length) console.log('★ 復旧できなかったファイルがある:\n  ' + badRestore.map((r) => r.file).join('\n  '));
 if (workspaceUnchanged === false) {
   console.log('★ 作業ツリーが実行前と違う（何かを残している）');
-  console.log(`  実行前: ${JSON.stringify(gitStatusStart).slice(0, 200)}`);
+  console.log(`  実行前: ${JSON.stringify(workspaceBaseline).slice(0, 200)}`);
   console.log(`  実行後: ${JSON.stringify(gitStatusEnd).slice(0, 200)}`);
 }
 
 const summary = {
-  spec: specPath,
+  spec: specPath, state: 'complete',
   evidenceEligible: !allowDirty && provenance.workingTreeDirty === false,
   total: results.length,
   applied_and_killed: killed.length, applied_but_survived: survived.length,

@@ -1642,6 +1642,18 @@
       }
     },
     {
+      "id": "T05",
+      "file": "scripts/run-mutations.mjs",
+      "find": "process.on('exit', (code) => {\n  if (receiptWritten || !receiptPath) return;",
+      "replace": "process.on('exit', (code) => {\n  if (true) return;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "倒れたときの証跡を書かない",
+      "expectedFailure": {
+        "testName": "普通に終わる限り、証跡を1行は残す（R24-002 / R25-003で範囲を限定）",
+        "diagnosticMarker": "倒れたときに証跡が1行も残っていない"
+      }
+    },
+    {
       "id": "T06",
       "file": "test/mutation-runner.test.mjs",
       "find": "  assert.ok(r.receipt, `証跡が無い（exit=${r.exitCode}）。何を測ったか言えない:\\n${r.stdout}`);",
@@ -1735,6 +1747,30 @@
       "expectedFailure": {
         "testName": "--allow-dirty で走らせた証跡は、証拠にしない（R25-002）",
         "diagnosticMarker": "--allow-dirty で走らせたのに、証拠として使えることになっている"
+      }
+    },
+    {
+      "id": "W08",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  spec: specPath, state: 'running', evidenceEligible: !allowDirty,",
+      "replace": "  spec: specPath, state: 'complete', evidenceEligible: !allowDirty,",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "走っている最中の証跡を complete と書く",
+      "expectedFailure": {
+        "testName": "測り始める前に「走っている」と書く（R25-003）",
+        "diagnosticMarker": "走っている最中の state が違う: "
+      }
+    },
+    {
+      "id": "W14",
+      "file": "scripts/run-mutations.mjs",
+      "find": "    writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\\n');\n    renameSync(tmp, receiptPath);",
+      "replace": "    writeFileSync(receiptPath, JSON.stringify(obj, null, 2) + '\\n');",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "証跡を直接上書きする（原子的な置換をやめる）",
+      "expectedFailure": {
+        "testName": "証跡は一時ファイル経由で置き換える（R25-003）",
+        "diagnosticMarker": "証跡を直接上書きしている（途中の状態が読まれうる）"
       }
     }
   ]

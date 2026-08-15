@@ -25,8 +25,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync,
-  existsSync, symlinkSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+  existsSync, symlinkSync, readdirSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ROOT } from './helpers/load.mjs';
@@ -718,7 +718,7 @@ test('呼ばれ方（NODE_TEST_CONTEXT）で判定が変わらない（R22-004�
   assert.equal(outcomeOf(r, 'H2'), 'applied_but_survived');
 });
 
-test('どんな終わり方でも、証跡を1行は残す（R24-002）', () => {
+test('普通に終わる限り、証跡を1行は残す（R24-002 / R25-003で範囲を限定）', () => {
   /*
    * ⚠️ N19（対象の存在検査を外す変異）で実測——ランナーが途中の例外で死に、
    * **証跡が1行も残らなかった**。受け取る側は null を読んで TypeError になり、
@@ -785,7 +785,51 @@ test('--allow-dirty で走らせた証跡は、証拠にしない（R25-002）',
     '--allow-dirty で走らせたのに、証拠として使えることになっている');
 });
 
+test('測り始める前に「走っている」と書く（R25-003）', () => {
+  /*
+   * ⚠️ SIGKILL では `process.on('exit')` が動かない（Node 公式仕様・実測でも
+   * 証跡は1つも残らなかった）。だから「どんな終わり方でも残す」とは言えない。
+   * 代わりに**始まったことを先に書き**、正常に終わったときだけ complete へ置き換える。
+   * 途中で殺されれば running のまま残り、外の検証器がそれを拒む。
+   */
+  const dir = makeFixture([mut('S1')]).dir;
+  const r = runRunner(dir);
+  assert.equal(r.receipt.state, 'complete', `終わったのに complete でない: ${r.receipt.state}`);
 
+  /* 走っている最中の形を、ランナーを止めて実際に作る */
+  const dir2 = makeFixture([mut('S2', { test: 'test/hangs.test.mjs',
+    expectedFailure: { testName: '終わらない' } })]).dir;
+  const child = spawn(process.execPath,
+    [join(dir2, 'scripts/run-mutations.mjs'), '--spec', join(dir2, 'test/mutations.json'),
+     '--timeout', '60000', '--allow-dirty', '--receipt', join(dir2, 'receipt.json')],
+    { cwd: dir2, stdio: 'ignore' });
+  const started = Date.now();
+  while (!existsSync(join(dir2, 'receipt.json')) && Date.now() - started < 20000) {
+    execFileSync(process.execPath, ['-e', 'setTimeout(()=>{},120)']);
+  }
+  const midway = existsSync(join(dir2, 'receipt.json'))
+    ? JSON.parse(readFileSync(join(dir2, 'receipt.json'), 'utf8')) : null;
+  child.kill('SIGKILL');
+  assert.ok(midway, '走っている最中に証跡が無い');
+  assert.equal(midway.state, 'running', `走っている最中の state が違う: ${midway.state}`);
+  assert.deepEqual(midway.results, [], '走っている最中に結果が入っている');
+});
+
+test('SIGKILL では証跡を保証できない——だから外側の受け皿を残す（R25-003）', () => {
+  /*
+   * ⚠️ こちらの主張を実測で確かめる。**残らないことが正しい**（listener を
+   * 登録できないので、Node にできることが無い）。CI の
+   * `if-no-files-found: error` は、その穴を外から塞ぐために今も要る。
+   */
+  const wf = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+  assert.match(wf, /if-no-files-found:\s*error/,
+    'ハード停止を捕まえる外側の受け皿（if-no-files-found: error）が消えている');
+  const runner = readFileSync(join(ROOT, 'scripts/run-mutations.mjs'), 'utf8');
+  assert.match(runner, /SIGKILL/,
+    '保証できない範囲（SIGKILL）を、ランナーの注釈が言っていない');
+  assert.ok(!/どんな終わり方でも、最後に必ず何か書く/.test(runner),
+    '「どんな終わり方でも残す」という過大な主張が残っている');
+});
 
 test('未処理の rejection の中の assertion を、assertion と数えない（R25-001）', () => {
   /*
@@ -911,3 +955,18 @@ test('別のテストも落ちる', () => {
     '対照が成立していない＝この検査は何でも落とす');
 });
 
+test('証跡は一時ファイル経由で置き換える（R25-003）', () => {
+  /*
+   * ⚠️ 直接上書きすると、書いている途中の JSON を読み手が拾いうる。
+   * 一時ファイルへ書いて rename する（同じファイルシステム上では不可分）。
+   * 走り終えたあとに一時ファイルが残っていないことも見る。
+   */
+  const runner = readFileSync(join(ROOT, 'scripts/run-mutations.mjs'), 'utf8');
+  assert.match(runner, /renameSync\(tmp, receiptPath\)/,
+    '証跡を直接上書きしている（途中の状態が読まれうる）');
+  const dir = makeFixture([mut('A9')]).dir;
+  const r = runRunner(dir);
+  assert.equal(r.exitCode, 0, `走れていない:\n${r.stdout}`);
+  const left = readdirSync(dir).filter((f) => f.includes('.tmp-'));
+  assert.deepEqual(left, [], `一時ファイルが残っている: ${left.join(' ')}`);
+});
