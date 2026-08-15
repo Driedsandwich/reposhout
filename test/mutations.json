@@ -945,6 +945,18 @@
       }
     },
     {
+      "id": "N30",
+      "file": ".github/workflows/ci.yml",
+      "find": "          # 第25回監査 R25-003 で確認したとおり、SIGKILL・ホスト消失では\n          # ランナー側が証跡を残せない。**ここが唯一の受け皿**なので外さない。\n          if-no-files-found: error",
+      "replace": "          # 第25回監査 R25-003 で確認したとおり、SIGKILL・ホスト消失では\n          # ランナー側が証跡を残せない。**ここが唯一の受け皿**なので外さない。\n          if-no-files-found: warn",
+      "test": "test/manifest.test.mjs",
+      "desc": "CIの証跡アップロードを warn へ戻す",
+      "expectedFailure": {
+        "testName": "成果物のアップロードは、1つ残らず「空なら失敗」になっている（R22-004）",
+        "diagnosticMarker": "mutation-receipt-"
+      }
+    },
+    {
       "id": "N31",
       "file": "src/background.js",
       "find": "  scheduleBadgeCleanup(tabId);          // ★ 出した直後。色/説明文より前\n  if (chrome.action.setBadgeBackgroundColor) {",
@@ -1759,6 +1771,18 @@
       "expectedFailure": {
         "testName": "測り始める前に「走っている」と書く（R25-003）",
         "diagnosticMarker": "走っている最中の state が違う: "
+      }
+    },
+    {
+      "id": "W09",
+      "file": ".github/workflows/ci.yml",
+      "find": "      - name: 証跡が証拠として使える形か、外から確かめる\n        run: node scripts/verify-mutation-receipt.mjs mutation-receipt.json --expected-commit \"$GITHUB_SHA\"\n\n",
+      "replace": "",
+      "test": "test/manifest.test.mjs",
+      "desc": "CIから証跡の外部検証を外す",
+      "expectedFailure": {
+        "testName": "CIが、変異の証跡を外から検証している（R25-003）",
+        "diagnosticMarker": "CIが証跡を外から検証していない（ランナーの終了コードだけを信じている）"
       }
     },
     {
