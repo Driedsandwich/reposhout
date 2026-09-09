@@ -108,19 +108,36 @@ const receiptPath = parsed.out['--receipt'] || null;
  *（第25回監査 R25-003。実測でも SIGKILL では証跡が1つも残らなかった）。
  * その穴は CI 側の `if-no-files-found: error` が外から塞ぐ。
  */
-let receiptWritten = false;
+/*
+ * ⚠️ **証跡の一生を、名前のついた状態にする。**（第25回 R25-003 / 第26回 R26-003）
+ *
+ *   none        まだ1バイトも書いていない（ここで倒れたら exit 側が aborted を書く）
+ *   running     測っている最中（いまどの変異か・どこまで終えたかを持つ）
+ *   settled     最後の1枚を書き終えた（complete か、前提失敗の記録）。**もう触らない**
+ *   unwritable  そもそも書けない場所だった。同じ理由で失敗するので、もう試さない
+ *
+ * 証跡に入る `state` は `running` / `complete` / `aborted` の3つ。
+ * **証拠として使えるのは `complete` だけ**。
+ *
+ * ⚠️ 第25回では `running` を1回書くだけで、**どこまで進んだかを更新していなかった**。
+ * 強制終了された証跡を見ても、どの変異の途中でどのファイルが変異したままか
+ * 分からない（第26回監査 R26-003）。変異ごとに atomic に書き直す。
+ */
+let receiptPhase = 'none';
+let currentMutationId = null;
+let lastCompletedMutationId = null;
+let lastErrorKind = null;
 /*
  * ⚠️ **途中の状態が「完了」に見えないようにする。**（第25回監査 R25-003）
  * 一時ファイルへ書いてから rename する。rename は同じファイルシステム上で
  * 不可分なので、読み手が半分だけ書かれた JSON を読むことがない。
  */
 function saveReceipt(obj) {
-  if (!receiptPath) { receiptWritten = true; return true; }
+  if (!receiptPath) return true;
   const tmp = `${receiptPath}.tmp-${process.pid}`;
   try {
     writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n');
     renameSync(tmp, receiptPath);
-    receiptWritten = true;
     return true;
   } catch (e) {
     try { unlinkSync(tmp); } catch (e2) { /* 消せなくても本題ではない */ }
@@ -129,15 +146,29 @@ function saveReceipt(obj) {
   }
 }
 process.on('exit', (code) => {
-  if (receiptWritten || !receiptPath) return;
-  try {
-    writeFileSync(receiptPath, JSON.stringify({
-      spec: parsed.out['--spec'] || 'test/mutations.json', total: 0,
-      precondition: 'aborted',
-      error: `証跡を書く前に終了した（exit ${code}）。結果は何も言えない`,
-      results: []
-    }, null, 2) + '\n');
-  } catch (e) { /* 書けないなら、そのまま落とす */ }
+  /*
+   * ⚠️ 最後の1枚を書き終えているなら、上書きしない（前提失敗の記録を消さないため）。
+   * 書けない場所だと分かっているなら、ここで書いても同じ理由で失敗するので試さない。
+   * ⚠️ 書き方は **saveReceipt と同じ（一時ファイル→rename）**にする。
+   * 第25回はここだけ直接 writeFileSync していて、`state` も持っていなかった（R26-003）。
+   */
+  if (!receiptPath || receiptPhase === 'settled' || receiptPhase === 'unwritable') return;
+  saveReceipt({
+    spec: parsed.out['--spec'] || 'test/mutations.json',
+    state: 'aborted', precondition: 'aborted', evidenceEligible: false, total: 0,
+    currentMutationId, lastCompletedMutationId, errorKind: lastErrorKind,
+    error: `証跡を完了させる前に終了した（exit ${code}）。結果は何も言えない`,
+    results: []
+  });
+});
+/*
+ * 倒れ方の種類だけ覚えて、**既定どおり**落ちる（握りつぶさない）。
+ * これが無いと aborted の証跡に「なぜ倒れたか」が1文字も残らない（R26-003）。
+ */
+process.on('uncaughtException', (e) => {
+  lastErrorKind = (e && (e.code || e.name)) || 'Error';
+  console.error(e && e.stack ? e.stack : String(e));
+  process.exit(1);
 });
 const specPath = parsed.out['--spec'] || 'test/mutations.json';
 let timeoutMs = 300000;
@@ -229,13 +260,14 @@ if (gitStatusStart !== null && gitStatusStart !== '' && !allowDirty) {
     + 'commit した状態で走らせるか、手元で試すだけなら --allow-dirty を付ける';
   console.error(`★ ${msg}\n${gitStatusStart.split('\n').slice(0, 10).join('\n')}`);
   saveReceipt({
-    spec: specPath, total: 0, precondition: 'failed', error: msg,
+    spec: specPath, state: 'aborted', total: 0, precondition: 'failed', error: msg,
     evidenceEligible: false,
     provenance: { sourceCommit, sourceTree, workingTreeDirty: true,
       nodeVersion: process.version, platform: process.platform, timeoutMs,
       startedAt, completedAt: new Date().toISOString() },
     results: []
   });
+  receiptPhase = 'settled';        /* 前提失敗の記録を、exit 側に上書きさせない */
   process.exit(2);
 }
 
@@ -250,6 +282,7 @@ if (sourceCommit === null || sourceTree === null || gitStatusStart === null) {
       platform: process.platform, timeoutMs, startedAt, completedAt: new Date().toISOString() },
     results: []
   });
+  receiptPhase = 'settled';        /* 同上 */
   process.exit(2);
 }
 const provenance = {
@@ -634,12 +667,26 @@ function restoreExact(m, before) {
  * これが無いと、途中で強制終了された痕跡が「まだ始まっていない」と区別できない。
  * 正常に終わったときだけ state=complete へ置き換える。
  */
-saveReceipt({
-  spec: specPath, state: 'running', evidenceEligible: !allowDirty,
-  startedAt, currentMutationId: null, lastCompletedMutationId: null,
-  provenance: { ...provenance }, total: mutations.length, results: []
-});
-receiptWritten = false;   // 完了で必ず上書きさせる（ここで止まったら exit 側が aborted を書く）
+function saveRunning() {
+  return saveReceipt({
+    spec: specPath, state: 'running', evidenceEligible: !allowDirty,
+    startedAt, currentMutationId, lastCompletedMutationId, shard,
+    provenance: { ...provenance }, total: mutations.length, results: []
+  });
+}
+/*
+ * ⚠️ **「走っている」を置けなかったら、1件も測らない。**（第26回監査 R26-003）
+ * 前は書き込みの成否を見ずに測り始めていたので、証跡を置けない場所を指したまま
+ * 全部走り、最後に「書けなかった」とだけ言っていた。**測る前に残す**という
+ * 設計が成り立っていない（この時点ではまだ何も書けていないので、
+ * 対象のファイルには1バイトも残らない）。
+ */
+if (!saveRunning()) {
+  console.error('★ 測る前に「走っている」と書けなかった。1件も測らずに止まる');
+  receiptPhase = 'unwritable';     /* 同じ理由で失敗するので、exit 側でも試さない */
+  process.exit(2);
+}
+receiptPhase = 'running';
 
 /*
  * ⚠️ 実行前後の比較は、**証跡を書いたあと**を基準にする。
@@ -651,6 +698,16 @@ const results = [];
 let fatal = null;
 
 for (const m of mutations) {
+  /*
+   * ⚠️ **どこまで進んだかを、その都度残す。**（第26回監査 R26-003）
+   * `currentMutationId` は「いま手を付けている1件」、`lastCompletedMutationId` は
+   * 「復旧まで終わった直前の1件」。強制終了されたとき、**どのファイルが変異したまま
+   * 残っているか**を証跡から名指しできるようにするため。
+   */
+  if (currentMutationId !== null) lastCompletedMutationId = currentMutationId;
+  currentMutationId = m.id;
+  saveRunning();
+
   const base = { id: m.id, file: m.file, desc: m.desc, test: m.test,
     expectedFailure: m.expectedFailure || null };
 
@@ -955,6 +1012,13 @@ for (const m of mutations) {
     matchedBody: savedBody });
 }
 
+/* 最後の1件も「終わった」に数える（R26-003） */
+if (currentMutationId !== null) {
+  lastCompletedMutationId = currentMutationId;
+  currentMutationId = null;
+  saveRunning();
+}
+
 /* 作業ツリーが元に戻っているか（第23回監査 R23-002 §6.6） */
 const gitStatusEnd = gitOut(['status', '--porcelain']);
 const workspaceUnchanged = workspaceBaseline === null || gitStatusEnd === null
@@ -989,7 +1053,7 @@ if (workspaceUnchanged === false) {
 const summary = {
   spec: specPath, state: 'complete',
   evidenceEligible: !allowDirty && provenance.workingTreeDirty === false,
-  shard,
+  currentMutationId, lastCompletedMutationId, shard,
   total: results.length,
   applied_and_killed: killed.length, applied_but_survived: survived.length,
   not_applied: notApplied.length, runner_error: errors.length,
@@ -1006,6 +1070,8 @@ if (receiptPath) {
   if (!saveReceipt(summary)) process.exit(2);
   console.log(`証跡: ${receiptPath}`);
 }
+/* ここまで来て初めて最後の1枚。以後、exit 側は aborted を書かない（R26-003） */
+receiptPhase = 'settled';
 
 const ok = survived.length === 0 && notApplied.length === 0
   && errors.length === 0 && badRestore.length === 0 && workspaceUnchanged === true;
