@@ -141,12 +141,16 @@ https://github.com/Driedsandwich/reposhout/blob/main/SUPPORT.md
 今回出すもの:
 
 ```
-成果物 : reposhout-package-e517976dd1d9e9fa2d08aaf0c17ee8771322dc0c
+status : pending_main_ci
+成果物 : まだ無い
 中のZIP : reposhout-1.1.8.zip
-大きさ : 45,404 B / 11ファイル
-SHA-256 : 82439a7b52c89deabde4ad863dedc26e07315789230a646b81a3eea8be780896
+大きさ : 未確定
+SHA-256 : 未確定
 ```
 
+**いま出せる成果物はありません。** 第26回監査（R26-001〜R26-004）で前の候補を
+却下し、正本を `pending_main_ci` へ戻しました。次の成果物は、是正を main へ
+マージしたあとに走る CI が作ります。実測してから、ここと正本へ書きます。
 正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json) です。
 却下した成果物は提出しません（理由も同ファイルにあります）。
 **「最新の main」では選ばず、上の成果物名とSHA-256 で選んでください**（第10回監査 R10-006）。
