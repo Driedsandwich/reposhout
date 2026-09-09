@@ -2110,6 +2110,30 @@
       }
     },
     {
+      "id": "Z06",
+      "file": "scripts/run-mutations.mjs",
+      "find": "    if (v === undefined || KNOWN_FLAGS.includes(v) || KNOWN_SWITCHES.includes(v)) {",
+      "replace": "    if (v === undefined || KNOWN_FLAGS.includes(v)) {",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "別の引数の名前を、値として受け取る",
+      "expectedFailure": {
+        "testName": "別の引数の名前を、値として受け取らない（R26-004）",
+        "diagnosticMarker": "GXS_MARK.SWITCH_AS_VALUE"
+      }
+    },
+    {
+      "id": "Z07",
+      "file": "scripts/run-mutations.mjs",
+      "find": "    if (out[a] !== undefined) return { error: `${a} が2回ある` };\n    const v = argv[i + 1];",
+      "replace": "    const v = argv[i + 1];",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "同じ引数が2回来ても受け取る",
+      "expectedFailure": {
+        "testName": "別の引数の名前を、値として受け取らない（R26-004）",
+        "diagnosticMarker": "GXS_MARK.DUP_ARG"
+      }
+    },
+    {
       "id": "S16",
       "file": "scripts/run-mutations.mjs",
       "find": "  if (shard) return shardOf(m.id, shard.total) === shard.index - 1;",

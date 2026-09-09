@@ -80,10 +80,23 @@ function parseArgs() {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (KNOWN_SWITCHES.includes(a)) { out[a] = true; continue; }
+    if (KNOWN_SWITCHES.includes(a)) {
+      if (out[a] !== undefined) return { error: `${a} が2回ある` };
+      out[a] = true;
+      continue;
+    }
     if (!KNOWN_FLAGS.includes(a)) return { error: `知らない引数: ${a}` };
+    if (out[a] !== undefined) return { error: `${a} が2回ある` };
     const v = argv[i + 1];
-    if (v === undefined || KNOWN_FLAGS.includes(v)) return { error: `${a} に値が無い` };
+    /*
+     * ⚠️ **次に来るのが引数の名前なら、それは値ではない。**（第26回監査 R26-004）
+     * 前は `KNOWN_FLAGS` しか見ていなかったので、`--receipt --allow-dirty` が
+     * 「`--allow-dirty` という名前の証跡ファイル」として通り、しかも
+     * **汚れた木を許す指定は効かないまま**走っていた（4通りとも実測）。
+     */
+    if (v === undefined || KNOWN_FLAGS.includes(v) || KNOWN_SWITCHES.includes(v)) {
+      return { error: `${a} に値が無い` };
+    }
     out[a] = v;
     i++;
   }
