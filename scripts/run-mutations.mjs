@@ -55,6 +55,8 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, isAbsolute, resolve, relative, basename } from 'node:path';
+import { countTestName as countDeclaredTestName, testSpanText } from './lib/test-decls.mjs';
+import { MARKER_PREFIX, MARKER_RE } from './lib/marker-format.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const RUNNER_FILE = fileURLToPath(import.meta.url);
@@ -70,6 +72,7 @@ const sha = (s) => createHash('sha256').update(s).digest('hex');
  */
 const KNOWN_FLAGS = ['--id', '--receipt', '--spec', '--timeout'];
 const KNOWN_SWITCHES = ['--allow-dirty'];
+/* 目印の形は `scripts/lib/marker-format.mjs` に1つだけ置く（第26回監査 R26-001） */
 const MAX_TIMEOUT_MS = 3600000;
 const argv = process.argv.slice(2);
 function parseArgs() {
@@ -279,29 +282,30 @@ function validatePath(rel, label) {
  * 守りたい方は通り、無関係な同名だけが落ちても、名前の一致は成立してしまう。
  * 走らせる前に、対象ファイルの中で宣言名が一意であることを確かめる。
  */
-const TEST_NAME_RE = /(?:^|\s)(?:it|test)\(\s*(['"`])((?:\\.|(?!\1).)*)\1/gm;
-const nameCache = new Map();
-/* 対象テストのソースに、その文字列がいくつあるか（目印の一意性を静的に見る） */
+/*
+ * ⚠️ 宣言を探す読み手は `scripts/lib/test-decls.mjs` に1つだけ置く（第26回 R26-001）。
+ * 素の正規表現だと、**題材としてテンプレート文字列の中に書いたテスト宣言**まで
+ * 本物として数える（実測: `test/mutation-runner.test.mjs` で 50 対 35）。
+ * そのせいで対象テストの範囲が題材の位置で切れ、assertion に置いた目印が
+ * 「テストの外」に見えていた。
+ */
 const fileTextCache = new Map();
-function countInFile(rel, needle) {
+function readTestSource(rel) {
   if (!fileTextCache.has(rel)) {
     try { fileTextCache.set(rel, readFileSync(resolve(ROOT, rel), 'utf8')); }
     catch (e) { fileTextCache.set(rel, null); }
   }
-  const src = fileTextCache.get(rel);
+  return fileTextCache.get(rel);
+}
+/* 対象テストのソースに、その文字列がいくつあるか（目印の一意性を静的に見る） */
+function countInFile(rel, needle) {
+  const src = readTestSource(rel);
   return src === null ? 0 : src.split(needle).length - 1;
 }
 
 function countTestName(rel, want) {
-  if (!nameCache.has(rel)) {
-    const src = readFileSync(join(ROOT, rel), 'utf8');
-    const names = [];
-    let g;
-    TEST_NAME_RE.lastIndex = 0;
-    while ((g = TEST_NAME_RE.exec(src)) !== null) names.push(g[2]);
-    nameCache.set(rel, names);
-  }
-  return nameCache.get(rel).filter((n) => n === want).length;
+  const src = readTestSource(rel);
+  return src === null ? 0 : countDeclaredTestName(src, want);
 }
 
 /*
@@ -666,10 +670,58 @@ for (const m of mutations) {
    * 変異ごとに「その assertion のメッセージにしか出ない目印」を宣言させ、
    * **その `not ok` の本文の中だけ**で照合する。
    */
+  /*
+   * 宣言した名前が、対象ファイルの中で一意であること。
+   * ⚠️ **目印より先に見る**（第26回監査 R26-001 の作業中に判明）。同名が2つあると
+   * 「どのテストの範囲か」も決まらないので、後ろの目印の検査が
+   * `expectation_invalid` を先に返し、**同名だと気づけない診断になっていた**。
+   */
+  const nameCount = countTestName(m.test, want0);
+  if (nameCount !== 1) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'duplicate_test_name',
+      error: nameCount === 0
+        ? `宣言した名前のテストが ${m.test} に無い`
+        : `宣言した名前のテストが ${m.test} に ${nameCount} 件ある（どれが落ちたか決まらない）`,
+      restored: true });
+    continue;
+  }
+
   const marker = m.expectedFailure.diagnosticMarker;
-  if (typeof marker !== 'string' || marker.trim().length < 6) {
+  /*
+   * ⚠️ **第26回監査 R26-001 で分かった、ここの穴**
+   * 前は「6文字以上」「対象ファイルの中で1回」しか見ていなかった。実測すると、
+   * P18／P19 の目印 `xpected ` は
+   *   ・**対象テストには1文字も無く**、無関係な別テストの
+   *     `throw new Error('unexpected internal error')` で「ファイル内に1回」を満たし、
+   *   ・Node が自動で出す `Expected values to be strictly equal:` に偶然一致していた。
+   * つまり**どの assertion が落ちたかを、何も決めていなかった**。
+   *
+   * そこで3つに分ける:
+   *   ① 形  … `GXS_MARK.<名前>` の予約形だけ。一般的な文言を目印にできない
+   *   ② 置き場 … 対象ファイルで一意、かつ**対象テストの範囲の中**にある
+   *   ③ 残り方 … 伏字を通しても変わらない（証跡に残って外から再照合できる）
+   */
+  if (typeof marker !== 'string' || !MARKER_RE.test(marker)) {
     results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
-      error: 'expectedFailure.diagnosticMarker（6文字以上）が要る', restored: true });
+      error: `expectedFailure.diagnosticMarker が予約形（${MARKER_PREFIX}<名前>）でない: ${JSON.stringify(marker)}`
+        + '——Node が自動で出す文言を目印にしないため', restored: true });
+    continue;
+  }
+  if (maskSecrets(marker, 4096) !== marker) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
+      error: `目印「${marker}」は伏字で変わってしまう（証跡に残らない）`, restored: true });
+    continue;
+  }
+  /*
+   * 目印の名前が**別の変異のID**を名乗っていたら止める。
+   * 1対1のときは変異IDをそのまま名前にしているので、あとから同じ assertion へ
+   * 2件目の変異を足すと、名前が実態と食い違う（そのまま通ると誤読のもとになる）。
+   */
+  const markerKey = marker.slice(MARKER_PREFIX.length);
+  if (idCount[markerKey] !== undefined && markerKey !== m.id) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
+      error: `目印が別の変異のID（${markerKey}）を名乗っている。共有するなら ${MARKER_PREFIX}SHARED_… にする`,
+      restored: true });
     continue;
   }
   const markerCount = countInFile(m.test, marker);
@@ -681,14 +733,20 @@ for (const m of mutations) {
       restored: true });
     continue;
   }
-
-  /* 宣言した名前が、対象ファイルの中で一意であること */
-  const nameCount = countTestName(m.test, want0);
-  if (nameCount !== 1) {
-    results.push({ ...base, outcome: 'runner_error', failureKind: 'duplicate_test_name',
-      error: nameCount === 0
-        ? `宣言した名前のテストが ${m.test} に無い`
-        : `宣言した名前のテストが ${m.test} に ${nameCount} 件ある（どれが落ちたか決まらない）`,
+  /*
+   * ⚠️ **対象テストの範囲の中にあること。**（第26回監査 R26-001）
+   * ファイル全体で1回では足りない——別のテストやコメント、module 直下の定数でも
+   * 満たせてしまう（P18／P19 が実例）。
+   */
+  const spanText = testSpanText(readTestSource(m.test), m.expectedFailure.testName.trim());
+  if (spanText === null) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
+      error: `宣言したテストの範囲を ${m.test} から一意に取れない`, restored: true });
+    continue;
+  }
+  if (!spanText.includes(marker)) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
+      error: `目印「${marker}」が対象テストの外にある——別のテストやコメントで一意になっているだけ`,
       restored: true });
     continue;
   }
@@ -848,13 +906,28 @@ for (const m of mutations) {
       matchedBody: maskSecrets(String(hits[0].body || ''), 600) });
     continue;
   }
+  /*
+   * ⚠️ **証跡に残った本文にも、目印が在ること。**（第26回監査 R26-001）
+   * 生の本文で照合できても、伏字を通したら消えていることがある
+   * （`[A-Za-z0-9_-]{24,}` が `<token>` になる／パスが `<path>` になる。実測10件）。
+   * 消えていると、**外の検証器は目印を再照合できない**——つまり証跡としては
+   * 「どの assertion が落ちたか」を言えていない。
+   */
+  const savedBody = maskSecrets(String(hits[0].body || ''), 600);
+  if (!savedBody.includes(marker)) {
+    results.push({ ...withRun, outcome: 'runner_error', failureKind: 'marker_not_in_receipt',
+      error: `目印「${marker}」が、証跡に残す本文には無い（伏字か長さで消えている）`,
+      expectedFailureKind: wantKind, actualFailureKind: gotKind,
+      expectedFailureMatched: false, matchedBody: savedBody });
+    continue;
+  }
   results.push({ ...withRun, outcome: 'applied_and_killed',
     failureKind: wantKind === 'assertion' ? 'expected_assertion_failure' : 'expected_declared_failure',
     expectedFailureKind: wantKind, actualFailureKind: gotKind,
     expectedFailureMatched: true,
     expectedFailureDetail: { name: hits[0].name, failureType: hits[0].failureType,
       code: hits[0].code, errName: hits[0].errName },
-    matchedBody: maskSecrets(String(hits[0].body || ''), 600) });
+    matchedBody: savedBody });
 }
 
 /* 作業ツリーが元に戻っているか（第23回監査 R23-002 §6.6） */

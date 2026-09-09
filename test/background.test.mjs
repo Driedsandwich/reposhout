@@ -271,7 +271,7 @@ test('バッジは 6000ms で消える（R15-005: 予約を実際に走らせて
   const { bg, log, advance, pending } = mount({ contentScript: false, fakeTimers: true });
   await bg.flagTab(7, 'unsupported');
   assert.ok(log.badges.some((b) => b.text === '!'), 'そもそも付いていない');
-  assert.equal(pending(), 1, '6000ms で消す予約が入っていない（R15-005）');
+  assert.equal(pending(), 1, 'GXS_MARK.N31 6000ms で消す予約が入っていない（R15-005）');
 
   advance(5999);
   assert.ok(!log.badges.some((b) => b.text === ''), '早く消えすぎている');
@@ -288,7 +288,7 @@ test('バッジを付け直すと、前の予約は新しいバッジを消さ�
   await bg.flagTab(7, 'unsupported');
   advance(5000);
   await bg.flagTab(7, 'credential_like');      // 付け直す
-  assert.equal(pending(), 1, '古い予約が残っている');
+  assert.equal(pending(), 1, 'GXS_MARK.N34 古い予約が残っている');
   advance(1000);                                // 最初の予約なら、ここで消える
   await new Promise((r) => setImmediate(r));
   assert.ok(!log.badges.some((b) => b.text === ''), '付け直したのに古い予約で消えた');
@@ -518,7 +518,7 @@ test('案内は1回だけ——画面にもバッジにも二重に出さない�
   /* 届く相手には notice だけ。バッジは出さない */
   const { bg, log } = mount({ fault: (G) => { THROWS(G); G.fallbackUrl = () => null; } });
   await bg.shareTab(TAB_OK);
-  assert.equal(log.notified.length, 1, '画面への案内が1回でない');
+  assert.equal(log.notified.length, 1, 'GXS_MARK.M28 画面への案内が1回でない');
   assert.equal(log.badges.filter((b) => b.text).length, 0,
     '画面へ届いたのにバッジも出している（二重）');
 });
@@ -532,7 +532,7 @@ test('開かずに終わる出口が、すべて refuse を通っている（R19
   const src = stripComments(readFileSync(join(ROOT, 'src/background.js'), 'utf8'));
   const falseExits = src.match(/opened:\s*false/g) || [];
   assert.equal(falseExits.length, 1,
-    `opened:false が ${falseExits.length} か所ある。refuse() の中の1つだけにする`);
+    `GXS_MARK.M26 opened:false が ${falseExits.length} か所ある。refuse() の中の1つだけにする`);
   /* その1つが refuse の中にあること */
   const refuseBody = src.match(/async function refuse\s*\([^)]*\)\s*\{[\s\S]*?\n\}/);
   assert.ok(refuseBody, 'refuse() が見つからない');
@@ -608,7 +608,7 @@ test('ツールバーの押下でも、予期しない例外を握り潰さな�
    * 状態を作る。リスナーが Promise を捨てていると、ここで無反応になる。
    */
   const { log } = mount({});
-  const hostile = { id: 9, get url() { throw new Error('unexpected internal error'); } };
+  const hostile = { id: 9, get url() { throw new Error('GXS_MARK.M27 unexpected internal error'); } };
   assert.ok(log.onClicked, 'ツールバーのリスナーが登録されていない');
   log.onClicked(hostile);
   await new Promise((r) => setTimeout(r, 60));
@@ -641,7 +641,7 @@ test('画面側は、service worker が案内を出せたときは黙る（R20-0
    */
   const src = stripComments(readFileSync(join(ROOT, 'src/content.js'), 'utf8'));
   assert.match(src, /res\.ok === false && res\.notified !== true/,
-    '画面側が notified を見ずに案内を出している（二重通知）');
+    'GXS_MARK.M29 画面側が notified を見ずに案内を出している（二重通知）');
 });
 
 /* ---- バッジの部分成功（第22回監査 R22-005） ---------------------------- */
@@ -658,7 +658,7 @@ test('色や説明文だけ失敗しても、バッジは出て消す予約も�
   for (const fault of ['color', 'title']) {
     const { bg, log, pending } = mount({ contentScript: false, fakeTimers: true, badgeFault: fault });
     const ok = await bg.flagTab(7, 'unsupported');
-    assert.equal(ok, true, `${fault} が失敗しただけで通知を失敗扱いにしている`);
+    assert.equal(ok, true, `GXS_MARK.SHARED_01 ${fault} が失敗しただけで通知を失敗扱いにしている`);
     assert.ok(log.badges.some((b) => b.text === '!'), `${fault}: バッジが出ていない`);
     assert.equal(pending(), 1, `${fault}: 出したバッジを消す予約が入っていない`);
   }
@@ -719,7 +719,7 @@ test('付け直しの世代管理は、消去APIの失敗に巻き込まれな�
    * 出ないので、見えている挙動を比べても分からない——だから直接見る。
    */
   assert.deepEqual(staleClears(), [],
-    `走り終えた予約を消しに行っている（登録簿に古い世代が残る）: ${JSON.stringify(staleClears())}`);
+    `GXS_MARK.N35 走り終えた予約を消しに行っている（登録簿に古い世代が残る）: ${JSON.stringify(staleClears())}`);
 });
 
 /* ---- Chrome API の部分成功（第23回監査 R23-003） ---------------------- */
@@ -740,7 +740,7 @@ test('窓のIDが返らなければ、開いたことにしない（R23-003）',
      */
     const r = await bg.openShareWindow('https://x.com/intent/post?text=a')
       .catch((e) => ({ state: `★例外: ${e && e.message}`, windowOpened: null, escAvailable: null, windowId: null }));
-    assert.equal(r.state, 'creation_unknown', `${createResult}: 状態が違う: ${JSON.stringify(r)}`);
+    assert.equal(r.state, 'creation_unknown', `GXS_MARK.P17 ${createResult}: 状態が違う: ${JSON.stringify(r)}`);
     assert.equal(r.windowOpened, null, '開いたかどうかを断定している');
     assert.equal(r.escAvailable, false);
     assert.equal(r.windowId, null);
@@ -754,7 +754,7 @@ test('開いたか分からないときは、タブで開き直さず案内を1�
    */
   const { bg, log } = mount({ createResult: 'undefined' });
   const res = await bg.shareTab({ id: 7, url: 'https://github.com/o/r' });
-  assert.equal(res.opened, false);
+  assert.equal(res.opened, false, 'GXS_MARK.P18');
   assert.equal(res.reason, 'open_unknown');
   assert.equal(res.notified, true, '何も伝えずに終わっている');
   assert.deepEqual(log.created, [], 'タブで開き直して二重に開いている');
@@ -770,7 +770,7 @@ test('記録できなければ、開いたことは認めてもEscは使えな�
    */
   const { bg } = mount({ setFails: true });
   const r = await bg.openShareWindow('https://x.com/intent/post?text=a');
-  assert.equal(r.state, 'popup_confirmed_untracked');
+  assert.equal(r.state, 'popup_confirmed_untracked', 'GXS_MARK.P19');
   assert.equal(r.windowOpened, true, '開いたことまで否定している');
   assert.equal(r.escAvailable, false, 'Escが使えると偽っている');
   assert.equal(r.errorKind, 'write_failed');
@@ -784,7 +784,7 @@ test('台帳を読めなかったときは、書かない（既にある記録�
    */
   const { bg, records } = mount({ getFailsOnce: true, initialRecords: { 10: Date.now() } });
   const r = await bg.rememberShareWindow(20);
-  assert.equal(r.ok, false, '読めていないのに成功を返している');
+  assert.equal(r.ok, false, 'GXS_MARK.SHARED_02 読めていないのに成功を返している');
   assert.equal(r.errorKind, 'read_failed');
   const rec = records();
   assert.ok(Object.prototype.hasOwnProperty.call(rec, '10'), '既にあった記録を消している');
@@ -795,7 +795,7 @@ test('台帳を読めなければ、所有を認めない（R23-003）', async (
   const { bg } = mount({ getFailsOnce: true, initialRecords: { 99: Date.now() } });
   /* ⚠️ 例外を値へ畳んでから見る（投げると assertion が走らない・R24-001） */
   const got = await bg.isShareWindow(99).catch((e) => `★例外: ${e && e.message}`);
-  assert.equal(got, false, '読めていないのに「拡張が開いた窓だ」と認めている');
+  assert.equal(got, false, 'GXS_MARK.P20 読めていないのに「拡張が開いた窓だ」と認めている');
   /* 対照: 読めるようになれば認める */
   const { bg: bg2 } = mount({ initialRecords: { 99: Date.now() } });
   assert.equal(await bg2.isShareWindow(99), true, '対照が壊れている（読めても認めない）');
@@ -842,7 +842,7 @@ test('ツールバーから開いたとき、Escが効かないことを1回だ�
   await new Promise((r) => setTimeout(r, 60));
   assert.equal(log.opened.length, 1, '窓が開いていない＝前提が違う');
   assert.equal(announced(log), 1,
-    `案内が1回でない: notice=${JSON.stringify(log.notified)} badge=${JSON.stringify(log.badges)}`);
+    `GXS_MARK.U01 案内が1回でない: notice=${JSON.stringify(log.notified)} badge=${JSON.stringify(log.badges)}`);
   assert.equal(log.notified[0].reason, 'esc_unavailable',
     `理由が違う: ${JSON.stringify(log.notified)}`);
   assert.equal(log.notified[0].tabId, 9, '別のタブへ伝えている');
@@ -863,7 +863,7 @@ test('画面内ボタンからも1回だけ伝え、応答に状態を載せる�
   const res = await send({ type: 'gxs:request-share' }, { tab: GH_TAB(5) });
   assert.equal(log.opened.length, 1, '窓が開いていない＝前提が違う');
   assert.equal(res.ok, true, '開いたのに失敗として返している');
-  assert.equal(res.state, 'popup_confirmed_untracked', `状態を返していない: ${JSON.stringify(res)}`);
+  assert.equal(res.state, 'popup_confirmed_untracked', `GXS_MARK.SHARED_03 状態を返していない: ${JSON.stringify(res)}`);
   assert.equal(res.escAvailable, false, 'Escが効かないことを応答で伝えていない');
   assert.equal(res.notified, true, '案内を出したことを応答で伝えていない');
   assert.equal(announced(log), 1, `案内が1回でない: ${JSON.stringify(log.notified)}`);
@@ -878,7 +878,7 @@ test('画面内の案内が届かないときはバッジへ回す（R24-003）'
   assert.deepEqual(log.notified, [], '届かないはずの notice が記録されている');
   assert.equal(announced(log), 1, `バッジが1つでない: ${JSON.stringify(log.badges)}`);
   assert.ok(log.titles.some((x) => x.title === '[noticeEscUnavailable]'),
-    `見出しが専用の定型文でない: ${JSON.stringify(log.titles)}`);
+    `GXS_MARK.U04 見出しが専用の定型文でない: ${JSON.stringify(log.titles)}`);
   assert.equal(res.notified, true, 'バッジで伝えたのに notified が false');
 });
 
@@ -891,7 +891,7 @@ test('記録できた窓では、案内を出さない（R24-003の対照）', a
   assert.equal(log.opened.length, 1, '窓が開いていない＝前提が違う');
   assert.equal(res.state, 'popup_confirmed_tracked');
   assert.equal(res.escAvailable, true);
-  assert.equal(res.notified, false, '記録できているのに案内を出している');
+  assert.equal(res.notified, false, 'GXS_MARK.U02 記録できているのに案内を出している');
   assert.equal(announced(log), 0, `案内を出している: ${JSON.stringify(log.notified)}`);
 });
 
@@ -911,7 +911,7 @@ test('英日の定型文がそろっていて、値を含まない（R24-003）'
   const en = JSON.parse(readFileSync(join(ROOT, '_locales/en/messages.json'), 'utf8'));
   const ja = JSON.parse(readFileSync(join(ROOT, '_locales/ja/messages.json'), 'utf8'));
   for (const [name, m] of [['en', en], ['ja', ja]]) {
-    assert.ok(m.noticeEscUnavailable, `${name} に noticeEscUnavailable が無い`);
+    assert.ok(m.noticeEscUnavailable, `GXS_MARK.U07 ${name} に noticeEscUnavailable が無い`);
     const s = m.noticeEscUnavailable.message;
     assert.ok(s.length > 10, `${name} の文が短すぎる`);
     assert.ok(!/https?:|\?|=|github\.com|x\.com/.test(s),
@@ -926,8 +926,8 @@ test('画面側にも、Escが効かないときの受け皿がある（R24-003�
    */
   const src = stripComments(readFileSync(join(ROOT, 'src/content.js'), 'utf8'));
   assert.match(src, /res\.escAvailable === false && res\.notified !== true/,
-    '画面側に Esc 不能の受け皿が無い（service worker が倒れたら誰も伝えない）');
-  assert.match(src, /reason === 'esc_unavailable'/, '画面側に専用の定型文が無い');
+    'GXS_MARK.U05 画面側に Esc 不能の受け皿が無い（service worker が倒れたら誰も伝えない）');
+  assert.match(src, /reason === 'esc_unavailable'/, 'GXS_MARK.U06 画面側に専用の定型文が無い');
 });
 
 test('開いた結果の一覧（正本）が、実際の挙動と一致している（R24-003）', async () => {
@@ -952,7 +952,7 @@ test('開いた結果の一覧（正本）が、実際の挙動と一致して�
     };
     assert.equal(got.state, o.state, `${o.state}: 作れていない（できたのは ${got.state}）`);
     assert.equal(got.notice, o.userNotice,
-      `${o.state}: 正本は案内 ${o.userNotice} と言うが、実物は ${got.notice}`);
+      `GXS_MARK.U09 ${o.state}: 正本は案内 ${o.userNotice} と言うが、実物は ${got.notice}`);
     assert.equal(got.count, o.userNotice ? 1 : 0,
       `${o.state}: 案内の回数が違う（${got.count}）`);
     if (o.state !== 'tab_confirmed') {
@@ -975,6 +975,6 @@ test('Escが効かないことの主張が、挙げた文書に実際に載っ�
     `載せる文書が少なすぎる: ${o.appearsIn && o.appearsIn.length}`);
   for (const f of o.appearsIn) {
     assert.ok(readFileSync(join(ROOT, f), 'utf8').includes(o.docToken),
-      `${f} に「${o.docToken}」が無い（正本だけ直して文書を直し忘れている）`);
+      `GXS_MARK.U10 ${f} に「${o.docToken}」が無い（正本だけ直して文書を直し忘れている）`);
   }
 });

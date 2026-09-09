@@ -1169,7 +1169,7 @@ test('主張の一覧が、すべての面で守られている（R18-001 / R19-
       }
     }
   }
-  assert.deepEqual(found, [], '古い主張が残っている:\n' + found.join('\n'));
+  assert.deepEqual(found, [], 'GXS_MARK.SHARED_04 古い主張が残っている:\n' + found.join('\n'));
 });
 
 /* ------------------------------------------------------------
@@ -1181,7 +1181,7 @@ test('履歴の目印が、対になっていて入れ子でない（R19-001）'
     const raw = read(file);
     const starts = (raw.match(HISTORY_START) || []).length;
     const ends = (raw.match(HISTORY_END) || []).length;
-    assert.equal(starts, ends, `${file}: 目印の数が合わない（start=${starts} end=${ends}）`);
+    assert.equal(starts, ends, `GXS_MARK.M07 ${file}: 目印の数が合わない（start=${starts} end=${ends}）`);
     /* 入れ子・閉じ忘れ・逆順を、位置を追って確かめる */
     let depth = 0;
     const marks = [...raw.matchAll(/HISTORICAL_CLAIM:(start|end)/g)];
@@ -1194,7 +1194,7 @@ test('履歴の目印が、対になっていて入れ子でない（R19-001）'
     /* start は必ず理由を名乗る。無ければ HISTORY_RE に当たらず、除外もされない */
     const withReason = (raw.match(/HISTORICAL_CLAIM:start\s+reason="[^"]+"/g) || []).length;
     assert.equal(withReason, starts,
-      `${file}: 理由の無い履歴目印がある（${starts - withReason} 件）。reason="…" を書く`);
+      `GXS_MARK.M06 ${file}: 理由の無い履歴目印がある（${starts - withReason} 件）。reason="…" を書く`);
   }
 });
 
@@ -1219,7 +1219,7 @@ test('履歴で囲って検査を逃れていない——囲いの数と大き�
     if (n) actual[file] = n;
   }
   assert.deepEqual(actual, EXPECTED,
-    '履歴で囲った箇所が変わった。増やすなら、それが本当に履歴か確かめてからここを直す');
+    'GXS_MARK.M08 履歴で囲った箇所が変わった。増やすなら、それが本当に履歴か確かめてからここを直す');
 
   /* 1つの囲いが大きくなりすぎない（章ごと黙らせるのを防ぐ） */
   for (const file of Object.keys(EXPECTED)) {
@@ -1265,7 +1265,7 @@ test('履歴で外している範囲が、正本と1文字も違わない（R23-
     `囲いを取りこぼしている（start=${starts} / 取れた=${actual.length}）`);
 
   assert.deepEqual(actual, declared,
-    '履歴で外している範囲が正本と違う。動かした・広げたなら、それが本当に履歴か確かめてから正本を直す');
+    'GXS_MARK.M09 履歴で外している範囲が正本と違う。動かした・広げたなら、それが本当に履歴か確かめてから正本を直す');
 });
 
 test('主張の検査そのものが効いている（対照）', () => {
@@ -1369,7 +1369,7 @@ test('主張の検査そのものが効いている（対照）', () => {
    */
   const claims = JSON.parse(read('store/DATA_FLOW_CLAIMS.json'));
   assert.deepEqual([...SURFACES].sort(), [...claims.claimSurfaces].sort(),
-    '検査する面と、正本の claimSurfaces がずれている');
+    'GXS_MARK.SHARED_05 検査する面と、正本の claimSurfaces がずれている');
   for (const f of ['PRIVACY.md', 'store/STORE_DASHBOARD_CHANGES.md', 'store/LISTING.md',
                    'manifest.json', 'store/WEB_INTENT_POLICY_DECISION.json']) {
     assert.ok(SURFACES.includes(f), `面の一覧に ${f} が無い`);
@@ -1393,7 +1393,7 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
     assert.ok(!/document\.title|tab\.title/.test(code),
       `${f} がタイトルを読んでいるのに、正本は titleRead=${C.titleRead}`);
   }
-  assert.equal(C.titleRead, false, '正本の titleRead が実コードと違う（R19-001）');
+  assert.equal(C.titleRead, false, 'GXS_MARK.M10 正本の titleRead が実コードと違う（R19-001）');
   assert.equal(C.titleSent, false);
 
   /* 画面側は合図だけ。URLも投稿文も組み立てない */
@@ -1430,7 +1430,7 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
     assert.ok(!shareable(probe[name]), `正本は共有できないと言うが、実際は通る: ${name}`);
   }
   assert.equal(C.supportedRoutes.length + C.unsupportedRoutes.length,
-    Object.keys(probe).length, '正本のルート一覧に、試した物が全部載っていない');
+    Object.keys(probe).length, 'GXS_MARK.M11 正本のルート一覧に、試した物が全部載っていない');
 
   /* フラグメントは全部落ちる */
   assert.equal(C.fragmentPolicy, 'drop_all');
@@ -1460,11 +1460,11 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
    * GitHubのページを開いている間ずっと動く確認（1秒ごと）を説明していなかった。
    * 正本へ書いた以上、それがコードと合っていることをここで測る。
    */
-  assert.equal(C.contentScriptReadsDom, true, '正本の contentScriptReadsDom が実コードと違う（R19-001）');
+  assert.equal(C.contentScriptReadsDom, true, 'GXS_MARK.M13 正本の contentScriptReadsDom が実コードと違う（R19-001）');
   assert.match(content, /querySelector/, '正本はDOMを見ると言うが、見ていない');
   assert.match(C.domReadTiming, /1秒|1000/, '見る間隔が正本に書かれていない');
   assert.match(content, /setInterval\(\s*inject\s*,\s*1000\s*\)/,
-    `正本の間隔（${C.domReadTiming}）とコードが合っていない`);
+    `GXS_MARK.M14 正本の間隔（${C.domReadTiming}）とコードが合っていない`);
   assert.match(C.domReadTiming, /visibilitychange|表示に戻/, '復帰時の確認が正本に無い');
   assert.match(content, /visibilitychange/, '正本は復帰時にも見ると言うが、見ていない');
   /* 逆に「読まない」と書いたものは、本当に読んでいないこと */
@@ -1492,18 +1492,18 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
   /* 正本の説明が、その読み取りを覆っていること */
   for (const word of ['children', 'tagName', 'display', 'cssFloat', 'marginRight']) {
     assert.ok(C.domReadScope.includes(word),
-      `正本の domReadScope が ${word} を説明していない`);
+      `GXS_MARK.M16 正本の domReadScope が ${word} を説明していない`);
   }
   /* 再測定のタイミングも、コードの値と合っていること */
   const delays = [...content.matchAll(/\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]\.forEach/g)][0];
   assert.ok(delays, 'ボタン挿入後の再測定が見つからない');
   for (const d of delays.slice(1)) {
     assert.ok(C.domReadTiming.includes(d),
-      `正本の domReadTiming に ${d}ms の再測定が書かれていない`);
+      `GXS_MARK.M34 正本の domReadTiming に ${d}ms の再測定が書かれていない`);
   }
 
   /* 通知要素を足すことを、正本が認めていること */
-  assert.equal(C.contentScriptMayInsertNotice, true, '正本の contentScriptMayInsertNotice が実コードと違う（R19-001）');
+  assert.equal(C.contentScriptMayInsertNotice, true, 'GXS_MARK.M15 正本の contentScriptMayInsertNotice が実コードと違う（R19-001）');
   assert.match(content, /createElement\('div'\)/, 'content.js が要素を作っていない');
   assert.match(content, /body\.appendChild/, 'content.js が body へ足していない');
   assert.ok(C.contentScriptInsertsInto.includes('gxs-notice'),
@@ -1546,11 +1546,11 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
    * 論理的な失効と物理的な削除を、また混ぜていないことを見る。
    */
   assert.ok(/根拠として/.test(C.storageLogicalExpiry),
-    '正本の storageLogicalExpiry が「根拠として数えない」と言っていない');
+    'GXS_MARK.N13 正本の storageLogicalExpiry が「根拠として数えない」と言っていない');
   assert.ok(/保存の上限ではな/.test(C.storageLogicalExpiry),
     '正本の storageLogicalExpiry が、保存の上限との違いを打ち消していない');
   assert.ok(Array.isArray(C.storagePhysicalDeletion) && C.storagePhysicalDeletion.length === 3,
-    `正本の「実際に消える契機」が3つでない: ${(C.storagePhysicalDeletion || []).length}`);
+    `GXS_MARK.N12 正本の「実際に消える契機」が3つでない: ${(C.storagePhysicalDeletion || []).length}`);
   /* 3つの契機が、それぞれコードに実在すること */
   assert.match(bg, /windows\.onRemoved/, '窓を閉じたときに消す処理が無い');
   assert.match(bg, /storage\.session/, 'session storage を使っていない');
@@ -1573,7 +1573,7 @@ test('正本の主張が、実際のコードと一致している（R19-001）'
 
   /* 保留中の判断は、それぞれの正本と一致している */
   const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
-  assert.equal(C.webIntentStatus, wi.status, 'Web Intent の状態が2か所で食い違っている');
+  assert.equal(C.webIntentStatus, wi.status, 'GXS_MARK.M12 Web Intent の状態が2か所で食い違っている');
   const dd = JSON.parse(read('store/DATA_DISCLOSURE.json'));
   for (const [id, expected] of Object.entries(C.ownerConfirmationStatus)) {
     const cat = (dd.categories || dd.disclosures || []).find((c) => c.id === id);
@@ -1614,7 +1614,7 @@ test('言うべきことを、言っている（主張の裏返し）', () => {
     const body = activeText(file);
     for (const p of phrases) {
       assert.ok(body.includes(p),
-        `${file} に「${p}」が無い（全称を消しただけで、代わりの説明が無い）`);
+        `GXS_MARK.M18 ${file} に「${p}」が無い（全称を消しただけで、代わりの説明が無い）`);
     }
   }
 
@@ -1633,7 +1633,7 @@ test('言うべきことを、言っている（主張の裏返し）', () => {
   for (const [file, phrases] of Object.entries(mustSay)) {
     const body = activeText(file);
     for (const p of phrases) {
-      assert.ok(body.includes(p), `${file} に「${p}」が無い（第23回 R23-001）`);
+      assert.ok(body.includes(p), `GXS_MARK.SHARED_06 ${file} に「${p}」が無い（第23回 R23-001）`);
     }
   }
   for (const [file, phrases] of Object.entries(must)) {
@@ -1675,7 +1675,7 @@ test('文書のルート例が、出荷するコードの判定と一致する�
       wrong.push(`${e.url}: 正本は ${e.shareable ? '共有できる' : '拒否'} と言うが、実物は ${got ? '共有できる' : '拒否'}`);
     }
   }
-  assert.deepEqual(wrong, [], '文書のルート例が実物と食い違っている:\n' + wrong.join('\n'));
+  assert.deepEqual(wrong, [], 'GXS_MARK.SHARED_07 文書のルート例が実物と食い違っている:\n' + wrong.join('\n'));
 });
 
 test('文書のルート例が、挙げた文書に実際に載っている（R22-003）', () => {
@@ -1689,7 +1689,7 @@ test('文書のルート例が、挙げた文書に実際に載っている（R2
     assert.ok(e.docToken, `${e.url}: 文書に載せる形（docToken）が宣言されていない`);
     for (const file of e.appearsIn) {
       assert.ok(read(file).includes(e.docToken),
-        `${file} に ${e.docToken} が無い（正本だけ直して文書を直し忘れている）`);
+        `GXS_MARK.SHARED_08 ${file} に ${e.docToken} が無い（正本だけ直して文書を直し忘れている）`);
     }
   }
   /*
@@ -1726,7 +1726,7 @@ test('拒否する語の一覧と、台帳の deny が1語も違わない（R19-
   const ledger = inv.namespaces.filter((e) => e.decision === 'deny')
     .map((e) => e.namespace).sort();
   assert.deepEqual(ledger, runtime,
-    '台帳とコードがずれている。片方だけ直すと、次に見た人はどちらを信じるか分からなくなる');
+    'GXS_MARK.M20 台帳とコードがずれている。片方だけ直すと、次に見た人はどちらを信じるか分からなくなる');
   assert.equal(inv.runtimeDenylistCount, runtime.length, '台帳が数えている語数が違う');
 
   /* allow と決めた語が、拒否の一覧に紛れていないこと */
@@ -1756,7 +1756,7 @@ test('READMEの採用理由が、台帳の実際の判定と食い違ってい�
     `台帳が採用理由を5つに分けていない: ${crit && crit.branches && crit.branches.length}`);
   assert.deepEqual(crit.branches.map((b) => b.id).sort(),
     ['account_absent', 'account_present_zero_public_repos_auth_route',
-     'reachable_repo', 'reachable_repo_security_exception', 'route_shadowed'].sort());
+     'reachable_repo', 'reachable_repo_security_exception', 'route_shadowed'].sort(), 'GXS_MARK.V02');
 
   /*
    * 全79語が、どれか1つの理由を**名指し**していること。
@@ -1785,10 +1785,10 @@ test('READMEの採用理由が、台帳の実際の判定と食い違ってい�
   for (const b of crit.branches) {
     assert.equal(typeof b.expectedCount, 'number', `${b.id}: 件数が宣言されていない`);
     assert.equal(count[b.id], b.expectedCount,
-      `${b.id}: 宣言 ${b.expectedCount} 件に対し実測 ${count[b.id]} 件`);
+      `GXS_MARK.SHARED_09 ${b.id}: 宣言 ${b.expectedCount} 件に対し実測 ${count[b.id]} 件`);
     if (b.expectedCount === 0) {
       assert.equal(b.reserved, true,
-        `${b.id}: 当たる語が1つも無いのに、予約枠だと書いていない`);
+        `GXS_MARK.V04 ${b.id}: 当たる語が1つも無いのに、予約枠だと書いていない`);
     } else {
       assert.ok(!b.reserved, `${b.id}: 予約枠なのに ${count[b.id]} 語が当たっている`);
     }
@@ -1810,7 +1810,7 @@ test('READMEの採用理由が、台帳の実際の判定と食い違ってい�
     .filter((e) => e.decision === 'deny' && e.accountApi && e.accountApi.present === true)
     .map((e) => e.namespace).sort();
   assert.deepEqual([...crit.measuredDenyWithAccountPresent].sort(), measured,
-    '台帳が挙げる「アカウントありで deny」が実測とずれている');
+    'GXS_MARK.P24 台帳が挙げる「アカウントありで deny」が実測とずれている');
   assert.ok(measured.length > 0,
     'アカウントありで deny の語が0件＝この検査は空振りする（前提が変わったなら README も見直す）');
 
@@ -1818,7 +1818,7 @@ test('READMEの採用理由が、台帳の実際の判定と食い違ってい�
   const ex = crit.branches.find((b) => b.id === 'route_shadowed').example;
   const e = inv.namespaces.find((x) => x.namespace === ex);
   assert.ok(e, `route-shadow の例 ${ex} が台帳に無い`);
-  assert.equal(e.accountApi.present, true, `${ex}: アカウントが無いなら route-shadow の例にならない`);
+  assert.equal(e.accountApi.present, true, `GXS_MARK.P23 ${ex}: アカウントが無いなら route-shadow の例にならない`);
   assert.equal(e.repositoryProbe.repositoryUiRendered, false, `${ex}: browser で開けている`);
   assert.equal(e.routeShadow, true);
 
@@ -1842,7 +1842,7 @@ test('READMEの採用理由が、台帳の実際の判定と食い違ってい�
   })) {
     const body = activeText(file);          // 履歴の囲いの中に書いて済ませられない
     for (const p of phrases) {
-      assert.ok(body.includes(p), `${file} に「${p}」が無い（採用理由が台帳と食い違う）`);
+      assert.ok(body.includes(p), `GXS_MARK.SHARED_10 ${file} に「${p}」が無い（採用理由が台帳と食い違う）`);
     }
   }
   /* deny/allow の数は変えていないこと */
@@ -1903,7 +1903,7 @@ test('実在のリポジトリを巻き込む拒否が、台帳に明記して�
   /* 外した3語が、allow として実測つきで記録されていること */
   for (const n of ['user', 'devices', 'password']) {
     const e = inv.namespaces.find((x) => x.namespace === n);
-    assert.ok(e, `${n}: 外した3語が台帳から消えている（R20-001）`);
+    assert.ok(e, `GXS_MARK.M21 ${n}: 外した3語が台帳から消えている（R20-001）`);
     assert.equal(e.decision, 'allow', `${n} が allow になっていない`);
     assert.equal(e.repositoryProbe.repositoryUiRendered, true,
       `${n}: 開けることを確かめずに allow にしている`);
@@ -2046,7 +2046,7 @@ test('却下の記録が、実在した指摘IDを漏れなく持っている（
   assert.ok(r20, 'rejected_by_R20 の記録が無い');
   assert.deepEqual(r20.findingIds,
     ['R20-001', 'R20-002', 'R20-003', 'R20-004', 'R20-005'],
-    'PR #20 で直した指摘の集合と一致していない');
+    'GXS_MARK.M19 PR #20 で直した指摘の集合と一致していない');
 });
 
 test('「それ以外は変更しない」という全称が撤回されている（R21-001）', () => {
@@ -2191,7 +2191,7 @@ test('案内の用途が、実挙動と一致している（R25-004）', () => {
   const C = JSON.parse(read('store/DATA_FLOW_CLAIMS.json'));
   const ids = (C.noticePurposes || []).map((x) => x.id).sort();
   assert.deepEqual(ids, ['popup_opened_without_esc_tracking', 'share_refusal'],
-    `案内の用途が2つに分かれていない: ${ids.join(' / ')}`);
+    `GXS_MARK.W10 案内の用途が2つに分かれていない: ${ids.join(' / ')}`);
 
   /* 用途が挙げる状態と、openOutcomes が言う「案内を出す状態」が一致すること */
   const declaredStates = new Set((C.noticePurposes || []).flatMap((x) => x.states));
@@ -2210,7 +2210,7 @@ test('案内の用途が、実挙動と一致している（R25-004）', () => {
     '足す要素の説明が、degraded-state の案内を覆っていない');
   const disc = read('store/DATA_DISCLOSURE.json');
   assert.match(disc, /Escでは閉じられないとき/,
-    'Website content の説明が、degraded-state の案内を覆っていない');
+    'GXS_MARK.W13 Website content の説明が、degraded-state の案内を覆っていない');
 });
 
 test('Escが効く条件が、すべての面で同じことを言っている（R25-004）', () => {
@@ -2235,6 +2235,6 @@ test('Escが効く条件が、すべての面で同じことを言っている�
     ['PRIVACY.md', "that tab is not recorded as the extension's own"]
   ]) {
     assert.ok(activeText(file).includes(needle),
-      `${file} が Esc の条件を無条件のまま書いている（「${needle}」が無い）`);
+      `GXS_MARK.SHARED_11 ${file} が Esc の条件を無条件のまま書いている（「${needle}」が無い）`);
   }
 });

@@ -15,7 +15,7 @@
       "replace": "**The page title is not read at all** (it was until 1.1.8). <!-- HISTORICAL_CLAIM:start",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": "The page title is not read at all"
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -27,7 +27,7 @@
       "replace": "**ページのタイトルとURLを読み取ります。**",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": "title_read_or_sent"
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -39,7 +39,7 @@
       "replace": "共有するURL・タイトルに、GitHubのユーザー名または組織名が入る場合がある",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": " /共有するURL[^。|]{0,8}タイトル/"
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -51,7 +51,7 @@
       "replace": "**渡る**。ページのタイトルと正規化済みURLが",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": " /ページのタイトル＋正規化済みURL/"
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -63,7 +63,7 @@
       "replace": "The page title・URL are sent.",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": "title_read_or_sent"
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -75,7 +75,7 @@
       "replace": "<!-- HISTORICAL_CLAIM:start -->(Versions",
       "expectedFailure": {
         "testName": "履歴の目印が、対になっていて入れ子でない（R19-001）",
-        "diagnosticMarker": " 件）。reason=\"…\" を書く"
+        "diagnosticMarker": "GXS_MARK.M06"
       }
     },
     {
@@ -87,7 +87,7 @@
       "replace": "(Versions before 1.1.8 did read it.)",
       "expectedFailure": {
         "testName": "履歴の目印が、対になっていて入れ子でない（R19-001）",
-        "diagnosticMarker": ": 目印の数が合わない（start="
+        "diagnosticMarker": "GXS_MARK.M07"
       }
     },
     {
@@ -99,7 +99,7 @@
       "replace": "<!-- HISTORICAL_CLAIM:start reason=\"ごまかしのための囲い\" -->\nこれを踏まえた答えが次の表です。\n<!-- HISTORICAL_CLAIM:end -->\n",
       "expectedFailure": {
         "testName": "履歴で囲って検査を逃れていない——囲いの数と大きさを縛る（R19-001）",
-        "diagnosticMarker": "履歴で囲った箇所が変わった。増やすなら、それが本当に履歴か確かめてからここを直す"
+        "diagnosticMarker": "GXS_MARK.M08"
       }
     },
     {
@@ -111,7 +111,7 @@
       "replace": "<!-- HISTORICAL_CLAIM:start reason=\"第5回監査より前の文書構成。現在の運用ではない\" -->**① Authentication information**<!-- HISTORICAL_CLAIM:end -->",
       "expectedFailure": {
         "testName": "履歴で外している範囲が、正本と1文字も違わない（R23-001）",
-        "diagnosticMarker": "履歴で外している範囲が正本と違う。動かした・広げたなら、それが本当に履歴か確かめてから正本を直す"
+        "diagnosticMarker": "GXS_MARK.M09"
       }
     },
     {
@@ -123,7 +123,7 @@
       "replace": "\"titleRead\": true",
       "expectedFailure": {
         "testName": "正本の主張が、実際のコードと一致している（R19-001）",
-        "diagnosticMarker": "正本の titleRead が実コードと違う（R19-001）"
+        "diagnosticMarker": "GXS_MARK.M10"
       }
     },
     {
@@ -135,7 +135,7 @@
       "replace": "",
       "expectedFailure": {
         "testName": "正本の主張が、実際のコードと一致している（R19-001）",
-        "diagnosticMarker": "正本のルート一覧に、試した物が全部載っていない"
+        "diagnosticMarker": "GXS_MARK.M11"
       }
     },
     {
@@ -147,7 +147,7 @@
       "replace": "\"webIntentStatus\": \"confirmed_allowed\"",
       "expectedFailure": {
         "testName": "正本の主張が、実際のコードと一致している（R19-001）",
-        "diagnosticMarker": "Web Intent の状態が2か所で食い違っている"
+        "diagnosticMarker": "GXS_MARK.M12"
       }
     },
     {
@@ -159,7 +159,7 @@
       "replace": "\"contentScriptReadsDom\": false",
       "expectedFailure": {
         "testName": "正本の主張が、実際のコードと一致している（R19-001）",
-        "diagnosticMarker": "正本の contentScriptReadsDom が実コードと違う（R19-001）"
+        "diagnosticMarker": "GXS_MARK.M13"
       }
     },
     {
@@ -171,7 +171,7 @@
       "replace": "setInterval(inject, 5000)",
       "expectedFailure": {
         "testName": "正本の主張が、実際のコードと一致している（R19-001）",
-        "diagnosticMarker": "）とコードが合っていない"
+        "diagnosticMarker": "GXS_MARK.M14"
       }
     },
     {
@@ -183,7 +183,7 @@
       "replace": "\"contentScriptMayInsertNotice\": false",
       "expectedFailure": {
         "testName": "正本の主張が、実際のコードと一致している（R19-001）",
-        "diagnosticMarker": "正本の contentScriptMayInsertNotice が実コードと違う（R19-001）"
+        "diagnosticMarker": "GXS_MARK.M15"
       }
     },
     {
@@ -195,7 +195,7 @@
       "replace": "（省略）",
       "expectedFailure": {
         "testName": "正本の主張が、実際のコードと一致している（R19-001）",
-        "diagnosticMarker": "正本の domReadScope が "
+        "diagnosticMarker": "GXS_MARK.M16"
       }
     },
     {
@@ -207,7 +207,7 @@
       "replace": "It modifies nothing else.",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": "dom_scope_and_added_elements"
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -219,7 +219,7 @@
       "replace": "After 12 hours the record is deleted",
       "expectedFailure": {
         "testName": "言うべきことを、言っている（主張の裏返し）",
-        "diagnosticMarker": "」が無い（全称を消しただけで、代わりの説明が無い）"
+        "diagnosticMarker": "GXS_MARK.M18"
       }
     },
     {
@@ -231,7 +231,7 @@
       "replace": "",
       "expectedFailure": {
         "testName": "却下の記録が、実在した指摘IDを漏れなく持っている（R21-003）",
-        "diagnosticMarker": "PR #20 で直した指摘の集合と一致していない"
+        "diagnosticMarker": "GXS_MARK.M19"
       }
     },
     {
@@ -243,7 +243,7 @@
       "replace": "'trust-center-REMOVED'",
       "expectedFailure": {
         "testName": "拒否する語の一覧と、台帳の deny が1語も違わない（R19-002）",
-        "diagnosticMarker": "台帳とコードがずれている。片方だけ直すと、次に見た人はどちらを信じるか分からなくなる"
+        "diagnosticMarker": "GXS_MARK.M20"
       }
     },
     {
@@ -255,7 +255,7 @@
       "replace": "\"namespace\": \"user-STALE\",",
       "expectedFailure": {
         "testName": "実在のリポジトリを巻き込む拒否が、台帳に明記してある（R19-002）",
-        "diagnosticMarker": ": 外した3語が台帳から消えている（R20-001）"
+        "diagnosticMarker": "GXS_MARK.M21"
       }
     },
     {
@@ -267,7 +267,7 @@
       "replace": "    'user', 'signup', 'join', 'password_reset'",
       "expectedFailure": {
         "testName": "owner単位の拒否をやめた3語が、実在のリポジトリを共有できる（R20-001）",
-        "diagnosticMarker": "https://github.com/user/bitmap-fonts"
+        "diagnosticMarker": "GXS_MARK.M22"
       }
     },
     {
@@ -279,7 +279,7 @@
       "replace": "    'logout', 'session'",
       "expectedFailure": {
         "testName": "owner単位の拒否をやめた3語が、実在のリポジトリを共有できる（R20-001）",
-        "diagnosticMarker": "認証系を守る語が消えている: "
+        "diagnosticMarker": "GXS_MARK.M23"
       }
     },
     {
@@ -291,7 +291,7 @@
       "replace": "   *   enum  決めた語のどれか\n   *   slug  英数と . _ - / , : だけの短い識別子",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": "source_comments_describe_now"
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -303,7 +303,7 @@
       "replace": "   *  - #L10-L20 や #issuecomment-123 は共有したい情報そのものなので残す\n   *  - **フラグメント（#…）は種類を問わず、すべて落とす**",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": " /issuecomment-123 [^*]{0,20}残す/"
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -315,7 +315,7 @@
       "replace": "    if (!share || !share.intentUrl) return { opened: false, reason: 'unsupported' };",
       "expectedFailure": {
         "testName": "開かずに終わる出口が、すべて refuse を通っている（R19-004）",
-        "diagnosticMarker": " か所ある。refuse() の中の1つだけにする"
+        "diagnosticMarker": "GXS_MARK.M26"
       }
     },
     {
@@ -329,7 +329,7 @@
         "testName": "ツールバーの押下でも、予期しない例外を握り潰さない（R20-005）",
         "kind": "unhandledRejection",
         "why": "この欠陥の姿そのものが「捨てられた Promise の拒否が外へ漏れること」。リスナーが握り潰すと拒否は未処理のまま逃げ、利用者からは無反応に見える。漏れたことを検知として数える（assertion では表せない）",
-        "diagnosticMarker": "unexpected internal error"
+        "diagnosticMarker": "GXS_MARK.M27"
       }
     },
     {
@@ -341,7 +341,7 @@
       "replace": "  await announceOnce(tab && tab.id, why);\n  var how = await announceOnce(tab && tab.id, why);",
       "expectedFailure": {
         "testName": "案内は1回だけ——画面にもバッジにも二重に出さない（R19-004）",
-        "diagnosticMarker": "画面への案内が1回でない"
+        "diagnosticMarker": "GXS_MARK.M28"
       }
     },
     {
@@ -353,7 +353,7 @@
       "replace": "if (res.ok === false) showNotice(res.reason || 'unsupported');",
       "expectedFailure": {
         "testName": "画面側は、service worker が案内を出せたときは黙る（R20-005・二重通知の防止）",
-        "diagnosticMarker": "画面側が notified を見ずに案内を出している（二重通知）"
+        "diagnosticMarker": "GXS_MARK.M29"
       }
     },
     {
@@ -365,7 +365,7 @@
       "replace": "'redirection_policy_TYPO'",
       "expectedFailure": {
         "testName": "strict: 証跡がそろっていれば Web Intent は止めない（R18-003の対照）",
-        "diagnosticMarker": "そろっているのに止めている: "
+        "diagnosticMarker": "GXS_MARK.M30"
       }
     },
     {
@@ -377,7 +377,7 @@
       "replace": "        true,\n        `ストアの回答が未確認",
       "expectedFailure": {
         "testName": "strict: Web Intent の判断が未確認なら通らない（R16-005）",
-        "diagnosticMarker": ": Web Intent が未確認なのに strict を通した"
+        "diagnosticMarker": "GXS_MARK.M31"
       }
     },
     {
@@ -389,7 +389,7 @@
       "replace": "  'README.ja.md', 'PRIVACY.md', 'SECURITY.md',\n",
       "expectedFailure": {
         "testName": "主張の検査そのものが効いている（対照）",
-        "diagnosticMarker": "検査する面と、正本の claimSurfaces がずれている"
+        "diagnosticMarker": "GXS_MARK.SHARED_05"
       }
     },
     {
@@ -401,7 +401,7 @@
       "replace": "  'README.md', 'PRIVACY.md', 'SECURITY.md',\n",
       "expectedFailure": {
         "testName": "主張の検査そのものが効いている（対照）",
-        "diagnosticMarker": "検査する面と、正本の claimSurfaces がずれている"
+        "diagnosticMarker": "GXS_MARK.SHARED_05"
       }
     },
     {
@@ -413,7 +413,7 @@
       "replace": "  'README.md', 'README.ja.md', 'SECURITY.md',\n",
       "expectedFailure": {
         "testName": "主張の検査そのものが効いている（対照）",
-        "diagnosticMarker": "検査する面と、正本の claimSurfaces がずれている"
+        "diagnosticMarker": "GXS_MARK.SHARED_05"
       }
     },
     {
@@ -425,7 +425,7 @@
       "replace": "  'README.md', 'README.ja.md', 'PRIVACY.md',\n",
       "expectedFailure": {
         "testName": "主張の検査そのものが効いている（対照）",
-        "diagnosticMarker": "検査する面と、正本の claimSurfaces がずれている"
+        "diagnosticMarker": "GXS_MARK.SHARED_05"
       }
     },
     {
@@ -437,7 +437,7 @@
       "replace": "  'store/STORE_DASHBOARD_CHANGES.md',\n",
       "expectedFailure": {
         "testName": "主張の検査そのものが効いている（対照）",
-        "diagnosticMarker": "検査する面と、正本の claimSurfaces がずれている"
+        "diagnosticMarker": "GXS_MARK.SHARED_05"
       }
     },
     {
@@ -449,7 +449,7 @@
       "replace": "  'store/LISTING.md',\n",
       "expectedFailure": {
         "testName": "主張の検査そのものが効いている（対照）",
-        "diagnosticMarker": "検査する面と、正本の claimSurfaces がずれている"
+        "diagnosticMarker": "GXS_MARK.SHARED_05"
       }
     },
     {
@@ -461,7 +461,7 @@
       "replace": "  'store/WEB_INTENT_POLICY_DECISION.json',\n",
       "expectedFailure": {
         "testName": "主張の検査そのものが効いている（対照）",
-        "diagnosticMarker": "検査する面と、正本の claimSurfaces がずれている"
+        "diagnosticMarker": "GXS_MARK.SHARED_05"
       }
     },
     {
@@ -473,7 +473,7 @@
       "replace": "  'store/DATA_DISCLOSURE.json',\n",
       "expectedFailure": {
         "testName": "主張の検査そのものが効いている（対照）",
-        "diagnosticMarker": "検査する面と、正本の claimSurfaces がずれている"
+        "diagnosticMarker": "GXS_MARK.SHARED_05"
       }
     },
     {
@@ -485,7 +485,7 @@
       "replace": "",
       "expectedFailure": {
         "testName": "主張の検査そのものが効いている（対照）",
-        "diagnosticMarker": "検査する面と、正本の claimSurfaces がずれている"
+        "diagnosticMarker": "GXS_MARK.SHARED_05"
       }
     },
     {
@@ -497,7 +497,7 @@
       "replace": "  '_locales/ja/messages.json',\n",
       "expectedFailure": {
         "testName": "主張の検査そのものが効いている（対照）",
-        "diagnosticMarker": "検査する面と、正本の claimSurfaces がずれている"
+        "diagnosticMarker": "GXS_MARK.SHARED_05"
       }
     },
     {
@@ -509,7 +509,7 @@
       "replace": "  '_locales/en/messages.json',\n",
       "expectedFailure": {
         "testName": "主張の検査そのものが効いている（対照）",
-        "diagnosticMarker": "検査する面と、正本の claimSurfaces がずれている"
+        "diagnosticMarker": "GXS_MARK.SHARED_05"
       }
     },
     {
@@ -521,7 +521,7 @@
       "replace": "  'src/content.js', 'src/background.js',\n",
       "expectedFailure": {
         "testName": "主張の検査そのものが効いている（対照）",
-        "diagnosticMarker": "検査する面と、正本の claimSurfaces がずれている"
+        "diagnosticMarker": "GXS_MARK.SHARED_05"
       }
     },
     {
@@ -533,7 +533,7 @@
       "replace": "  'src/share.js', 'src/background.js',\n",
       "expectedFailure": {
         "testName": "主張の検査そのものが効いている（対照）",
-        "diagnosticMarker": "検査する面と、正本の claimSurfaces がずれている"
+        "diagnosticMarker": "GXS_MARK.SHARED_05"
       }
     },
     {
@@ -545,7 +545,7 @@
       "replace": "  'src/share.js', 'src/content.js',\n",
       "expectedFailure": {
         "testName": "主張の検査そのものが効いている（対照）",
-        "diagnosticMarker": "検査する面と、正本の claimSurfaces がずれている"
+        "diagnosticMarker": "GXS_MARK.SHARED_05"
       }
     },
     {
@@ -557,7 +557,7 @@
       "replace": "",
       "expectedFailure": {
         "testName": "主張の検査そのものが効いている（対照）",
-        "diagnosticMarker": "検査する面と、正本の claimSurfaces がずれている"
+        "diagnosticMarker": "GXS_MARK.SHARED_05"
       }
     },
     {
@@ -569,7 +569,7 @@
       "replace": "          name: reposhout-package-${{ github.sha }}",
       "expectedFailure": {
         "testName": "PRのCIは提出候補の成果物を残さない",
-        "diagnosticMarker": "upload-artifact の条件が「main への push」に限定されていない"
+        "diagnosticMarker": "GXS_MARK.M32"
       }
     },
     {
@@ -581,7 +581,7 @@
       "replace": "        uses: actions/upload-artifact@v4\n        with:\n          name: mutation-receipt",
       "expectedFailure": {
         "testName": "CIワークフローが供給網の最低条件を満たす",
-        "diagnosticMarker": "commit SHA で固定されていない: "
+        "diagnosticMarker": "GXS_MARK.M33"
       }
     },
     {
@@ -593,7 +593,7 @@
       "replace": "",
       "expectedFailure": {
         "testName": "正本の主張が、実際のコードと一致している（R19-001）",
-        "diagnosticMarker": "正本の domReadTiming に "
+        "diagnosticMarker": "GXS_MARK.M34"
       }
     },
     {
@@ -605,7 +605,7 @@
       "desc": "Privacy(英)の説明を「有無と高さだけ」へ戻す",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": "/only whether a few specific layout elements exist/i"
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -617,7 +617,7 @@
       "desc": "Privacy(日)の説明を「有無と高さだけ」へ戻す",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": " /決まった数個の要素があるかどうかと[^。]{0,24}高さだけ/"
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -629,7 +629,7 @@
       "desc": "README(英)を「何もしない」へ戻す",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": "If the anchor element isn't found, it does nothing."
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -641,7 +641,7 @@
       "desc": "README(日)を「何もしない」へ戻す",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": "dom_scope_and_added_elements"
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -653,7 +653,7 @@
       "desc": "申告を「要素を1つ足す」へ戻す",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": "dom_scope_and_added_elements"
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -665,7 +665,7 @@
       "desc": "出荷コメントを「追加する要素は1個」へ戻す",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": "dom_scope_and_added_elements"
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -677,7 +677,7 @@
       "desc": "案内の経路を操作列に依存させる（無い所で出なくする）",
       "expectedFailure": {
         "testName": "操作列が無いページでも、拒否の案内は body へ出る（R22-001）",
-        "diagnosticMarker": "操作列が無いページで案内が出ていない（または複数出ている）: "
+        "diagnosticMarker": "GXS_MARK.N07"
       }
     },
     {
@@ -689,7 +689,7 @@
       "desc": "ストア原稿へ nothing about the user を戻す",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": "/nothing about the user/i"
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -701,7 +701,7 @@
       "desc": "ストア原稿の12時間を曖昧な言い方へ戻す",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": " /expire after 12 hours in any case/i"
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -713,7 +713,7 @@
       "desc": "README(英)から保存する時刻を落とす",
       "expectedFailure": {
         "testName": "言うべきことを、言っている（主張の裏返し）",
-        "diagnosticMarker": "the time each was opened"
+        "diagnosticMarker": "GXS_MARK.SHARED_06"
       }
     },
     {
@@ -725,7 +725,7 @@
       "desc": "README(日)から保存する時刻を落とす",
       "expectedFailure": {
         "testName": "言うべきことを、言っている（主張の裏返し）",
-        "diagnosticMarker": "入るのはウィンドウIDと開いた時刻だけで"
+        "diagnosticMarker": "GXS_MARK.SHARED_06"
       }
     },
     {
@@ -737,7 +737,7 @@
       "desc": "実際に消える契機を1つ削る（JSONは壊さない）",
       "expectedFailure": {
         "testName": "正本の主張が、実際のコードと一致している（R19-001）",
-        "diagnosticMarker": "正本の「実際に消える契機」が3つでない: "
+        "diagnosticMarker": "GXS_MARK.N12"
       }
     },
     {
@@ -749,7 +749,7 @@
       "desc": "論理的な失効と物理的な削除を再び混ぜる",
       "expectedFailure": {
         "testName": "正本の主張が、実際のコードと一致している（R19-001）",
-        "diagnosticMarker": "正本の storageLogicalExpiry が「根拠として数えない」と言っていない"
+        "diagnosticMarker": "GXS_MARK.N13"
       }
     },
     {
@@ -761,7 +761,7 @@
       "desc": "申告を「12時間で失効」へ戻す",
       "expectedFailure": {
         "testName": "主張の一覧が、すべての面で守られている（R18-001 / R19-001）",
-        "diagnosticMarker": "store/DATA_DISCLOSURE.json "
+        "diagnosticMarker": "GXS_MARK.SHARED_04"
       }
     },
     {
@@ -773,7 +773,7 @@
       "desc": "README(英)の拒否例へ /user/keys を戻す",
       "expectedFailure": {
         "testName": "文書のルート例が、挙げた文書に実際に載っている（R22-003）",
-        "diagnosticMarker": " が無い（正本だけ直して文書を直し忘れている）"
+        "diagnosticMarker": "GXS_MARK.SHARED_08"
       }
     },
     {
@@ -785,7 +785,7 @@
       "desc": "README(日)の拒否例へ /user/keys を戻す",
       "expectedFailure": {
         "testName": "文書のルート例が、挙げた文書に実際に載っている（R22-003）",
-        "diagnosticMarker": " が無い（正本だけ直して文書を直し忘れている）"
+        "diagnosticMarker": "GXS_MARK.SHARED_08"
       }
     },
     {
@@ -797,7 +797,7 @@
       "desc": "実物と逆の判定を正本へ書く（共有できるものを拒否と宣言）",
       "expectedFailure": {
         "testName": "文書のルート例が、出荷するコードの判定と一致する（R22-003）",
-        "diagnosticMarker": "github.com/user/keys"
+        "diagnosticMarker": "GXS_MARK.SHARED_07"
       }
     },
     {
@@ -809,7 +809,7 @@
       "desc": "実物と逆の判定を正本へ書く（拒否するものを共有できると宣言）",
       "expectedFailure": {
         "testName": "文書のルート例が、出荷するコードの判定と一致する（R22-003）",
-        "diagnosticMarker": "文書のルート例が実物と食い違っている:"
+        "diagnosticMarker": "GXS_MARK.SHARED_07"
       }
     },
     {
@@ -821,7 +821,7 @@
       "desc": "対象が存在しなくても通す（存在検査を外す）",
       "expectedFailure": {
         "testName": "前提が崩れている状態を、検知として数えない（R22-004）",
-        "diagnosticMarker": "存在しないテストを、パスの検査で止めていない: "
+        "diagnosticMarker": "GXS_MARK.N19"
       }
     },
     {
@@ -833,7 +833,7 @@
       "desc": "変異前の対照を無視する（元から落ちるテストが検知に化ける）",
       "expectedFailure": {
         "testName": "前提が崩れている状態を、検知として数えない（R22-004）",
-        "diagnosticMarker": "元から落ちるテストを、変異の検知に数えている"
+        "diagnosticMarker": "GXS_MARK.N20"
       }
     },
     {
@@ -845,7 +845,7 @@
       "desc": "上限打ち切りを検知へ寄せる",
       "expectedFailure": {
         "testName": "前提が崩れている状態を、検知として数えない（R22-004）",
-        "diagnosticMarker": "上限打ち切りを、上限として分類していない: "
+        "diagnosticMarker": "GXS_MARK.SHARED_15"
       }
     },
     {
@@ -857,7 +857,7 @@
       "desc": "上限で打ち切ったことを記録しない",
       "expectedFailure": {
         "testName": "前提が崩れている状態を、検知として数えない（R22-004）",
-        "diagnosticMarker": "上限打ち切りを、上限として分類していない: "
+        "diagnosticMarker": "GXS_MARK.SHARED_15"
       }
     },
     {
@@ -869,7 +869,7 @@
       "desc": "リポジトリの外を指す対象を許す",
       "expectedFailure": {
         "testName": "変異する対象が、リポジトリの外を指せない（R23-002）",
-        "diagnosticMarker": "リポジトリの外を書き換えたうえで検知にしている"
+        "diagnosticMarker": "GXS_MARK.SHARED_14"
       }
     },
     {
@@ -881,7 +881,7 @@
       "desc": "複数一致でも1個しか置換しない旧挙動へ戻す",
       "expectedFailure": {
         "testName": "期待した数だけ置換し、置換した数を証跡へ残す（R22-004）",
-        "diagnosticMarker": "複数一致の変異を検知にしていない（R22-004）"
+        "diagnosticMarker": "GXS_MARK.N24"
       }
     },
     {
@@ -893,7 +893,7 @@
       "desc": "証跡から由来（ランナーのハッシュ）を落とす",
       "expectedFailure": {
         "testName": "証跡には、何をどの版で測ったかが入る（R22-004）",
-        "diagnosticMarker": ": 由来が証跡に残っていない（R22-004）"
+        "diagnosticMarker": "GXS_MARK.N25"
       }
     },
     {
@@ -905,7 +905,7 @@
       "desc": "証跡から変異前の対照を落とす",
       "expectedFailure": {
         "testName": "変異前に対象テストを素で走らせ、その結果を証跡へ残す（R22-004）",
-        "diagnosticMarker": "変異前の対照が記録されていない"
+        "diagnosticMarker": "GXS_MARK.N26"
       }
     },
     {
@@ -917,7 +917,7 @@
       "desc": "呼び出し元の環境を剥がさない（全件が素通りに化ける）",
       "expectedFailure": {
         "testName": "呼ばれ方（NODE_TEST_CONTEXT）で判定が変わらない（R22-004の作業中に発見）",
-        "diagnosticMarker": "呼び出し元の環境変数で、検知が素通りに化けている"
+        "diagnosticMarker": "GXS_MARK.N27"
       }
     },
     {
@@ -929,7 +929,7 @@
       "desc": "証跡を書けなくても成功で終わる",
       "expectedFailure": {
         "testName": "証跡を書けなければ、成功で終わらない（R22-004）",
-        "diagnosticMarker": "証跡を書けなかったのに成功で終わっている"
+        "diagnosticMarker": "GXS_MARK.N28"
       }
     },
     {
@@ -941,7 +941,7 @@
       "desc": "CIで証跡を書く場所と拾う場所をずらす",
       "expectedFailure": {
         "testName": "変異対照の証跡は、作った場所と拾う場所が同じ（R22-004）",
-        "diagnosticMarker": "証跡を書く場所と拾う場所が違う: 書く="
+        "diagnosticMarker": "GXS_MARK.N29"
       }
     },
     {
@@ -953,7 +953,7 @@
       "desc": "CIの証跡アップロードを warn へ戻す",
       "expectedFailure": {
         "testName": "成果物のアップロードは、1つ残らず「空なら失敗」になっている（R22-004）",
-        "diagnosticMarker": "mutation-receipt-"
+        "diagnosticMarker": "GXS_MARK.N30"
       }
     },
     {
@@ -965,7 +965,7 @@
       "desc": "出したバッジの消去予約を入れない（色/説明文の後ろに置いた旧形と同じ結果）",
       "expectedFailure": {
         "testName": "バッジは 6000ms で消える（R15-005: 予約を実際に走らせて見る）",
-        "diagnosticMarker": "6000ms で消す予約が入っていない（R15-005）"
+        "diagnosticMarker": "GXS_MARK.N31"
       }
     },
     {
@@ -977,7 +977,7 @@
       "desc": "色の失敗で通知を失敗扱いにする",
       "expectedFailure": {
         "testName": "色や説明文だけ失敗しても、バッジは出て消す予約も入る（R22-005）",
-        "diagnosticMarker": " が失敗しただけで通知を失敗扱いにしている"
+        "diagnosticMarker": "GXS_MARK.SHARED_01"
       }
     },
     {
@@ -989,7 +989,7 @@
       "desc": "説明文の失敗で通知を失敗扱いにする",
       "expectedFailure": {
         "testName": "色や説明文だけ失敗しても、バッジは出て消す予約も入る（R22-005）",
-        "diagnosticMarker": " が失敗しただけで通知を失敗扱いにしている"
+        "diagnosticMarker": "GXS_MARK.SHARED_01"
       }
     },
     {
@@ -1001,7 +1001,7 @@
       "desc": "付け直しの世代管理を外す",
       "expectedFailure": {
         "testName": "バッジを付け直すと、前の予約は新しいバッジを消さない（R15-005）",
-        "diagnosticMarker": "古い予約が残っている"
+        "diagnosticMarker": "GXS_MARK.N34"
       }
     },
     {
@@ -1013,7 +1013,7 @@
       "desc": "走り終えた予約を登録簿から消さない",
       "expectedFailure": {
         "testName": "付け直しの世代管理は、消去APIの失敗に巻き込まれない（R22-005）",
-        "diagnosticMarker": "走り終えた予約を消しに行っている（登録簿に古い世代が残る）: "
+        "diagnosticMarker": "GXS_MARK.N35"
       }
     },
     {
@@ -1025,7 +1025,7 @@
       "desc": "環境の判定を反転させる（どちらのOSでも落ちるべき）",
       "expectedFailure": {
         "testName": "前提が崩れている状態を、検知として数えない（R22-004）",
-        "diagnosticMarker": "Windows で signal が観測できている＝前提が変わったので、この分岐を見直す"
+        "diagnosticMarker": "GXS_MARK.N36"
       }
     },
     {
@@ -1037,7 +1037,7 @@
       "desc": "宣言したテストとの照合をやめる",
       "expectedFailure": {
         "testName": "落ちた理由を区別する——構文・import・setup・別テストを検知にしない（R23-001）",
-        "diagnosticMarker": " 'wrong_test_failure'"
+        "diagnosticMarker": "GXS_MARK.P01"
       }
     },
     {
@@ -1049,7 +1049,7 @@
       "desc": "構文・import・読み込み失敗を検知へ寄せる",
       "expectedFailure": {
         "testName": "落ちた理由を区別する——構文・import・setup・別テストを検知にしない（R23-001）",
-        "diagnosticMarker": " 'wrong_test_failure'"
+        "diagnosticMarker": "GXS_MARK.SHARED_12"
       }
     },
     {
@@ -1061,7 +1061,7 @@
       "desc": "SyntaxError の見分けをやめる",
       "expectedFailure": {
         "testName": "落ちた理由を区別する——構文・import・setup・別テストを検知にしない（R23-001）",
-        "diagnosticMarker": " 'bootstrap_error'"
+        "diagnosticMarker": "GXS_MARK.SHARED_12"
       }
     },
     {
@@ -1073,7 +1073,7 @@
       "desc": "import 失敗の見分けをやめる",
       "expectedFailure": {
         "testName": "落ちた理由を区別する——構文・import・setup・別テストを検知にしない（R23-001）",
-        "diagnosticMarker": " 'module_resolution_error'"
+        "diagnosticMarker": "GXS_MARK.P04"
       }
     },
     {
@@ -1085,7 +1085,7 @@
       "desc": "落ちた理由の本文を診断へ集めない",
       "expectedFailure": {
         "testName": "証跡に、落ちた理由と落ちたテスト名が残る（R23-001）",
-        "diagnosticMarker": "落ちた理由の本文が入っていない: "
+        "diagnosticMarker": "GXS_MARK.P05"
       }
     },
     {
@@ -1097,7 +1097,7 @@
       "desc": "宣言が無い変異を通す",
       "expectedFailure": {
         "testName": "どのテストが落ちるはずかを宣言していない変異は、測れない（R23-001）",
-        "diagnosticMarker": "宣言が無いのに検知にしている"
+        "diagnosticMarker": "GXS_MARK.P06"
       }
     },
     {
@@ -1109,7 +1109,7 @@
       "desc": "証跡から、落ちたテスト名を落とす",
       "expectedFailure": {
         "testName": "証跡に、落ちた理由と落ちたテスト名が残る（R23-001）",
-        "diagnosticMarker": ": 証跡の欄が欠けている（R23-001）"
+        "diagnosticMarker": "GXS_MARK.P07"
       }
     },
     {
@@ -1121,7 +1121,7 @@
       "desc": "診断から絶対パスを伏せない",
       "expectedFailure": {
         "testName": "証跡に、落ちた理由と落ちたテスト名が残る（R23-001）",
-        "diagnosticMarker": "test/guard.test.mjs"
+        "diagnosticMarker": "GXS_MARK.P08"
       }
     },
     {
@@ -1133,7 +1133,7 @@
       "desc": "変異する対象のリポジトリ境界を外す",
       "expectedFailure": {
         "testName": "変異する対象が、リポジトリの外を指せない（R23-002）",
-        "diagnosticMarker": "リポジトリの外を書き換えたうえで検知にしている"
+        "diagnosticMarker": "GXS_MARK.SHARED_14"
       }
     },
     {
@@ -1145,7 +1145,7 @@
       "desc": "symlink の検査を外す",
       "expectedFailure": {
         "testName": "リポジトリの中の symlink で外へ出られない（R23-002）",
-        "diagnosticMarker": "symlink の検査で止めていない: "
+        "diagnosticMarker": "GXS_MARK.P10"
       }
     },
     {
@@ -1157,7 +1157,7 @@
       "desc": "復旧したふりをする（実際には戻さない）",
       "expectedFailure": {
         "testName": "書いたのに読み戻せなければ、戻したうえでランナー失敗にする（R23-002）",
-        "diagnosticMarker": "戻したと言うが、実物が変異前と違う（R23-002）"
+        "diagnosticMarker": "GXS_MARK.P11"
       }
     },
     {
@@ -1169,7 +1169,7 @@
       "desc": "戻せなくても検知として扱う",
       "expectedFailure": {
         "testName": "復旧が例外を投げても、証跡が残り、検知にはならない（R23-002）",
-        "diagnosticMarker": " 'restore_failed'"
+        "diagnosticMarker": "GXS_MARK.P12"
       }
     },
     {
@@ -1181,7 +1181,7 @@
       "desc": "書いたのに復旧を試みない",
       "expectedFailure": {
         "testName": "復旧が例外を投げても、証跡が残り、検知にはならない（R23-002）",
-        "diagnosticMarker": "!== false"
+        "diagnosticMarker": "GXS_MARK.P13"
       }
     },
     {
@@ -1193,7 +1193,7 @@
       "desc": "置き換え残しを数えない",
       "expectedFailure": {
         "testName": "期待した数だけ置換し、置換した数を証跡へ残す（R22-004）",
-        "diagnosticMarker": "置き換え残しを数えていない（2箇所を「GAMMA GAMMA」にしたら4残るはず）: "
+        "diagnosticMarker": "GXS_MARK.P14"
       }
     },
     {
@@ -1205,7 +1205,7 @@
       "desc": "読めなくても空の台帳として書き進める",
       "expectedFailure": {
         "testName": "台帳を読めなかったときは、書かない（既にある記録を消さない）（R23-003）",
-        "diagnosticMarker": "読めていないのに成功を返している"
+        "diagnosticMarker": "GXS_MARK.SHARED_02"
       }
     },
     {
@@ -1217,7 +1217,7 @@
       "desc": "読み取り失敗を「空だった」に変える",
       "expectedFailure": {
         "testName": "台帳を読めなかったときは、書かない（既にある記録を消さない）（R23-003）",
-        "diagnosticMarker": "読めていないのに成功を返している"
+        "diagnosticMarker": "GXS_MARK.SHARED_02"
       }
     },
     {
@@ -1229,7 +1229,7 @@
       "desc": "IDが無くても開いたことにする",
       "expectedFailure": {
         "testName": "窓のIDが返らなければ、開いたことにしない（R23-003）",
-        "diagnosticMarker": ": 状態が違う: "
+        "diagnosticMarker": "GXS_MARK.P17"
       }
     },
     {
@@ -1241,7 +1241,7 @@
       "desc": "開いたか分からないときに、何も伝えない",
       "expectedFailure": {
         "testName": "開いたか分からないときは、タブで開き直さず案内を1回出す（R23-003）",
-        "diagnosticMarker": "xpected "
+        "diagnosticMarker": "GXS_MARK.P18"
       }
     },
     {
@@ -1253,7 +1253,7 @@
       "desc": "記録できなくても「Escが使える」と返す",
       "expectedFailure": {
         "testName": "記録できなければ、開いたことは認めてもEscは使えないと返す（R23-003）",
-        "diagnosticMarker": "xpected "
+        "diagnosticMarker": "GXS_MARK.P19"
       }
     },
     {
@@ -1265,7 +1265,7 @@
       "desc": "読めなくても所有の判定を続ける",
       "expectedFailure": {
         "testName": "台帳を読めなければ、所有を認めない（R23-003）",
-        "diagnosticMarker": "読めていないのに「拡張が開いた窓だ」と認めている"
+        "diagnosticMarker": "GXS_MARK.P20"
       }
     },
     {
@@ -1277,7 +1277,7 @@
       "desc": "README(英)の採用理由を「アカウントが無い語だけ」へ戻す",
       "expectedFailure": {
         "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）",
-        "diagnosticMarker": "may be added under one of **three** conditions"
+        "diagnosticMarker": "GXS_MARK.SHARED_10"
       }
     },
     {
@@ -1289,7 +1289,7 @@
       "desc": "README(日)から route-shadow の分岐を落とす",
       "expectedFailure": {
         "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）",
-        "diagnosticMarker": "**②アカウントは在るが、ブラウザでリポジトリの画面が出ない**"
+        "diagnosticMarker": "GXS_MARK.SHARED_10"
       }
     },
     {
@@ -1301,7 +1301,7 @@
       "desc": "route-shadow の例を、実際には route-shadow でない語へ変える",
       "expectedFailure": {
         "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）",
-        "diagnosticMarker": ": アカウントが無いなら route-shadow の例にならない"
+        "diagnosticMarker": "GXS_MARK.P23"
       }
     },
     {
@@ -1313,7 +1313,7 @@
       "desc": "「アカウントありで deny」の一覧を実測とずらす",
       "expectedFailure": {
         "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）",
-        "diagnosticMarker": "台帳が挙げる「アカウントありで deny」が実測とずれている"
+        "diagnosticMarker": "GXS_MARK.P24"
       }
     },
     {
@@ -1325,7 +1325,7 @@
       "desc": "Windows形式のパスを伏せない",
       "expectedFailure": {
         "testName": "証跡に、落ちた理由と落ちたテスト名が残る（R23-001）",
-        "diagnosticMarker": "Windows形式のパスが残っている: "
+        "diagnosticMarker": "GXS_MARK.P25"
       }
     },
     {
@@ -1337,7 +1337,7 @@
       "desc": "対象ファイルの判定をやめる（ファイルごと読めない失敗を見分けない）",
       "expectedFailure": {
         "testName": "落ちた理由を区別する——構文・import・setup・別テストを検知にしない（R23-001）",
-        "diagnosticMarker": " 'syntax_error'"
+        "diagnosticMarker": "GXS_MARK.SHARED_12"
       }
     },
     {
@@ -1349,7 +1349,7 @@
       "desc": "落ち方の種類を照合しない",
       "expectedFailure": {
         "testName": "名前が合っていても、assertion で落ちていなければ検知にしない（R24-001）",
-        "diagnosticMarker": "TypeError を assertion の検知として数えている"
+        "diagnosticMarker": "GXS_MARK.SHARED_13"
       }
     },
     {
@@ -1361,7 +1361,7 @@
       "desc": "なんでも assertion とみなす",
       "expectedFailure": {
         "testName": "名前が合っていても、assertion で落ちていなければ検知にしない（R24-001）",
-        "diagnosticMarker": "TypeError を assertion の検知として数えている"
+        "diagnosticMarker": "GXS_MARK.SHARED_13"
       }
     },
     {
@@ -1373,7 +1373,7 @@
       "desc": "同名テストの拒否をやめる",
       "expectedFailure": {
         "testName": "同じ名前のテストが2つ落ちたら、どれが落ちたか決まらない（R24-001）",
-        "diagnosticMarker": " 'duplicate_test_name'"
+        "diagnosticMarker": "GXS_MARK.SHARED_16"
       }
     },
     {
@@ -1385,7 +1385,7 @@
       "desc": "重複した変異IDを通す",
       "expectedFailure": {
         "testName": "変異IDが重複していたら、走る前に止まる（R24-001）",
-        "diagnosticMarker": "重複したIDで走り切っている"
+        "diagnosticMarker": "GXS_MARK.Q04"
       }
     },
     {
@@ -1397,7 +1397,7 @@
       "desc": "理由なしの宣言を通す",
       "expectedFailure": {
         "testName": "assertion 以外を検知にするなら、理由を書かせる（R24-001）",
-        "diagnosticMarker": "理由なしの宣言を通している"
+        "diagnosticMarker": "GXS_MARK.Q05"
       }
     },
     {
@@ -1409,7 +1409,7 @@
       "desc": "知らない種類の宣言を通す",
       "expectedFailure": {
         "testName": "assertion 以外を検知にするなら、理由を書かせる（R24-001）",
-        "diagnosticMarker": "知らない種類の宣言を通している"
+        "diagnosticMarker": "GXS_MARK.Q06"
       }
     },
     {
@@ -1421,7 +1421,7 @@
       "desc": "上限の検査をやめる",
       "expectedFailure": {
         "testName": "上限は有限の正整数だけ——0 や文字列や範囲外を受け取らない（R24-002）",
-        "diagnosticMarker": "--timeout 0"
+        "diagnosticMarker": "GXS_MARK.T01"
       }
     },
     {
@@ -1433,7 +1433,7 @@
       "desc": "知らない引数を通す",
       "expectedFailure": {
         "testName": "知らない引数は受け取らない（R24-002）",
-        "diagnosticMarker": "知らない引数を黙って無視している"
+        "diagnosticMarker": "GXS_MARK.T02"
       }
     },
     {
@@ -1445,7 +1445,7 @@
       "desc": "由来が取れなくても走る",
       "expectedFailure": {
         "testName": "git から由来を取れないなら走らない（R24-002）",
-        "diagnosticMarker": " 'failed'"
+        "diagnosticMarker": "GXS_MARK.T03"
       }
     },
     {
@@ -1457,7 +1457,7 @@
       "desc": "作業ツリーの判定を null 許容へ戻す",
       "expectedFailure": {
         "testName": "作業ツリーが実行前と同じでなければ、成功にしない（R24-002）",
-        "diagnosticMarker": "作業ツリーを確かめられていないのに成功で終わっている"
+        "diagnosticMarker": "GXS_MARK.T04"
       }
     },
     {
@@ -1469,7 +1469,7 @@
       "desc": "Escが効かないことを伝えるのをやめる",
       "expectedFailure": {
         "testName": "ツールバーから開いたとき、Escが効かないことを1回だけ伝える（R24-003）",
-        "diagnosticMarker": "案内が1回でない: notice="
+        "diagnosticMarker": "GXS_MARK.U01"
       }
     },
     {
@@ -1481,7 +1481,7 @@
       "desc": "記録できた窓でも案内を出す",
       "expectedFailure": {
         "testName": "記録できた窓では、案内を出さない（R24-003の対照）",
-        "diagnosticMarker": "記録できているのに案内を出している"
+        "diagnosticMarker": "GXS_MARK.U02"
       }
     },
     {
@@ -1493,7 +1493,7 @@
       "desc": "応答から状態を落とす",
       "expectedFailure": {
         "testName": "画面内ボタンからも1回だけ伝え、応答に状態を載せる（R24-003）",
-        "diagnosticMarker": "状態を返していない: "
+        "diagnosticMarker": "GXS_MARK.SHARED_03"
       }
     },
     {
@@ -1505,7 +1505,7 @@
       "desc": "バッジの見出しを既定の文へ戻す",
       "expectedFailure": {
         "testName": "画面内の案内が届かないときはバッジへ回す（R24-003）",
-        "diagnosticMarker": "見出しが専用の定型文でない: "
+        "diagnosticMarker": "GXS_MARK.U04"
       }
     },
     {
@@ -1517,7 +1517,7 @@
       "desc": "画面側の受け皿を外す",
       "expectedFailure": {
         "testName": "画面側にも、Escが効かないときの受け皿がある（R24-003）",
-        "diagnosticMarker": "画面側に Esc 不能の受け皿が無い（service worker が倒れたら誰も伝えない）"
+        "diagnosticMarker": "GXS_MARK.U05"
       }
     },
     {
@@ -1529,7 +1529,7 @@
       "desc": "画面側の専用文をやめる",
       "expectedFailure": {
         "testName": "画面側にも、Escが効かないときの受け皿がある（R24-003）",
-        "diagnosticMarker": "画面側に専用の定型文が無い"
+        "diagnosticMarker": "GXS_MARK.U06"
       }
     },
     {
@@ -1541,7 +1541,7 @@
       "desc": "日本語の定型文を落とす",
       "expectedFailure": {
         "testName": "英日の定型文がそろっていて、値を含まない（R24-003）",
-        "diagnosticMarker": " に noticeEscUnavailable が無い"
+        "diagnosticMarker": "GXS_MARK.U07"
       }
     },
     {
@@ -1553,7 +1553,7 @@
       "desc": "記録できなかった窓を、できたことにする",
       "expectedFailure": {
         "testName": "画面内ボタンからも1回だけ伝え、応答に状態を載せる（R24-003）",
-        "diagnosticMarker": "状態を返していない: "
+        "diagnosticMarker": "GXS_MARK.SHARED_03"
       }
     },
     {
@@ -1565,7 +1565,7 @@
       "desc": "正本から「Escが効かないと伝える」を落とす",
       "expectedFailure": {
         "testName": "開いた結果の一覧（正本）が、実際の挙動と一致している（R24-003）",
-        "diagnosticMarker": ": 正本は案内 "
+        "diagnosticMarker": "GXS_MARK.U09"
       }
     },
     {
@@ -1577,7 +1577,7 @@
       "desc": "READMEから主張を落とす（正本だけ直した形）",
       "expectedFailure": {
         "testName": "Escが効かないことの主張が、挙げた文書に実際に載っている（R24-003）",
-        "diagnosticMarker": "」が無い（正本だけ直して文書を直し忘れている）"
+        "diagnosticMarker": "GXS_MARK.U10"
       }
     },
     {
@@ -1589,7 +1589,7 @@
       "desc": "認証入口の3語を「アカウントが無い」へ付け替える",
       "expectedFailure": {
         "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）",
-        "diagnosticMarker": "account_absent"
+        "diagnosticMarker": "GXS_MARK.SHARED_09"
       },
       "expectMatches": 3
     },
@@ -1602,7 +1602,7 @@
       "desc": "新しい理由の名前を、誰も指さない名前へ変える",
       "expectedFailure": {
         "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）",
-        "diagnosticMarker": " 'account_present_zero_public_repos_auth_route',"
+        "diagnosticMarker": "GXS_MARK.V02"
       }
     },
     {
@@ -1614,7 +1614,7 @@
       "desc": "理由ごとの件数を実測とずらす",
       "expectedFailure": {
         "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）",
-        "diagnosticMarker": " 件に対し実測 "
+        "diagnosticMarker": "GXS_MARK.SHARED_09"
       }
     },
     {
@@ -1626,7 +1626,7 @@
       "desc": "当たる語が0件の枠から「予約」の宣言を外す",
       "expectedFailure": {
         "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）",
-        "diagnosticMarker": ": 当たる語が1つも無いのに、予約枠だと書いていない"
+        "diagnosticMarker": "GXS_MARK.V04"
       }
     },
     {
@@ -1638,7 +1638,7 @@
       "desc": "README(日)の採用理由を2つへ戻す",
       "expectedFailure": {
         "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）",
-        "diagnosticMarker": "一覧へ足してよいのは次の**3つ**"
+        "diagnosticMarker": "GXS_MARK.SHARED_10"
       }
     },
     {
@@ -1650,7 +1650,7 @@
       "desc": "出荷コメントから理由の数を落とす",
       "expectedFailure": {
         "testName": "READMEの採用理由が、台帳の実際の判定と食い違っていない（R23-004）",
-        "diagnosticMarker": "次の**3つ**のどれかに当てはまるもの"
+        "diagnosticMarker": "GXS_MARK.SHARED_10"
       }
     },
     {
@@ -1662,19 +1662,19 @@
       "desc": "倒れたときの証跡を書かない",
       "expectedFailure": {
         "testName": "普通に終わる限り、証跡を1行は残す（R24-002 / R25-003で範囲を限定）",
-        "diagnosticMarker": "倒れたときに証跡が1行も残っていない"
+        "diagnosticMarker": "GXS_MARK.T05"
       }
     },
     {
       "id": "T06",
-      "file": "test/mutation-runner.test.mjs",
+      "file": "test/helpers/mutation-fixture.mjs",
       "find": "  assert.ok(r.receipt, `証跡が無い（exit=${r.exitCode}）。何を測ったか言えない:\\n${r.stdout}`);",
       "replace": "  if (!r.receipt) return {};",
       "test": "test/mutation-runner.test.mjs",
       "desc": "補助関数が、証跡が無いことを黙って通す",
       "expectedFailure": {
         "testName": "証跡が無いとき、補助関数は assertion で止まる（R24-001）",
-        "diagnosticMarker": "証跡が無いのに assertion 以外で倒れている（または止まらずに通している）"
+        "diagnosticMarker": "GXS_MARK.T06"
       }
     },
     {
@@ -1682,11 +1682,11 @@
       "file": "scripts/run-mutations.mjs",
       "find": "  if (f.failureType === 'unhandledRejection') return 'unhandledRejection';\n  if (f.failureType === 'testCodeFailure' && isAssertionFailure(f)) return 'assertion';",
       "replace": "  if (isAssertionFailure(f)) return 'assertion';\n  if (f.failureType === 'unhandledRejection') return 'unhandledRejection';",
-      "test": "test/mutation-runner.test.mjs",
+      "test": "test/mutation-evidence.test.mjs",
       "desc": "error名を先に見る（未処理rejectionをassertionへ誤分類）",
       "expectedFailure": {
         "testName": "未処理の rejection の中の assertion を、assertion と数えない（R25-001）",
-        "diagnosticMarker": "未処理の rejection を assertion として検知にしている: "
+        "diagnosticMarker": "GXS_MARK.W01"
       }
     },
     {
@@ -1694,11 +1694,11 @@
       "file": "scripts/run-mutations.mjs",
       "find": "  if (!String(hits[0].body || '').includes(marker)) {",
       "replace": "  if (false) {",
-      "test": "test/mutation-runner.test.mjs",
+      "test": "test/mutation-evidence.test.mjs",
       "desc": "目印の照合をやめる",
       "expectedFailure": {
         "testName": "同じテストの別の assertion が落ちただけなら、検知にしない（R25-001）",
-        "diagnosticMarker": "守りたい assertion は通っているのに検知にしている"
+        "diagnosticMarker": "GXS_MARK.W02"
       }
     },
     {
@@ -1706,23 +1706,23 @@
       "file": "scripts/run-mutations.mjs",
       "find": "    rec.body = body.join('\\n');",
       "replace": "    rec.body = output;",
-      "test": "test/mutation-runner.test.mjs",
+      "test": "test/mutation-evidence.test.mjs",
       "desc": "目印を出力全体から探せるようにする",
       "expectedFailure": {
         "testName": "目印は、そのテストの本文の中だけで探す（R25-001）",
-        "diagnosticMarker": "別のテストが出した目印で検知にしている"
+        "diagnosticMarker": "GXS_MARK.SPILL_GUARD"
       }
     },
     {
       "id": "W04",
       "file": "scripts/run-mutations.mjs",
-      "find": "  if (typeof marker !== 'string' || marker.trim().length < 6) {",
+      "find": "  if (typeof marker !== 'string' || !MARKER_RE.test(marker)) {",
       "replace": "  if (false) {",
-      "test": "test/mutation-runner.test.mjs",
+      "test": "test/mutation-evidence.test.mjs",
       "desc": "目印の宣言を必須でなくする",
       "expectedFailure": {
         "testName": "目印を宣言していない変異は、測れない（R25-001）",
-        "diagnosticMarker": "目印の宣言が無いことで止めていない: "
+        "diagnosticMarker": "GXS_MARK.W04"
       }
     },
     {
@@ -1730,11 +1730,11 @@
       "file": "scripts/run-mutations.mjs",
       "find": "  const markerCount = countInFile(m.test, marker);\n  if (markerCount !== 1) {",
       "replace": "  const markerCount = countInFile(m.test, marker);\n  if (false) {",
-      "test": "test/mutation-runner.test.mjs",
+      "test": "test/mutation-evidence.test.mjs",
       "desc": "目印がテスト内で一意でなくても通す",
       "expectedFailure": {
         "testName": "目印がテスト内で一意でなければ、測れない（R25-001）",
-        "diagnosticMarker": "一意でない目印を受け取っている"
+        "diagnosticMarker": "GXS_MARK.SHARED_18"
       }
     },
     {
@@ -1742,11 +1742,11 @@
       "file": "scripts/run-mutations.mjs",
       "find": "if (gitStatusStart !== null && gitStatusStart !== '' && !allowDirty) {",
       "replace": "if (false) {",
-      "test": "test/mutation-runner.test.mjs",
+      "test": "test/mutation-evidence.test.mjs",
       "desc": "汚れた木でも走る",
       "expectedFailure": {
         "testName": "測る前から汚れている木では、証跡を作らない（R25-002）",
-        "diagnosticMarker": "汚れた木で走り切っている"
+        "diagnosticMarker": "GXS_MARK.W06"
       }
     },
     {
@@ -1754,11 +1754,11 @@
       "file": "scripts/run-mutations.mjs",
       "find": "  evidenceEligible: !allowDirty && provenance.workingTreeDirty === false,",
       "replace": "  evidenceEligible: true,",
-      "test": "test/mutation-runner.test.mjs",
+      "test": "test/mutation-evidence.test.mjs",
       "desc": "--allow-dirty の証跡も証拠だと言う",
       "expectedFailure": {
         "testName": "--allow-dirty で走らせた証跡は、証拠にしない（R25-002）",
-        "diagnosticMarker": "--allow-dirty で走らせたのに、証拠として使えることになっている"
+        "diagnosticMarker": "GXS_MARK.W07"
       }
     },
     {
@@ -1766,11 +1766,11 @@
       "file": "scripts/run-mutations.mjs",
       "find": "  spec: specPath, state: 'running', evidenceEligible: !allowDirty,",
       "replace": "  spec: specPath, state: 'complete', evidenceEligible: !allowDirty,",
-      "test": "test/mutation-runner.test.mjs",
+      "test": "test/mutation-evidence.test.mjs",
       "desc": "走っている最中の証跡を complete と書く",
       "expectedFailure": {
         "testName": "測り始める前に「走っている」と書く（R25-003）",
-        "diagnosticMarker": "走っている最中の state が違う: "
+        "diagnosticMarker": "GXS_MARK.W08"
       }
     },
     {
@@ -1782,7 +1782,7 @@
       "desc": "CIから証跡の外部検証を外す",
       "expectedFailure": {
         "testName": "CIが、変異の証跡を外から検証している（R25-003）",
-        "diagnosticMarker": "CIが証跡を外から検証していない（ランナーの終了コードだけを信じている）"
+        "diagnosticMarker": "GXS_MARK.W09"
       }
     },
     {
@@ -1794,7 +1794,7 @@
       "desc": "正本から degraded-state の用途を消す",
       "expectedFailure": {
         "testName": "案内の用途が、実挙動と一致している（R25-004）",
-        "diagnosticMarker": "'popup_opened_without_esc_tracking',"
+        "diagnosticMarker": "GXS_MARK.W10"
       }
     },
     {
@@ -1806,7 +1806,7 @@
       "desc": "README(英)のEscを無条件へ戻す",
       "expectedFailure": {
         "testName": "Escが効く条件が、すべての面で同じことを言っている（R25-004）",
-        "diagnosticMarker": " が Esc の条件を無条件のまま書いている（「"
+        "diagnosticMarker": "GXS_MARK.SHARED_11"
       }
     },
     {
@@ -1818,7 +1818,7 @@
       "desc": "README(日)のEscを無条件へ戻す",
       "expectedFailure": {
         "testName": "Escが効く条件が、すべての面で同じことを言っている（R25-004）",
-        "diagnosticMarker": " が Esc の条件を無条件のまま書いている（「"
+        "diagnosticMarker": "GXS_MARK.SHARED_11"
       }
     },
     {
@@ -1830,7 +1830,7 @@
       "desc": "申告から degraded-state 通知を落とす",
       "expectedFailure": {
         "testName": "案内の用途が、実挙動と一致している（R25-004）",
-        "diagnosticMarker": "Website content の説明が、degraded-state の案内を覆っていない"
+        "diagnosticMarker": "GXS_MARK.W13"
       }
     },
     {
@@ -1838,11 +1838,107 @@
       "file": "scripts/run-mutations.mjs",
       "find": "    writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\\n');\n    renameSync(tmp, receiptPath);",
       "replace": "    writeFileSync(receiptPath, JSON.stringify(obj, null, 2) + '\\n');",
-      "test": "test/mutation-runner.test.mjs",
+      "test": "test/mutation-evidence.test.mjs",
       "desc": "証跡を直接上書きする（原子的な置換をやめる）",
       "expectedFailure": {
         "testName": "証跡は一時ファイル経由で置き換える（R25-003）",
-        "diagnosticMarker": "証跡を直接上書きしている（途中の状態が読まれうる）"
+        "diagnosticMarker": "GXS_MARK.W14"
+      }
+    },
+    {
+      "id": "Y01",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (typeof marker !== 'string' || !MARKER_RE.test(marker)) {",
+      "replace": "  if (typeof marker !== 'string') {",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "目印の形を問わない（一般的な文言を通す）",
+      "expectedFailure": {
+        "testName": "Node が自動で出す文言は、目印にできない（R26-001）",
+        "diagnosticMarker": "GXS_MARK.SHARED_19"
+      }
+    },
+    {
+      "id": "Y02",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (maskSecrets(marker, 4096) !== marker) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "目印が伏字で消えても受け取る",
+      "expectedFailure": {
+        "testName": "伏字で消える形の目印は、走らせる前に断る（R26-001）",
+        "diagnosticMarker": "GXS_MARK.MASK_BEFORE_RUN"
+      }
+    },
+    {
+      "id": "Y03",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (!savedBody.includes(marker)) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "証跡に残らない目印でも検知にする",
+      "expectedFailure": {
+        "testName": "伏字で消える目印は、証拠にならないので検知にしない（R26-001）",
+        "diagnosticMarker": "GXS_MARK.SHARED_20"
+      }
+    },
+    {
+      "id": "Y04",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (!spanText.includes(marker)) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "目印を対象テストの範囲で確かめない",
+      "expectedFailure": {
+        "testName": "目印は、そのテストの本文の中だけで探す（R25-001）",
+        "diagnosticMarker": "GXS_MARK.Y04"
+      }
+    },
+    {
+      "id": "Y05",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  const markerCount = countInFile(m.test, marker);",
+      "replace": "  const markerCount = 1;",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "目印の一意性を、ファイル全体で見ない",
+      "expectedFailure": {
+        "testName": "目印がテスト内で一意でなければ、測れない（R25-001）",
+        "diagnosticMarker": "GXS_MARK.SHARED_18"
+      }
+    },
+    {
+      "id": "Y06",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  return src === null ? 0 : countDeclaredTestName(src, want);",
+      "replace": "  return src === null ? 0 : src.split(`test('${want}'`).length - 1;",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "題材の中のテスト宣言を、本物として数える",
+      "expectedFailure": {
+        "testName": "題材として書いたテスト宣言を、本物と数えない（R26-001）",
+        "diagnosticMarker": "GXS_MARK.DECL_REAL"
+      }
+    },
+    {
+      "id": "Y07",
+      "file": "scripts/lib/marker-format.mjs",
+      "find": "export const MARKER_RE = /^GXS_MARK\\.[A-Z0-9_]{2,}(?:\\.[A-Z0-9_]+)*$/;",
+      "replace": "export const MARKER_RE = /^.+$/;",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "予約形を、何でも通る形にする",
+      "expectedFailure": {
+        "testName": "Node が自動で出す文言は、目印にできない（R26-001）",
+        "diagnosticMarker": "GXS_MARK.SHARED_19"
+      }
+    },
+    {
+      "id": "Y08",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  const nameCount = countTestName(m.test, want0);",
+      "replace": "  const nameCount = 1;",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "同名テストの検査を、目印より後ろへ戻す",
+      "expectedFailure": {
+        "testName": "同じ名前のテストが2つ落ちたら、どれが落ちたか決まらない（R24-001）",
+        "diagnosticMarker": "GXS_MARK.SHARED_16"
       }
     }
   ]

@@ -421,7 +421,7 @@ test('owner単位の拒否をやめた3語が、実在のリポジトリを共�
   for (const u of ['https://github.com/user/bitmap-fonts',
                    'https://github.com/devices/submit-site-to-marginalia-search',
                    'https://github.com/password/python-code-shifter']) {
-    assert.ok(GXS.buildShare(u), `実在のリポジトリを拒否している: ${u}`);
+    assert.ok(GXS.buildShare(u), `GXS_MARK.M22 実在のリポジトリを拒否している: ${u}`);
   }
   /*
    * 外しても本物の認証ルートが漏れないこと。
@@ -435,7 +435,7 @@ test('owner単位の拒否をやめた3語が、実在のリポジトリを共�
     assert.ok(!words.includes(gone), `${gone} が一覧に残っている`);
   }
   for (const kept of ['login', 'settings', 'password_reset', 'oauth', 'auth']) {
-    assert.ok(words.includes(kept), `認証系を守る語が消えている: ${kept}`);
+    assert.ok(words.includes(kept), `GXS_MARK.M23 認証系を守る語が消えている: ${kept}`);
   }
   assert.equal(GXS.buildShare('https://github.com/password_reset/x'), null,
     'アンダースコアを含む名前が所有者名として通っている');

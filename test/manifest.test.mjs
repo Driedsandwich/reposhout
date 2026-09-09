@@ -176,7 +176,7 @@ test('CIワークフローが供給網の最低条件を満たす', () => {
   assert.ok(uses.length >= 3, `uses が少なすぎる: ${uses.length}`);
   for (const u of uses) {
     // 可変タグ（@v7）は付け替えられるので、完全なcommit SHAで固定する
-    assert.match(u, /@[0-9a-f]{40}$/, `commit SHA で固定されていない: ${u}`);
+    assert.match(u, /@[0-9a-f]{40}$/, `GXS_MARK.M33 commit SHA で固定されていない: ${u}`);
   }
   assert.match(wf, /^permissions:\n  contents: read$/m, 'permissions: contents: read が無い');
   assert.match(wf, /timeout-minutes:\s*\d+/, 'timeout-minutes が無い');
@@ -220,7 +220,7 @@ test('PRのCIは提出候補の成果物を残さない', () => {
      * 残してよいのは main への push だけ。
      */
     assert.match(step, /if:\s*github\.event_name\s*==\s*'push'\s*&&\s*github\.ref\s*==\s*'refs\/heads\/main'/,
-      'upload-artifact の条件が「main への push」に限定されていない');
+      'GXS_MARK.M32 upload-artifact の条件が「main への push」に限定されていない');
     assert.match(step, /name:\s*reposhout-package-\$\{\{\s*github\.sha\s*\}\}/,
       '成果物の名前にコミットが入っていない（どのコミット由来か辿れない）');
   }
@@ -325,7 +325,7 @@ test('成果物のアップロードは、1つ残らず「空なら失敗」に�
   for (const step of uploads) {
     const name = (step.match(/with:[\s\S]*?\bname:\s*([^\n]+)/) || [])[1] || '(名前不明)';
     assert.match(step, /if-no-files-found:\s*error/,
-      `空でも成功する成果物がある: ${name.trim()}`);
+      `GXS_MARK.N30 空でも成功する成果物がある: ${name.trim()}`);
   }
 });
 
@@ -350,7 +350,7 @@ test('変異対照の証跡は、作った場所と拾う場所が同じ（R22-0
   assert.ok(picked, 'アップロードが拾う場所を書いていない');
 
   assert.equal(picked.trim(), written.trim(),
-    `証跡を書く場所と拾う場所が違う: 書く=${written} / 拾う=${picked}`);
+    `GXS_MARK.N29 証跡を書く場所と拾う場所が違う: 書く=${written} / 拾う=${picked}`);
   /* 走らせるステップが先、拾うステップが後 */
   assert.ok(wf.indexOf(runStep) < wf.indexOf(upStep), '証跡を書く前に拾おうとしている');
   /* 失敗しても拾う（部分的な証跡も残す）が、**証跡自体が無いのは異常** */
@@ -388,7 +388,7 @@ test('CIが、変異の証跡を外から検証している（R25-003）', () =>
    */
   const wf = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8').replace(/\r\n/g, '\n');
   assert.match(wf, /verify-mutation-receipt\.mjs/,
-    'CIが証跡を外から検証していない（ランナーの終了コードだけを信じている）');
+    'GXS_MARK.W09 CIが証跡を外から検証していない（ランナーの終了コードだけを信じている）');
   assert.match(wf, /--expected-commit/,
     '証跡がどのコミットを測ったかを、CIが突き合わせていない');
   /* 提出候補は、3つのジョブが通ってからでないと作らない */
