@@ -1940,6 +1940,126 @@
         "testName": "同じ名前のテストが2つ落ちたら、どれが落ちたか決まらない（R24-001）",
         "diagnosticMarker": "GXS_MARK.SHARED_16"
       }
+    },
+    {
+      "id": "S16",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (shard) return shardOf(m.id, shard.total) === shard.index - 1;",
+      "replace": "  if (shard) return true;",
+      "test": "test/mutation-shard.test.mjs",
+      "desc": "束の指定を無視して、毎回全件走らせる",
+      "expectedFailure": {
+        "testName": "束は、正本をちょうど1回ずつ覆う（R26-002）",
+        "diagnosticMarker": "GXS_MARK.SHARD_ONCE"
+      }
+    },
+    {
+      "id": "S17",
+      "file": "scripts/run-mutations.mjs",
+      "find": "  if (onlyId) {\n    console.error('--id と --shard は同時に使えない（何を測ったか決まらない）');",
+      "replace": "  if (false) {\n    console.error('--id と --shard は同時に使えない（何を測ったか決まらない）');",
+      "test": "test/mutation-shard.test.mjs",
+      "desc": "--id と --shard の同時指定を許す",
+      "expectedFailure": {
+        "testName": "束の指定がおかしければ、1件も測らない（R26-002）",
+        "diagnosticMarker": "GXS_MARK.SHARD_NOT_WITH_ID"
+      }
+    },
+    {
+      "id": "S18",
+      "file": "scripts/lib/shard.mjs",
+      "find": "  if (!Number.isInteger(index) || index < 1 || index > total) {",
+      "replace": "  if (false) {",
+      "test": "test/mutation-shard.test.mjs",
+      "desc": "束の番号の範囲を見ない",
+      "expectedFailure": {
+        "testName": "束の指定がおかしければ、1件も測らない（R26-002）",
+        "diagnosticMarker": "GXS_MARK.SHARD_RANGE"
+      }
+    },
+    {
+      "id": "S20",
+      "file": "scripts/verify-mutation-coverage.mjs",
+      "find": "    need(missingShards.length === 0, `走っていない束がある: ${missingShards.join(' ')}`);",
+      "replace": "    need(true, `走っていない束がある: ${missingShards.join(' ')}`);",
+      "test": "test/mutation-shard.test.mjs",
+      "desc": "走っていない束があっても通す",
+      "expectedFailure": {
+        "testName": "覆えていない束は拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.COV_GUARD"
+      }
+    },
+    {
+      "id": "S21",
+      "file": "scripts/verify-mutation-coverage.mjs",
+      "find": "  need(twice.length === 0,",
+      "replace": "  need(true,",
+      "test": "test/mutation-shard.test.mjs",
+      "desc": "同じ変異が2度測られていても通す",
+      "expectedFailure": {
+        "testName": "覆えていない束は拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.COV_GUARD"
+      }
+    },
+    {
+      "id": "S22",
+      "file": "scripts/verify-mutation-coverage.mjs",
+      "find": "    need(wrong.length === 0, `違う束で測られた変異がある: ${wrong.slice(0, 10).join(' ')}`);",
+      "replace": "    need(true, `違う束で測られた変異がある: ${wrong.slice(0, 10).join(' ')}`);",
+      "test": "test/mutation-shard.test.mjs",
+      "desc": "違う束で測られていても通す",
+      "expectedFailure": {
+        "testName": "覆えていない束は拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.COV_GUARD"
+      }
+    },
+    {
+      "id": "S23",
+      "file": "scripts/verify-mutation-coverage.mjs",
+      "find": "    need(vals.size === 1 && one !== undefined && one !== null,",
+      "replace": "    need(true,",
+      "test": "test/mutation-shard.test.mjs",
+      "desc": "別々の版の証跡を寄せ集めても通す",
+      "expectedFailure": {
+        "testName": "覆えていない束は拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.COV_GUARD"
+      }
+    },
+    {
+      "id": "S24",
+      "file": "scripts/verify-mutation-coverage.mjs",
+      "find": "  if (!existsSync(p)) { problems.push(`証跡が無い: ${p}`); continue; }",
+      "replace": "  if (!existsSync(p)) { continue; }",
+      "test": "test/mutation-shard.test.mjs",
+      "desc": "証跡が無くても通す",
+      "expectedFailure": {
+        "testName": "証跡が1枚も無ければ拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.COV_MISSING"
+      }
+    },
+    {
+      "id": "S25",
+      "file": "scripts/verify-mutation-coverage.mjs",
+      "find": "  need(missing.length === 0, `一度も測っていない変異がある: ${missing.slice(0, 20).join(' ')}`);",
+      "replace": "  need(false, `一度も測っていない変異がある: ${missing.slice(0, 20).join(' ')}`);",
+      "test": "test/mutation-shard.test.mjs",
+      "desc": "揃った束も拒む（対照が成立しない）",
+      "expectedFailure": {
+        "testName": "揃った束は通す（R26-002の対照）",
+        "diagnosticMarker": "GXS_MARK.COV_OK"
+      }
+    },
+    {
+      "id": "S27",
+      "file": ".github/workflows/ci.yml",
+      "find": "node scripts/verify-mutation-coverage.mjs \\",
+      "replace": "node -e 'process.exit(0)' \\",
+      "test": "test/manifest.test.mjs",
+      "desc": "CIから、束を数え直す段を外す",
+      "expectedFailure": {
+        "testName": "CIが、変異の証跡を外から検証している（R25-003）",
+        "diagnosticMarker": "GXS_MARK.W15"
+      }
     }
   ]
 }

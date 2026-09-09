@@ -57,6 +57,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, isAbsolute, resolve, relative, basename } from 'node:path';
 import { countTestName as countDeclaredTestName, testSpanText } from './lib/test-decls.mjs';
 import { MARKER_PREFIX, MARKER_RE } from './lib/marker-format.mjs';
+import { parseShard, shardOf } from './lib/shard.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const RUNNER_FILE = fileURLToPath(import.meta.url);
@@ -70,7 +71,7 @@ const sha = (s) => createHash('sha256').update(s).digest('hex');
  *   ・知らない綴りの引数は黙って無視される
  * 上限は有限の正整数だけ。知らない引数は受け取らない。
  */
-const KNOWN_FLAGS = ['--id', '--receipt', '--spec', '--timeout'];
+const KNOWN_FLAGS = ['--id', '--receipt', '--spec', '--timeout', '--shard'];
 const KNOWN_SWITCHES = ['--allow-dirty'];
 /* 目印の形は `scripts/lib/marker-format.mjs` に1つだけ置く（第26回監査 R26-001） */
 const MAX_TIMEOUT_MS = 3600000;
@@ -165,9 +166,33 @@ if (dupIds.length) {
   process.exit(2);
 }
 
-const mutations = spec.mutations.filter((m) => !onlyId || m.id === onlyId);
+/*
+ * 束に分けて走らせる（第26回監査 R26-002 §11）。
+ * ⚠️ **代表を選ぶのではない。** 全部の束を必ず走らせ、
+ * 読む側（検証器）が「どのIDもちょうど1回」を自分で数え直す。
+ * ⚠️ `--id` と併用させない——1件だけ測っているのか束を測っているのか、
+ * 証跡から決まらなくなる。
+ */
+let shard = null;
+if (parsed.out['--shard'] !== undefined) {
+  if (onlyId) {
+    console.error('--id と --shard は同時に使えない（何を測ったか決まらない）');
+    process.exit(2);
+  }
+  const s = parseShard(parsed.out['--shard']);
+  if (s.error) { console.error(s.error); process.exit(2); }
+  shard = s;
+}
+
+const mutations = spec.mutations.filter((m) => {
+  if (onlyId) return m.id === onlyId;
+  if (shard) return shardOf(m.id, shard.total) === shard.index - 1;
+  return true;
+});
 if (!mutations.length) {
-  console.error(`変異が1件も選ばれていない（--id ${onlyId}）`);
+  console.error(shard
+    ? `変異が1件も選ばれていない（--shard ${shard.index}/${shard.total}）`
+    : `変異が1件も選ばれていない（--id ${onlyId}）`);
   process.exit(2);
 }
 
@@ -964,6 +989,7 @@ if (workspaceUnchanged === false) {
 const summary = {
   spec: specPath, state: 'complete',
   evidenceEligible: !allowDirty && provenance.workingTreeDirty === false,
+  shard,
   total: results.length,
   applied_and_killed: killed.length, applied_but_survived: survived.length,
   not_applied: notApplied.length, runner_error: errors.length,

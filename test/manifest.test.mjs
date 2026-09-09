@@ -391,7 +391,22 @@ test('CIが、変異の証跡を外から検証している（R25-003）', () =>
     'GXS_MARK.W09 CIが証跡を外から検証していない（ランナーの終了コードだけを信じている）');
   assert.match(wf, /--expected-commit/,
     '証跡がどのコミットを測ったかを、CIが突き合わせていない');
-  /* 提出候補は、3つのジョブが通ってからでないと作らない */
-  assert.match(wf, /needs:\s*\[test, windows, mutations\]/,
+  /* 提出候補は、単体・Windows・変異（の全束）が通ってからでないと作らない */
+  assert.match(wf, /needs:\s*\[test, windows, mutation-coverage\]/,
     '提出候補を作るジョブが、単体・Windows・変異の全部を待っていない');
+  /*
+   * ⚠️ **束に分けたら、覆えているかを数え直す段が要る。**（第26回監査 R26-002 §11）
+   * 束を1つ落としても、束の中身が重なっても、走った側の証跡はどれも「完了」に見える。
+   * 数え直す段が needs から外れると、提出候補は**測れていない変異があるまま**作られる。
+   */
+  assert.match(wf, /verify-mutation-coverage\.mjs/,
+    'GXS_MARK.W15 束が全体を覆えているかを、CIが数え直していない');
+  assert.match(wf, /needs:\s*\[mutations\]/,
+    '数え直すジョブが、束のジョブを待っていない');
+  assert.match(wf, /--shard \$\{\{ matrix\.shard \}\}\/6/,
+    '束の番号と総数が、matrix と噛み合っていない');
+  const shards = /shard:\s*\[([^\]]+)\]/.exec(wf);
+  assert.ok(shards, '束の一覧が matrix に無い');
+  assert.equal(shards[1].split(',').length, 6,
+    `束の数が --shard の総数と合っていない: ${shards[1]}`);
 });
