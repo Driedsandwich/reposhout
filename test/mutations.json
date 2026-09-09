@@ -1942,6 +1942,126 @@
       }
     },
     {
+      "id": "Y09",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "find": "for (const k of REQUIRED_PROVENANCE) {",
+      "replace": "for (const k of []) {",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "由来の欄が欠けていても通す",
+      "expectedFailure": {
+        "testName": "改竄した証跡を、項目ごとに拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.VR02"
+      }
+    },
+    {
+      "id": "Y10",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "find": "  need(prov.runnerSha256 === sha256(readFileSync(runnerAbs, 'utf8')),",
+      "replace": "  need(true,",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "ランナーのハッシュを実物と比べない",
+      "expectedFailure": {
+        "testName": "改竄した証跡を、項目ごとに拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.VR02"
+      }
+    },
+    {
+      "id": "Y11",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "find": "  need(prov.sourceTree === headTree,",
+      "replace": "  need(true,",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "tree を実物と比べない",
+      "expectedFailure": {
+        "testName": "改竄した証跡を、項目ごとに拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.VR02"
+      }
+    },
+    {
+      "id": "Y12",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "find": "    w(gf.diagnosticMarker === ef.diagnosticMarker,",
+      "replace": "    w(true,",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "宣言を、いまの正本と突き合わせない",
+      "expectedFailure": {
+        "testName": "改竄した証跡を、項目ごとに拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.VR02"
+      }
+    },
+    {
+      "id": "Y13",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "find": "    w(typeof x.matchedBody === 'string' && x.matchedBody.includes(marker),",
+      "replace": "    w(typeof x.matchedBody === 'string' && x.matchedBody.length > 0,",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "残された本文に目印があるかを見ない",
+      "expectedFailure": {
+        "testName": "改竄した証跡を、項目ごとに拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.VR02"
+      }
+    },
+    {
+      "id": "Y14",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "find": "  w(x.actualFailureKind === wantKind,",
+      "replace": "  w(true,",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "落ち方が宣言と合っているかを見ない",
+      "expectedFailure": {
+        "testName": "改竄した証跡を、項目ごとに拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.VR02"
+      }
+    },
+    {
+      "id": "Y15",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "find": "  w(x.timedOut === false, `上限で打ち切られている: ${JSON.stringify(x.timedOut)}`);",
+      "replace": "  w(true, `上限で打ち切られている: ${JSON.stringify(x.timedOut)}`);",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "上限で打ち切られた結果も通す",
+      "expectedFailure": {
+        "testName": "改竄した証跡を、項目ごとに拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.VR02"
+      }
+    },
+    {
+      "id": "Y16",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "find": "  const b = baseByTest.get(t);",
+      "replace": "  const b = baseByTest.get(t) || { passed: true, stdoutSha256: 'a'.repeat(64) };",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "変異前の対照が対象テストを覆っているかを見ない",
+      "expectedFailure": {
+        "testName": "改竄した証跡を、項目ごとに拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.VR02"
+      }
+    },
+    {
+      "id": "Y17",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "find": "need(r.currentMutationId === null || r.currentMutationId === undefined,",
+      "replace": "need(true,",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "進み具合の矛盾を見ない",
+      "expectedFailure": {
+        "testName": "改竄した証跡を、項目ごとに拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.VR02"
+      }
+    },
+    {
+      "id": "Y18",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "find": "  if (rest.length > 1) return { error: `証跡のパスが ${rest.length} 個ある` };",
+      "replace": "  if (false) return { error: `証跡のパスが ${rest.length} 個ある` };",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "証跡のパスを2つ受け取る",
+      "expectedFailure": {
+        "testName": "引数を厳格に読む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.Y18"
+      }
+    },
+    {
       "id": "S16",
       "file": "scripts/run-mutations.mjs",
       "find": "  if (shard) return shardOf(m.id, shard.total) === shard.index - 1;",
@@ -2047,6 +2167,18 @@
       "expectedFailure": {
         "testName": "揃った束は通す（R26-002の対照）",
         "diagnosticMarker": "GXS_MARK.COV_OK"
+      }
+    },
+    {
+      "id": "S26",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "find": "    const outside = [...ids].filter((id) => !expectedIds.includes(id));",
+      "replace": "    const outside = [];",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "束の外のIDが混ざっていても通す",
+      "expectedFailure": {
+        "testName": "束の証跡は、その束に属する変異だけを持つ（R26-002）",
+        "diagnosticMarker": "GXS_MARK.VR07"
       }
     },
     {
