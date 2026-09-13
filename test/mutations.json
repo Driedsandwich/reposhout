@@ -1355,7 +1355,7 @@
     {
       "id": "Q02",
       "file": "scripts/run-mutations.mjs",
-      "find": "const isAssertionFailure = (f) => !!f && (f.errName === 'AssertionError' || f.code === 'ERR_ASSERTION');",
+      "find": "const isAssertionFailure = (f) => !!f && f.errName === 'AssertionError' && f.code === 'ERR_ASSERTION';",
       "replace": "const isAssertionFailure = (f) => !!f;",
       "test": "test/mutation-runner.test.mjs",
       "desc": "なんでも assertion とみなす",

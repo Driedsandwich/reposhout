@@ -77,6 +77,69 @@ test('名前が合っていても、assertion で落ちていなければ検知�
   assert.equal(of(r, 'Q2').actualFailureKind, 'assertion');
 });
 
+test('落ちた値が診断の YAML に見えても、落ち方を取り違えない（R26-002の作業中に発見）', () => {
+  /*
+   * ⚠️ **第26回監査 R26-002 の作業中に発見。** TAP の診断は
+   *     code: 'ERR_ASSERTION'
+   *     name: 'AssertionError'
+   *     actual: |-
+   *       …落ちた値…
+   * の形で出る。`actual: |-` の本文が YAML やソースだと、中に `name:` や
+   * `code:` の行が入る。字下げを見ずに拾っていたので、**本文の値が
+   * 落ち方を上書き**していた。本番の189件で5件（N30・M32・W09・S27・W14）が
+   * これを踏み、ランナーは「検知」、外の検証器は「証拠にならない」と読んだ。
+   */
+  const dir = makeFixture([
+    mut('Y1', { test: 'test/yamlish.test.mjs',
+      expectedFailure: { testName: '診断に見える本文で落ちる検査' } }),
+    mut('Y2', { test: 'test/yamlish-code.test.mjs',
+      expectedFailure: { testName: '診断の code に見える本文で落ちる検査' } }),
+    mut('Y3')   /* 対照: 落ちた値が短い、ふつうの assertion */
+  ]).dir;
+  const r = runRunner(dir);
+  assert.ok(r.receipt, `証跡が残っていない:\n${r.stdout}`);
+  for (const id of ['Y1', 'Y2', 'Y3']) {
+    const one = of(r, id);
+    const det = one.expectedFailureDetail || {};
+    assert.equal(det.errName, 'AssertionError',
+      `GXS_MARK.TAPKEY_NAME ${id}: 落ちた値の本文で errName が上書きされている: ${JSON.stringify(det)}`);
+    assert.equal(det.code, 'ERR_ASSERTION',
+      `GXS_MARK.TAPKEY_CODE ${id}: 落ちた値の本文で code が上書きされている: ${JSON.stringify(det)}`);
+    assert.equal(det.failureType, 'testCodeFailure',
+      `${id}: failureType が上書きされている: ${JSON.stringify(det)}`);
+    assert.equal(one.actualFailureKind, 'assertion', `${id}: 落ち方を assertion と読めていない`);
+    assert.equal(one.outcome, 'applied_and_killed', `${id}: 検知になっていない`);
+  }
+});
+
+test('assertion を名乗るだけの失敗を検知にしない（R26-002の作業中に発見）', () => {
+  /*
+   * `code` と `name` の**両方**が揃って初めて assertion と認める。
+   * 以前は片方だけ（OR）で認めていたので、`e.code = 'ERR_ASSERTION'` を
+   * 持たせた TypeError でも「守りたい assertion が落ちた」ことになっていた。
+   * 外の検証器（verify-mutation-receipt.mjs）は両方を求めるので、揃えないと
+   * 同じ証跡を片方が通し片方が拒む。
+   */
+  const dir = makeFixture([
+    mut('F1', { test: 'test/fake-assertion.test.mjs',
+      expectedFailure: { testName: '名前だけ AssertionError の検査' } }),
+    mut('F2', { test: 'test/fake-assertion.test.mjs',
+      expectedFailure: { testName: 'code だけ ERR_ASSERTION の検査' } }),
+    mut('F3')   /* 対照: 本物の assertion */
+  ]).dir;
+  const r = runRunner(dir);
+  assert.ok(r.receipt, `証跡が残っていない:\n${r.stdout}`);
+  assert.equal(outcomeOf(r, 'F1'), 'runner_error',
+    `GXS_MARK.TAPAND_NAME 名前だけ AssertionError を検知にしている: ${outcomeOf(r, 'F1')}`);
+  assert.equal(of(r, 'F1').actualFailureKind, 'AssertionError');
+  assert.equal(outcomeOf(r, 'F2'), 'runner_error',
+    `GXS_MARK.TAPAND_CODE code だけ ERR_ASSERTION を検知にしている: ${outcomeOf(r, 'F2')}`);
+  assert.equal(of(r, 'F2').actualFailureKind, 'TypeError');
+  /* 対照が無いと、単に全部を落としているのか区別できない */
+  assert.equal(outcomeOf(r, 'F3'), 'applied_and_killed');
+  assert.equal(of(r, 'F3').actualFailureKind, 'assertion');
+});
+
 test('同じ名前のテストが2つ落ちたら、どれが落ちたか決まらない（R24-001）', () => {
   /*
    * 守りたい方は通り、**無関係な同名だけ**が落ちても、名前の一致は成立してしまう。

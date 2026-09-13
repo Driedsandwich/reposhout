@@ -418,10 +418,27 @@ const NOT_OK = /^(\s*)not ok \d+ - (.+?)\s*$/gm;
  *
  * TAP は `not ok` の直後の YAML に `failureType` / `code` / `name` を書く。
  * そこまで読んで、`AssertionError`（`ERR_ASSERTION`）だけを検知として認める。
+ *
+ * ⚠️ **読むのは診断の最上位のキーだけ**（第26回監査 R26-002 の作業中に発見）。
+ * Node は落ちた値を `actual: |-` のブロックスカラーで出す。その本文が
+ * ワークフロー定義やソースだと、中に `name:` / `code:` の行が入る:
+ *
+ *     code: 'ERR_ASSERTION'
+ *     name: 'AssertionError'
+ *     actual: |-
+ *       with:
+ *         name: mutation-receipt-…      ← 字下げを見ないと、これをキーとして拾う
+ *
+ * 以前は `^name:` を字下げなしで拾っていたので、**本文の値が落ち方を上書き**
+ * していた。本番の189件のうち5件（N30・M32・W09・S27 は ci.yml、W14 は
+ * ランナー自身の本文）がこれを踏み、ランナーは「検知」、外の検証器は
+ * 「assertion として落ちたことになっていない」と読んだ＝CI が進めなくなった。
+ * 診断は `---` で開き `...` で閉じる。**開きと同じ字下げの行だけ**をキーにする。
  */
 function failureDetails(output) {
   const lines = output.split('\n');
   const out = [];
+  const indentOf = (l) => l.length - l.trimStart().length;
   for (let i = 0; i < lines.length; i++) {
     const m = /^(\s*)not ok \d+ - (.+?)\s*$/.exec(lines[i]);
     if (!m) continue;
@@ -431,33 +448,51 @@ function failureDetails(output) {
      * ⚠️ **その `not ok` の中だけ**を読む（第25回監査 R25-001）。
      * 目印を出力全体から探すと、別のテストが出した同じ文字列で満たされてしまう。
      */
-    const body = [];
-    let inError = false, errIndent = 0;
-    for (let j = i + 1; j < lines.length; j++) {
-      const l = lines[j];
-      if (!l.trim()) { if (inError) body.push(''); continue; }
-      const ind = l.length - l.trimStart().length;
-      if (ind <= indent && !/^\s*(---|\.\.\.)\s*$/.test(l)) break;
-      const t = l.trim();
-      if (inError) {
-        /* error: |- の続き。より浅い字下げのキーが来たら終わり */
-        if (ind > errIndent) { body.push(l.slice(errIndent + 2)); continue; }
+    let j = i + 1;
+    while (j < lines.length && !lines[j].trim()) j++;
+    const open = j < lines.length ? /^(\s*)---\s*$/.exec(lines[j]) : null;
+    /* 診断が付いていない `not ok` は、落ち方を何も名乗れない（＝検知にしない） */
+    if (open && open[1].length > indent) {
+      const keyIndent = open[1].length;
+      const body = [];
+      let inError = false;
+      for (let k = j + 1; k < lines.length; k++) {
+        const l = lines[k];
+        const t = l.trim();
+        if (!t) { if (inError) body.push(''); continue; }
+        const ind = indentOf(l);
+        /*
+         * キーより深い行は、キーではなく**値の中身**（ブロックスカラー・入れ子）。
+         * `error:` のブロックスカラーのときだけ本文として拾い、他は読み飛ばす。
+         */
+        if (ind > keyIndent) { if (inError) body.push(l.slice(keyIndent + 2)); continue; }
         inError = false;
+        if (ind < keyIndent || t === '...' || t === '---') break;
+        let g;
+        if (/^error:\s*[|>][-+]?\s*$/.test(t)) { inError = true; continue; }
+        if ((g = /^error:\s*(.+)$/.exec(t))) body.push(g[1].replace(/^'|'$/g, ''));
+        else if ((g = /^failureType:\s*'?([^']+)'?/.exec(t))) rec.failureType = g[1];
+        else if ((g = /^code:\s*'?([^']+)'?/.exec(t))) rec.code = g[1];
+        else if ((g = /^name:\s*'?([^']+)'?/.exec(t))) rec.errName = g[1];
       }
-      let g;
-      if (/^error:\s*\|-?\s*$/.test(t)) { inError = true; errIndent = ind; continue; }
-      if ((g = /^error:\s*(.+)$/.exec(t))) body.push(g[1].replace(/^'|'$/g, ''));
-      else if ((g = /^failureType:\s*'?([^']+)'?/.exec(t))) rec.failureType = g[1];
-      else if ((g = /^code:\s*'?([^']+)'?/.exec(t))) rec.code = g[1];
-      else if ((g = /^name:\s*'?([^']+)'?/.exec(t))) rec.errName = g[1];
-      if (/^\.\.\.$/.test(t) && ind <= indent + 2) break;
+      rec.body = body.join('\n');
     }
-    rec.body = body.join('\n');
     out.push(rec);
   }
   return out;
 }
-const isAssertionFailure = (f) => !!f && (f.errName === 'AssertionError' || f.code === 'ERR_ASSERTION');
+/*
+ * ⚠️ **`code` と `name` の両方**が揃って初めて assertion と認める（第26回監査 R26-002 の作業中に発見）。
+ * 以前は OR で、片方だけで認めていた。外から読む検証器
+ * （verify-mutation-receipt.mjs）は AND なので、同じ証跡をランナーは「検知」、
+ * 検証器は「証拠にならない」と読む——片方だけ直しても噛み合わない。
+ * **厳しい側（AND）へ揃える**: Node 22.22.3 実測で、assert.ok / strictEqual /
+ * deepStrictEqual / match / fail / throws はどれも `code: 'ERR_ASSERTION'` と
+ * `name: 'AssertionError'` を必ず両方出す。片方だけの失敗は assertion を
+ * 名乗るだけの別の例外（`e.code = 'ERR_ASSERTION'` を持たせた TypeError 等）で、
+ * 守りたい assertion は一度も走っていない。
+ */
+const isAssertionFailure = (f) => !!f && f.errName === 'AssertionError' && f.code === 'ERR_ASSERTION';
 
 /*
  * 実際の落ち方を、宣言できる語へ落とす。

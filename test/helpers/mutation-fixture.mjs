@@ -144,6 +144,72 @@ test('例外で落ちる検査', () => {
   assert.ok(true, 'GXS_MARK.THROWS: ここまで来たら題材が壊れている');
 });
 `);
+  /*
+   * 落ちた値が **YAML の診断に見える** 題材（第26回監査 R26-002 の作業中に発見）。
+   * `assert.match` が落ちると、Node は照合した文字列を `actual: |-` の
+   * ブロックスカラーで出す。その本文に `name:` の行が入っていると、
+   * 字下げを見ない解析は**それを診断の最上位のキーと取り違える**——
+   * 落ち方が `AssertionError` から本文の値へ化ける。
+   * ⚠️ 本番で実際にこれを踏んだ（N30・M32・W09・S27 は ci.yml、W14 は
+   * ランナー自身の本文。189件のうち5件の証跡が「証拠にならない」になった）。
+   */
+  writeFileSync(join(dir, 'test/yamlish.test.mjs'), `
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+const body = readFileSync(new URL('../mod.mjs', import.meta.url), 'utf8');
+const HAYSTACK = [
+  'steps:',
+  '  - uses: actions/upload-artifact@v4',
+  '    with:',
+  '      name: GXS_LIE_NAME',
+  '      path: out.json'
+].join('\\n');
+test('診断に見える本文で落ちる検査', () => {
+  assert.match(HAYSTACK, new RegExp(body.includes('99') ? 'NEVER_MATCHES_ANYTHING' : 'steps'),
+    'GXS_MARK.YAMLISH 診断に見える本文');
+});
+`);
+  /*
+   * 落ちた値の中に `code:` の行が入る題材（第26回監査 R26-002 の作業中に発見）。
+   * `name:` 側と `code:` 側は別々に化けるので、両方を題材で持つ。
+   */
+  writeFileSync(join(dir, 'test/yamlish-code.test.mjs'), `
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+const body = readFileSync(new URL('../mod.mjs', import.meta.url), 'utf8');
+const HAYSTACK = [
+  'const rec = {',
+  '  code: hits[0].code, errName: hits[0].errName },',
+  '};'
+].join('\\n');
+test('診断の code に見える本文で落ちる検査', () => {
+  assert.match(HAYSTACK, new RegExp(body.includes('99') ? 'NEVER_MATCHES_ANYTHING' : 'const rec'),
+    'GXS_MARK.YAMLISHCODE 診断の code に見える本文');
+});
+`);
+  /*
+   * **assertion を名乗るだけ**の失敗（第26回監査 R26-002 の作業中に発見）。
+   * `code` と `name` の片方だけが assertion の値を持つ例外を投げる。
+   * 守りたい assertion は一度も走っていないので、検知にしてはいけない。
+   */
+  writeFileSync(join(dir, 'test/fake-assertion.test.mjs'), `
+import test from 'node:test';
+import { readFileSync } from 'node:fs';
+const body = readFileSync(new URL('../mod.mjs', import.meta.url), 'utf8');
+function pretend(errName, code, marker) {
+  const e = new Error(marker + ' assertion を名乗るだけの失敗');
+  e.name = errName; e.code = code;
+  throw e;
+}
+test('名前だけ AssertionError の検査', () => {
+  if (body.includes('99')) pretend('AssertionError', 'ERR_INVALID_STATE', 'GXS_MARK.FAKENAME');
+});
+test('code だけ ERR_ASSERTION の検査', () => {
+  if (body.includes('99')) pretend('TypeError', 'ERR_ASSERTION', 'GXS_MARK.FAKECODE');
+});
+`);
   /* 同じ名前のテストが2つ——守りたい方は通り、無関係な同名だけが落ちる */
   writeFileSync(join(dir, 'test/dup.test.mjs'), `
 import test from 'node:test';
@@ -175,6 +241,10 @@ const FIXTURE_MARKERS = {
   '題材がふつうなら、ふつうに通る': 'GXS_MARK.BREAKS',
   '例外で落ちる検査': 'GXS_MARK.THROWS',
   '同じ名前': 'GXS_MARK.DUP',
+  '診断に見える本文で落ちる検査': 'GXS_MARK.YAMLISH',
+  '診断の code に見える本文で落ちる検査': 'GXS_MARK.YAMLISHCODE',
+  '名前だけ AssertionError の検査': 'GXS_MARK.FAKENAME',
+  'code だけ ERR_ASSERTION の検査': 'GXS_MARK.FAKECODE',
   '外にある、ふつうに通るテスト': 'GXS_MARK.OUTSIDE'
 };
 
