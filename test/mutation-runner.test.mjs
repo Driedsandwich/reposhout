@@ -208,15 +208,6 @@ test('証跡に、落ちた理由と落ちたテスト名が残る（R23-001）'
   /* 診断は伏せてから残す（絶対パスと長い列を出さない） */
   assert.ok(typeof one.sanitizedDiagnostic === 'string' && one.sanitizedDiagnostic.length > 0);
   /*
-   * ⚠️ 「/private/ か /Users/ か /home/ で始まるか」で見ていたが、使い捨ての
-   * 作業場は /var/folders/… なので**一度も当たらなかった**（変異 P08 が素通り）。
-   * 題材そのもののパスで見る——これなら環境によらず必ず当たる。
-   */
-  assert.ok(!one.sanitizedDiagnostic.includes(dir),
-    `診断に作業場の絶対パスが残っている: ${one.sanitizedDiagnostic.slice(0, 160)}`);
-  assert.match(one.sanitizedDiagnostic, /<path>/,
-    '伏せた印が無い＝そもそも伏せていない');
-  /*
    * ⚠️ **落ちた理由の本文まで入っていること。** 見出しの行だけを集めていた版では
    * 本文が1文字も入らず、下の「パスが残っていないか」が**当たるものが無いまま**
    * 通っていた（変異 P25 が素通りして分かった）。
@@ -230,8 +221,37 @@ test('証跡に、落ちた理由と落ちたテスト名が残る（R23-001）'
    */
   assert.ok(!one.sanitizedDiagnostic.includes('D:\\a\\repo'),
     `GXS_MARK.P25 Windows形式のパスが残っている: ${one.sanitizedDiagnostic.slice(0, 160)}`);
-  assert.ok(!one.sanitizedDiagnostic.includes('/var/tmp/repo'),
-    `GXS_MARK.P08 POSIX形式のパスが残っている: ${one.sanitizedDiagnostic.slice(0, 160)}`);
+  /*
+   * POSIX 形式のパスは**2つの検体**で見る。どちらも同じ1つの規則が伏せる。
+   *   ① 題材そのものの絶対パス（`location:` の行に出る）
+   *      ⚠️ 「/private/ か /Users/ か /home/ で始まるか」で見ていた版は、使い捨ての
+   *      作業場が /var/folders/… なので**一度も当たらなかった**（変異 P08 が素通り）。
+   *   ② 失敗の文へわざと混ぜた `/var/tmp/repo`
+   *
+   * ⚠️ **同じ性質を2本の assertion に分けない。** 分けていたとき、目印を持たない①が
+   * 先に落ちて、P08 は `marker_not_found`（＝結果が何も言えない）に化けた。しかも
+   * どちらが先に落ちるかは**作業場のパスの形**で変わる:
+   *   macOS の /var/folders/xx/<30字>/T/… は 24 文字以上の塊を含むので、別の規則
+   *   （`[A-Za-z0-9_-]{24,}` → `<token>`）が先に潰して①が通り、②で落ちる＝検知できた。
+   *   Linux の /tmp/reposhout-mut-xxxxxx/repo は 24 文字以上の塊が無いので潰れず、
+   *   ①が先に落ちる＝目印が本文に無い。**macOS では再現せず、Ubuntu の CI だけ赤**
+   *   になった（2026-09-14 に TMPDIR を短いパスへ振って両方を実測）。
+   * 目印は1ファイルに1個しか置けない（2個あると「どの assertion か決まらない」で
+   * ランナーが止まる）ので、**1本にまとめて**この1個に持たせる。
+   */
+  const posixLeaks = [['作業場の絶対パス', dir], ['失敗の文に混ぜたパス', '/var/tmp/repo']]
+    .filter(([, path]) => one.sanitizedDiagnostic.includes(path)).map(([label]) => label);
+  assert.ok(posixLeaks.length === 0,
+    `GXS_MARK.P08 POSIX形式のパスが残っている（${posixLeaks.join('・')}）: `
+    + one.sanitizedDiagnostic.slice(0, 160));
+  /*
+   * ⚠️ ここは**最後**に置く。伏字の規則はPOSIX用とWindows用の2つあり、どちらか
+   * 1つでも生きていれば `<path>` は出るので、**どの変異もここでは落ちない**
+   * （＝目印を付けても外しても落ちない）。手前に置くと、目印を持つ assertion より
+   * 先に落ちて結果を読めなくする側にだけ回る——それが上の①で起きたこと。
+   */
+  assert.match(one.sanitizedDiagnostic, /<path>/,
+    '伏せた印が無い＝そもそも伏せていない');
 });
 
 /* ============================================================
