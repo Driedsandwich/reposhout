@@ -13,18 +13,18 @@
     "",
     "history には、提出しないことにした成果物も理由つきで残す。"
   ],
-  "status": "ready",
+  "status": "pending_main_ci",
   "itemId": "joaipdjaiefbenoijcekdnjagiadikkd",
   "version": "1.1.8",
   "tag": null,
-  "sourceCommit": "e517976dd1d9e9fa2d08aaf0c17ee8771322dc0c",
-  "treeSha": "d04c9f9df86c5515647436d841675c8c51185837",
-  "runId": "31871301360",
-  "artifactName": "reposhout-package-e517976dd1d9e9fa2d08aaf0c17ee8771322dc0c",
+  "sourceCommit": null,
+  "treeSha": null,
+  "runId": null,
+  "artifactName": null,
   "innerName": "reposhout-1.1.8.zip",
-  "innerBytes": 45404,
-  "innerFiles": 11,
-  "innerSha256": "82439a7b52c89deabde4ad863dedc26e07315789230a646b81a3eea8be780896",
+  "innerBytes": null,
+  "innerFiles": null,
+  "innerSha256": null,
   "privacyPolicyUrl": "https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md",
   "confirmationTimeZone": "Asia/Tokyo",
   "note": "選ぶ基準は、上の構造化された欄（artifactName / innerSha256 / innerBytes / innerFiles）だけ。ここに run 番号・バイト数・ハッシュ・監査の回次を書き写さない（第20回監査 R20-004。写した値は成果物を差し替えても取り残され、どちらが正しいか分からなくなる）。この候補は、main への push で走った CI の成果物をダウンロードし、外側のハッシュが GitHub の API が申告する digest と一致することを確かめたうえで内側を実測し、同じコミットを独立にクローンして作り直したZIPとバイト一致することも確認して確定した。タグは外部監査に合格するまで打たない。却下した成果物は history にある。",
@@ -320,6 +320,26 @@
         "R25-004"
       ],
       "reason": "R25-001: テスト名と粗い種類だけでは、未処理のrejectionの中のAssertionErrorと、同じテスト内の別assertionだけが落ちた場合を、意図した検知と区別できなかった。R25-002: 測る前から作業ツリーが汚れていても、汚れたまま戻れば成功の証跡を作れた——sourceCommitが指すバイト列と、実際に測ったバイト列が違う。R25-003: process.on('exit') では SIGKILL 等に証跡を残せず、「どんな終わり方でも残す」は成立していなかった。CIの if-no-files-found: error の役割も無くなっていなかった。R25-004: 開いたあとの esc_unavailable 通知と、タブへ倒したときの扱いを、正本の一般欄・DATA_DISCLOSURE・README が覆っていなかった"
+    },
+    {
+      "version": "1.1.8",
+      "sourceCommit": "e517976dd1d9e9fa2d08aaf0c17ee8771322dc0c",
+      "treeSha": "d04c9f9df86c5515647436d841675c8c51185837",
+      "runId": "31871301360",
+      "artifactName": "reposhout-package-e517976dd1d9e9fa2d08aaf0c17ee8771322dc0c",
+      "innerName": "reposhout-1.1.8.zip",
+      "innerBytes": 45404,
+      "innerFiles": 11,
+      "innerSha256": "82439a7b52c89deabde4ad863dedc26e07315789230a646b81a3eea8be780896",
+      "status": "rejected_by_R26",
+      "auditRound": 26,
+      "findingIds": [
+        "R26-001",
+        "R26-002",
+        "R26-003",
+        "R26-004"
+      ],
+      "reason": "R26-001: P18/P19 の diagnosticMarker「xpected 」が対象 assertion ではなく、無関係な別テストの unexpected internal error で静的な一意性を満たし、Node が自動で出す Expected values… に偶然一致していた（153件中27件が対象テストの範囲外、10件は伏字で証跡から消えていた）。R26-002: 外部検証器が runner/spec/tree の由来・目印・落ち方・プロセスの終わり方を独立に照合せず、意味のある欄を壊した証跡も現行条件では受理できた。R26-003: 最初の running 証跡の書き込み失敗を無視し、進み具合の欄を更新せず、倒れたときの証跡が atomic でなく state も持っていなかった。R26-004: parseArgs が --allow-dirty を --receipt 等の値として受け取り、その名前のファイルを作っていた（実測で再現）。"
     }
   ]
 }

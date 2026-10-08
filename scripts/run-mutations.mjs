@@ -55,6 +55,9 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, isAbsolute, resolve, relative, basename } from 'node:path';
+import { countTestName as countDeclaredTestName, testSpanText } from './lib/test-decls.mjs';
+import { MARKER_PREFIX, MARKER_RE } from './lib/marker-format.mjs';
+import { parseShard, shardOf } from './lib/shard.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const RUNNER_FILE = fileURLToPath(import.meta.url);
@@ -68,18 +71,32 @@ const sha = (s) => createHash('sha256').update(s).digest('hex');
  *   ・知らない綴りの引数は黙って無視される
  * 上限は有限の正整数だけ。知らない引数は受け取らない。
  */
-const KNOWN_FLAGS = ['--id', '--receipt', '--spec', '--timeout'];
+const KNOWN_FLAGS = ['--id', '--receipt', '--spec', '--timeout', '--shard'];
 const KNOWN_SWITCHES = ['--allow-dirty'];
+/* 目印の形は `scripts/lib/marker-format.mjs` に1つだけ置く（第26回監査 R26-001） */
 const MAX_TIMEOUT_MS = 3600000;
 const argv = process.argv.slice(2);
 function parseArgs() {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (KNOWN_SWITCHES.includes(a)) { out[a] = true; continue; }
+    if (KNOWN_SWITCHES.includes(a)) {
+      if (out[a] !== undefined) return { error: `${a} が2回ある` };
+      out[a] = true;
+      continue;
+    }
     if (!KNOWN_FLAGS.includes(a)) return { error: `知らない引数: ${a}` };
+    if (out[a] !== undefined) return { error: `${a} が2回ある` };
     const v = argv[i + 1];
-    if (v === undefined || KNOWN_FLAGS.includes(v)) return { error: `${a} に値が無い` };
+    /*
+     * ⚠️ **次に来るのが引数の名前なら、それは値ではない。**（第26回監査 R26-004）
+     * 前は `KNOWN_FLAGS` しか見ていなかったので、`--receipt --allow-dirty` が
+     * 「`--allow-dirty` という名前の証跡ファイル」として通り、しかも
+     * **汚れた木を許す指定は効かないまま**走っていた（4通りとも実測）。
+     */
+    if (v === undefined || KNOWN_FLAGS.includes(v) || KNOWN_SWITCHES.includes(v)) {
+      return { error: `${a} に値が無い` };
+    }
     out[a] = v;
     i++;
   }
@@ -104,19 +121,36 @@ const receiptPath = parsed.out['--receipt'] || null;
  *（第25回監査 R25-003。実測でも SIGKILL では証跡が1つも残らなかった）。
  * その穴は CI 側の `if-no-files-found: error` が外から塞ぐ。
  */
-let receiptWritten = false;
+/*
+ * ⚠️ **証跡の一生を、名前のついた状態にする。**（第25回 R25-003 / 第26回 R26-003）
+ *
+ *   none        まだ1バイトも書いていない（ここで倒れたら exit 側が aborted を書く）
+ *   running     測っている最中（いまどの変異か・どこまで終えたかを持つ）
+ *   settled     最後の1枚を書き終えた（complete か、前提失敗の記録）。**もう触らない**
+ *   unwritable  そもそも書けない場所だった。同じ理由で失敗するので、もう試さない
+ *
+ * 証跡に入る `state` は `running` / `complete` / `aborted` の3つ。
+ * **証拠として使えるのは `complete` だけ**。
+ *
+ * ⚠️ 第25回では `running` を1回書くだけで、**どこまで進んだかを更新していなかった**。
+ * 強制終了された証跡を見ても、どの変異の途中でどのファイルが変異したままか
+ * 分からない（第26回監査 R26-003）。変異ごとに atomic に書き直す。
+ */
+let receiptPhase = 'none';
+let currentMutationId = null;
+let lastCompletedMutationId = null;
+let lastErrorKind = null;
 /*
  * ⚠️ **途中の状態が「完了」に見えないようにする。**（第25回監査 R25-003）
  * 一時ファイルへ書いてから rename する。rename は同じファイルシステム上で
  * 不可分なので、読み手が半分だけ書かれた JSON を読むことがない。
  */
 function saveReceipt(obj) {
-  if (!receiptPath) { receiptWritten = true; return true; }
+  if (!receiptPath) return true;
   const tmp = `${receiptPath}.tmp-${process.pid}`;
   try {
     writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n');
     renameSync(tmp, receiptPath);
-    receiptWritten = true;
     return true;
   } catch (e) {
     try { unlinkSync(tmp); } catch (e2) { /* 消せなくても本題ではない */ }
@@ -125,15 +159,29 @@ function saveReceipt(obj) {
   }
 }
 process.on('exit', (code) => {
-  if (receiptWritten || !receiptPath) return;
-  try {
-    writeFileSync(receiptPath, JSON.stringify({
-      spec: parsed.out['--spec'] || 'test/mutations.json', total: 0,
-      precondition: 'aborted',
-      error: `証跡を書く前に終了した（exit ${code}）。結果は何も言えない`,
-      results: []
-    }, null, 2) + '\n');
-  } catch (e) { /* 書けないなら、そのまま落とす */ }
+  /*
+   * ⚠️ 最後の1枚を書き終えているなら、上書きしない（前提失敗の記録を消さないため）。
+   * 書けない場所だと分かっているなら、ここで書いても同じ理由で失敗するので試さない。
+   * ⚠️ 書き方は **saveReceipt と同じ（一時ファイル→rename）**にする。
+   * 第25回はここだけ直接 writeFileSync していて、`state` も持っていなかった（R26-003）。
+   */
+  if (!receiptPath || receiptPhase === 'settled' || receiptPhase === 'unwritable') return;
+  saveReceipt({
+    spec: parsed.out['--spec'] || 'test/mutations.json',
+    state: 'aborted', precondition: 'aborted', evidenceEligible: false, total: 0,
+    currentMutationId, lastCompletedMutationId, errorKind: lastErrorKind,
+    error: `証跡を完了させる前に終了した（exit ${code}）。結果は何も言えない`,
+    results: []
+  });
+});
+/*
+ * 倒れ方の種類だけ覚えて、**既定どおり**落ちる（握りつぶさない）。
+ * これが無いと aborted の証跡に「なぜ倒れたか」が1文字も残らない（R26-003）。
+ */
+process.on('uncaughtException', (e) => {
+  lastErrorKind = (e && (e.code || e.name)) || 'Error';
+  console.error(e && e.stack ? e.stack : String(e));
+  process.exit(1);
 });
 const specPath = parsed.out['--spec'] || 'test/mutations.json';
 let timeoutMs = 300000;
@@ -162,9 +210,33 @@ if (dupIds.length) {
   process.exit(2);
 }
 
-const mutations = spec.mutations.filter((m) => !onlyId || m.id === onlyId);
+/*
+ * 束に分けて走らせる（第26回監査 R26-002 §11）。
+ * ⚠️ **代表を選ぶのではない。** 全部の束を必ず走らせ、
+ * 読む側（検証器）が「どのIDもちょうど1回」を自分で数え直す。
+ * ⚠️ `--id` と併用させない——1件だけ測っているのか束を測っているのか、
+ * 証跡から決まらなくなる。
+ */
+let shard = null;
+if (parsed.out['--shard'] !== undefined) {
+  if (onlyId) {
+    console.error('--id と --shard は同時に使えない（何を測ったか決まらない）');
+    process.exit(2);
+  }
+  const s = parseShard(parsed.out['--shard']);
+  if (s.error) { console.error(s.error); process.exit(2); }
+  shard = s;
+}
+
+const mutations = spec.mutations.filter((m) => {
+  if (onlyId) return m.id === onlyId;
+  if (shard) return shardOf(m.id, shard.total) === shard.index - 1;
+  return true;
+});
 if (!mutations.length) {
-  console.error(`変異が1件も選ばれていない（--id ${onlyId}）`);
+  console.error(shard
+    ? `変異が1件も選ばれていない（--shard ${shard.index}/${shard.total}）`
+    : `変異が1件も選ばれていない（--id ${onlyId}）`);
   process.exit(2);
 }
 
@@ -201,13 +273,14 @@ if (gitStatusStart !== null && gitStatusStart !== '' && !allowDirty) {
     + 'commit した状態で走らせるか、手元で試すだけなら --allow-dirty を付ける';
   console.error(`★ ${msg}\n${gitStatusStart.split('\n').slice(0, 10).join('\n')}`);
   saveReceipt({
-    spec: specPath, total: 0, precondition: 'failed', error: msg,
+    spec: specPath, state: 'aborted', total: 0, precondition: 'failed', error: msg,
     evidenceEligible: false,
     provenance: { sourceCommit, sourceTree, workingTreeDirty: true,
       nodeVersion: process.version, platform: process.platform, timeoutMs,
       startedAt, completedAt: new Date().toISOString() },
     results: []
   });
+  receiptPhase = 'settled';        /* 前提失敗の記録を、exit 側に上書きさせない */
   process.exit(2);
 }
 
@@ -222,6 +295,7 @@ if (sourceCommit === null || sourceTree === null || gitStatusStart === null) {
       platform: process.platform, timeoutMs, startedAt, completedAt: new Date().toISOString() },
     results: []
   });
+  receiptPhase = 'settled';        /* 同上 */
   process.exit(2);
 }
 const provenance = {
@@ -279,29 +353,30 @@ function validatePath(rel, label) {
  * 守りたい方は通り、無関係な同名だけが落ちても、名前の一致は成立してしまう。
  * 走らせる前に、対象ファイルの中で宣言名が一意であることを確かめる。
  */
-const TEST_NAME_RE = /(?:^|\s)(?:it|test)\(\s*(['"`])((?:\\.|(?!\1).)*)\1/gm;
-const nameCache = new Map();
-/* 対象テストのソースに、その文字列がいくつあるか（目印の一意性を静的に見る） */
+/*
+ * ⚠️ 宣言を探す読み手は `scripts/lib/test-decls.mjs` に1つだけ置く（第26回 R26-001）。
+ * 素の正規表現だと、**題材としてテンプレート文字列の中に書いたテスト宣言**まで
+ * 本物として数える（実測: `test/mutation-runner.test.mjs` で 50 対 35）。
+ * そのせいで対象テストの範囲が題材の位置で切れ、assertion に置いた目印が
+ * 「テストの外」に見えていた。
+ */
 const fileTextCache = new Map();
-function countInFile(rel, needle) {
+function readTestSource(rel) {
   if (!fileTextCache.has(rel)) {
     try { fileTextCache.set(rel, readFileSync(resolve(ROOT, rel), 'utf8')); }
     catch (e) { fileTextCache.set(rel, null); }
   }
-  const src = fileTextCache.get(rel);
+  return fileTextCache.get(rel);
+}
+/* 対象テストのソースに、その文字列がいくつあるか（目印の一意性を静的に見る） */
+function countInFile(rel, needle) {
+  const src = readTestSource(rel);
   return src === null ? 0 : src.split(needle).length - 1;
 }
 
 function countTestName(rel, want) {
-  if (!nameCache.has(rel)) {
-    const src = readFileSync(join(ROOT, rel), 'utf8');
-    const names = [];
-    let g;
-    TEST_NAME_RE.lastIndex = 0;
-    while ((g = TEST_NAME_RE.exec(src)) !== null) names.push(g[2]);
-    nameCache.set(rel, names);
-  }
-  return nameCache.get(rel).filter((n) => n === want).length;
+  const src = readTestSource(rel);
+  return src === null ? 0 : countDeclaredTestName(src, want);
 }
 
 /*
@@ -343,10 +418,27 @@ const NOT_OK = /^(\s*)not ok \d+ - (.+?)\s*$/gm;
  *
  * TAP は `not ok` の直後の YAML に `failureType` / `code` / `name` を書く。
  * そこまで読んで、`AssertionError`（`ERR_ASSERTION`）だけを検知として認める。
+ *
+ * ⚠️ **読むのは診断の最上位のキーだけ**（第26回監査 R26-002 の作業中に発見）。
+ * Node は落ちた値を `actual: |-` のブロックスカラーで出す。その本文が
+ * ワークフロー定義やソースだと、中に `name:` / `code:` の行が入る:
+ *
+ *     code: 'ERR_ASSERTION'
+ *     name: 'AssertionError'
+ *     actual: |-
+ *       with:
+ *         name: mutation-receipt-…      ← 字下げを見ないと、これをキーとして拾う
+ *
+ * 以前は `^name:` を字下げなしで拾っていたので、**本文の値が落ち方を上書き**
+ * していた。本番の189件のうち5件（N30・M32・W09・S27 は ci.yml、W14 は
+ * ランナー自身の本文）がこれを踏み、ランナーは「検知」、外の検証器は
+ * 「assertion として落ちたことになっていない」と読んだ＝CI が進めなくなった。
+ * 診断は `---` で開き `...` で閉じる。**開きと同じ字下げの行だけ**をキーにする。
  */
 function failureDetails(output) {
   const lines = output.split('\n');
   const out = [];
+  const indentOf = (l) => l.length - l.trimStart().length;
   for (let i = 0; i < lines.length; i++) {
     const m = /^(\s*)not ok \d+ - (.+?)\s*$/.exec(lines[i]);
     if (!m) continue;
@@ -356,33 +448,51 @@ function failureDetails(output) {
      * ⚠️ **その `not ok` の中だけ**を読む（第25回監査 R25-001）。
      * 目印を出力全体から探すと、別のテストが出した同じ文字列で満たされてしまう。
      */
-    const body = [];
-    let inError = false, errIndent = 0;
-    for (let j = i + 1; j < lines.length; j++) {
-      const l = lines[j];
-      if (!l.trim()) { if (inError) body.push(''); continue; }
-      const ind = l.length - l.trimStart().length;
-      if (ind <= indent && !/^\s*(---|\.\.\.)\s*$/.test(l)) break;
-      const t = l.trim();
-      if (inError) {
-        /* error: |- の続き。より浅い字下げのキーが来たら終わり */
-        if (ind > errIndent) { body.push(l.slice(errIndent + 2)); continue; }
+    let j = i + 1;
+    while (j < lines.length && !lines[j].trim()) j++;
+    const open = j < lines.length ? /^(\s*)---\s*$/.exec(lines[j]) : null;
+    /* 診断が付いていない `not ok` は、落ち方を何も名乗れない（＝検知にしない） */
+    if (open && open[1].length > indent) {
+      const keyIndent = open[1].length;
+      const body = [];
+      let inError = false;
+      for (let k = j + 1; k < lines.length; k++) {
+        const l = lines[k];
+        const t = l.trim();
+        if (!t) { if (inError) body.push(''); continue; }
+        const ind = indentOf(l);
+        /*
+         * キーより深い行は、キーではなく**値の中身**（ブロックスカラー・入れ子）。
+         * `error:` のブロックスカラーのときだけ本文として拾い、他は読み飛ばす。
+         */
+        if (ind > keyIndent) { if (inError) body.push(l.slice(keyIndent + 2)); continue; }
         inError = false;
+        if (ind < keyIndent || t === '...' || t === '---') break;
+        let g;
+        if (/^error:\s*[|>][-+]?\s*$/.test(t)) { inError = true; continue; }
+        if ((g = /^error:\s*(.+)$/.exec(t))) body.push(g[1].replace(/^'|'$/g, ''));
+        else if ((g = /^failureType:\s*'?([^']+)'?/.exec(t))) rec.failureType = g[1];
+        else if ((g = /^code:\s*'?([^']+)'?/.exec(t))) rec.code = g[1];
+        else if ((g = /^name:\s*'?([^']+)'?/.exec(t))) rec.errName = g[1];
       }
-      let g;
-      if (/^error:\s*\|-?\s*$/.test(t)) { inError = true; errIndent = ind; continue; }
-      if ((g = /^error:\s*(.+)$/.exec(t))) body.push(g[1].replace(/^'|'$/g, ''));
-      else if ((g = /^failureType:\s*'?([^']+)'?/.exec(t))) rec.failureType = g[1];
-      else if ((g = /^code:\s*'?([^']+)'?/.exec(t))) rec.code = g[1];
-      else if ((g = /^name:\s*'?([^']+)'?/.exec(t))) rec.errName = g[1];
-      if (/^\.\.\.$/.test(t) && ind <= indent + 2) break;
+      rec.body = body.join('\n');
     }
-    rec.body = body.join('\n');
     out.push(rec);
   }
   return out;
 }
-const isAssertionFailure = (f) => !!f && (f.errName === 'AssertionError' || f.code === 'ERR_ASSERTION');
+/*
+ * ⚠️ **`code` と `name` の両方**が揃って初めて assertion と認める（第26回監査 R26-002 の作業中に発見）。
+ * 以前は OR で、片方だけで認めていた。外から読む検証器
+ * （verify-mutation-receipt.mjs）は AND なので、同じ証跡をランナーは「検知」、
+ * 検証器は「証拠にならない」と読む——片方だけ直しても噛み合わない。
+ * **厳しい側（AND）へ揃える**: Node 22.22.3 実測で、assert.ok / strictEqual /
+ * deepStrictEqual / match / fail / throws はどれも `code: 'ERR_ASSERTION'` と
+ * `name: 'AssertionError'` を必ず両方出す。片方だけの失敗は assertion を
+ * 名乗るだけの別の例外（`e.code = 'ERR_ASSERTION'` を持たせた TypeError 等）で、
+ * 守りたい assertion は一度も走っていない。
+ */
+const isAssertionFailure = (f) => !!f && f.errName === 'AssertionError' && f.code === 'ERR_ASSERTION';
 
 /*
  * 実際の落ち方を、宣言できる語へ落とす。
@@ -605,12 +715,26 @@ function restoreExact(m, before) {
  * これが無いと、途中で強制終了された痕跡が「まだ始まっていない」と区別できない。
  * 正常に終わったときだけ state=complete へ置き換える。
  */
-saveReceipt({
-  spec: specPath, state: 'running', evidenceEligible: !allowDirty,
-  startedAt, currentMutationId: null, lastCompletedMutationId: null,
-  provenance: { ...provenance }, total: mutations.length, results: []
-});
-receiptWritten = false;   // 完了で必ず上書きさせる（ここで止まったら exit 側が aborted を書く）
+function saveRunning() {
+  return saveReceipt({
+    spec: specPath, state: 'running', evidenceEligible: !allowDirty,
+    startedAt, currentMutationId, lastCompletedMutationId, shard,
+    provenance: { ...provenance }, total: mutations.length, results: []
+  });
+}
+/*
+ * ⚠️ **「走っている」を置けなかったら、1件も測らない。**（第26回監査 R26-003）
+ * 前は書き込みの成否を見ずに測り始めていたので、証跡を置けない場所を指したまま
+ * 全部走り、最後に「書けなかった」とだけ言っていた。**測る前に残す**という
+ * 設計が成り立っていない（この時点ではまだ何も書けていないので、
+ * 対象のファイルには1バイトも残らない）。
+ */
+if (!saveRunning()) {
+  console.error('★ 測る前に「走っている」と書けなかった。1件も測らずに止まる');
+  receiptPhase = 'unwritable';     /* 同じ理由で失敗するので、exit 側でも試さない */
+  process.exit(2);
+}
+receiptPhase = 'running';
 
 /*
  * ⚠️ 実行前後の比較は、**証跡を書いたあと**を基準にする。
@@ -622,6 +746,16 @@ const results = [];
 let fatal = null;
 
 for (const m of mutations) {
+  /*
+   * ⚠️ **どこまで進んだかを、その都度残す。**（第26回監査 R26-003）
+   * `currentMutationId` は「いま手を付けている1件」、`lastCompletedMutationId` は
+   * 「復旧まで終わった直前の1件」。強制終了されたとき、**どのファイルが変異したまま
+   * 残っているか**を証跡から名指しできるようにするため。
+   */
+  if (currentMutationId !== null) lastCompletedMutationId = currentMutationId;
+  currentMutationId = m.id;
+  saveRunning();
+
   const base = { id: m.id, file: m.file, desc: m.desc, test: m.test,
     expectedFailure: m.expectedFailure || null };
 
@@ -666,10 +800,58 @@ for (const m of mutations) {
    * 変異ごとに「その assertion のメッセージにしか出ない目印」を宣言させ、
    * **その `not ok` の本文の中だけ**で照合する。
    */
+  /*
+   * 宣言した名前が、対象ファイルの中で一意であること。
+   * ⚠️ **目印より先に見る**（第26回監査 R26-001 の作業中に判明）。同名が2つあると
+   * 「どのテストの範囲か」も決まらないので、後ろの目印の検査が
+   * `expectation_invalid` を先に返し、**同名だと気づけない診断になっていた**。
+   */
+  const nameCount = countTestName(m.test, want0);
+  if (nameCount !== 1) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'duplicate_test_name',
+      error: nameCount === 0
+        ? `宣言した名前のテストが ${m.test} に無い`
+        : `宣言した名前のテストが ${m.test} に ${nameCount} 件ある（どれが落ちたか決まらない）`,
+      restored: true });
+    continue;
+  }
+
   const marker = m.expectedFailure.diagnosticMarker;
-  if (typeof marker !== 'string' || marker.trim().length < 6) {
+  /*
+   * ⚠️ **第26回監査 R26-001 で分かった、ここの穴**
+   * 前は「6文字以上」「対象ファイルの中で1回」しか見ていなかった。実測すると、
+   * P18／P19 の目印 `xpected ` は
+   *   ・**対象テストには1文字も無く**、無関係な別テストの
+   *     `throw new Error('unexpected internal error')` で「ファイル内に1回」を満たし、
+   *   ・Node が自動で出す `Expected values to be strictly equal:` に偶然一致していた。
+   * つまり**どの assertion が落ちたかを、何も決めていなかった**。
+   *
+   * そこで3つに分ける:
+   *   ① 形  … `GXS_MARK.<名前>` の予約形だけ。一般的な文言を目印にできない
+   *   ② 置き場 … 対象ファイルで一意、かつ**対象テストの範囲の中**にある
+   *   ③ 残り方 … 伏字を通しても変わらない（証跡に残って外から再照合できる）
+   */
+  if (typeof marker !== 'string' || !MARKER_RE.test(marker)) {
     results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
-      error: 'expectedFailure.diagnosticMarker（6文字以上）が要る', restored: true });
+      error: `expectedFailure.diagnosticMarker が予約形（${MARKER_PREFIX}<名前>）でない: ${JSON.stringify(marker)}`
+        + '——Node が自動で出す文言を目印にしないため', restored: true });
+    continue;
+  }
+  if (maskSecrets(marker, 4096) !== marker) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
+      error: `目印「${marker}」は伏字で変わってしまう（証跡に残らない）`, restored: true });
+    continue;
+  }
+  /*
+   * 目印の名前が**別の変異のID**を名乗っていたら止める。
+   * 1対1のときは変異IDをそのまま名前にしているので、あとから同じ assertion へ
+   * 2件目の変異を足すと、名前が実態と食い違う（そのまま通ると誤読のもとになる）。
+   */
+  const markerKey = marker.slice(MARKER_PREFIX.length);
+  if (idCount[markerKey] !== undefined && markerKey !== m.id) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
+      error: `目印が別の変異のID（${markerKey}）を名乗っている。共有するなら ${MARKER_PREFIX}SHARED_… にする`,
+      restored: true });
     continue;
   }
   const markerCount = countInFile(m.test, marker);
@@ -681,14 +863,20 @@ for (const m of mutations) {
       restored: true });
     continue;
   }
-
-  /* 宣言した名前が、対象ファイルの中で一意であること */
-  const nameCount = countTestName(m.test, want0);
-  if (nameCount !== 1) {
-    results.push({ ...base, outcome: 'runner_error', failureKind: 'duplicate_test_name',
-      error: nameCount === 0
-        ? `宣言した名前のテストが ${m.test} に無い`
-        : `宣言した名前のテストが ${m.test} に ${nameCount} 件ある（どれが落ちたか決まらない）`,
+  /*
+   * ⚠️ **対象テストの範囲の中にあること。**（第26回監査 R26-001）
+   * ファイル全体で1回では足りない——別のテストやコメント、module 直下の定数でも
+   * 満たせてしまう（P18／P19 が実例）。
+   */
+  const spanText = testSpanText(readTestSource(m.test), m.expectedFailure.testName.trim());
+  if (spanText === null) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
+      error: `宣言したテストの範囲を ${m.test} から一意に取れない`, restored: true });
+    continue;
+  }
+  if (!spanText.includes(marker)) {
+    results.push({ ...base, outcome: 'runner_error', failureKind: 'expectation_invalid',
+      error: `目印「${marker}」が対象テストの外にある——別のテストやコメントで一意になっているだけ`,
       restored: true });
     continue;
   }
@@ -848,13 +1036,35 @@ for (const m of mutations) {
       matchedBody: maskSecrets(String(hits[0].body || ''), 600) });
     continue;
   }
+  /*
+   * ⚠️ **証跡に残った本文にも、目印が在ること。**（第26回監査 R26-001）
+   * 生の本文で照合できても、伏字を通したら消えていることがある
+   * （`[A-Za-z0-9_-]{24,}` が `<token>` になる／パスが `<path>` になる。実測10件）。
+   * 消えていると、**外の検証器は目印を再照合できない**——つまり証跡としては
+   * 「どの assertion が落ちたか」を言えていない。
+   */
+  const savedBody = maskSecrets(String(hits[0].body || ''), 600);
+  if (!savedBody.includes(marker)) {
+    results.push({ ...withRun, outcome: 'runner_error', failureKind: 'marker_not_in_receipt',
+      error: `目印「${marker}」が、証跡に残す本文には無い（伏字か長さで消えている）`,
+      expectedFailureKind: wantKind, actualFailureKind: gotKind,
+      expectedFailureMatched: false, matchedBody: savedBody });
+    continue;
+  }
   results.push({ ...withRun, outcome: 'applied_and_killed',
     failureKind: wantKind === 'assertion' ? 'expected_assertion_failure' : 'expected_declared_failure',
     expectedFailureKind: wantKind, actualFailureKind: gotKind,
     expectedFailureMatched: true,
     expectedFailureDetail: { name: hits[0].name, failureType: hits[0].failureType,
       code: hits[0].code, errName: hits[0].errName },
-    matchedBody: maskSecrets(String(hits[0].body || ''), 600) });
+    matchedBody: savedBody });
+}
+
+/* 最後の1件も「終わった」に数える（R26-003） */
+if (currentMutationId !== null) {
+  lastCompletedMutationId = currentMutationId;
+  currentMutationId = null;
+  saveRunning();
 }
 
 /* 作業ツリーが元に戻っているか（第23回監査 R23-002 §6.6） */
@@ -891,6 +1101,7 @@ if (workspaceUnchanged === false) {
 const summary = {
   spec: specPath, state: 'complete',
   evidenceEligible: !allowDirty && provenance.workingTreeDirty === false,
+  currentMutationId, lastCompletedMutationId, shard,
   total: results.length,
   applied_and_killed: killed.length, applied_but_survived: survived.length,
   not_applied: notApplied.length, runner_error: errors.length,
@@ -907,6 +1118,8 @@ if (receiptPath) {
   if (!saveReceipt(summary)) process.exit(2);
   console.log(`証跡: ${receiptPath}`);
 }
+/* ここまで来て初めて最後の1枚。以後、exit 側は aborted を書かない（R26-003） */
+receiptPhase = 'settled';
 
 const ok = survived.length === 0 && notApplied.length === 0
   && errors.length === 0 && badRestore.length === 0 && workspaceUnchanged === true;

@@ -136,7 +136,7 @@ test('操作列が無いページでも、拒否の案内は body へ出る（R2
   m.notify('unsupported');
   const notices = m.noticeEls();
   assert.equal(notices.length, 1,
-    `操作列が無いページで案内が出ていない（または複数出ている）: ${notices.length}`);
+    `GXS_MARK.N07 操作列が無いページで案内が出ていない（または複数出ている）: ${notices.length}`);
   assert.equal(notices[0].tagName, 'DIV');
   assert.equal(notices[0].attrs.role, 'status', '読み上げに乗る形になっていない');
   assert.ok(notices[0]._text.length > 0, '案内の文が空');

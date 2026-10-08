@@ -114,6 +114,15 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
+    # ⚠️ **代表抽出ではない。**（第26回監査 R26-002 §11）
+    # 全部の束を必ず走らせ、`mutation-coverage` が「どのIDもちょうど1回」を数え直す。
+    # 分ける鍵は変異IDのハッシュなので、変異を1件足しても他の束は動かない。
+    # 分けた理由: 自己検査が増えて1変異あたり 90 秒に達し、実測で
+    # 全件 109 分・4件が 300 秒の上限で打ち切られた（＝検知できたはずが読めなくなる）。
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -131,7 +140,7 @@ jobs:
       # ⚠️ 変異が当たらなかったものは「素通り」と区別して**失敗**にする
       #    （第20回に、当たっていない変異15件を素通りと読み違えた）。
       - name: 変異対照（検査が効いていることの確認）
-        run: npm run test:mutations -- --receipt mutation-receipt.json
+        run: npm run test:mutations -- --shard ${{ matrix.shard }}/6 --receipt mutation-receipt.json
 
       # ⚠️ ランナーの終了コードだけを信じない（第25回監査 R25-003）。
       # 途中で強制終了されると証跡は running のままか、そもそも残らない。
@@ -143,12 +152,45 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: mutation-receipt-${{ github.sha }}
+          name: mutation-receipt-${{ github.sha }}-shard${{ matrix.shard }}
           path: mutation-receipt.json
           # ⚠️ warn ではなく error（第22回監査 R22-004）。
           # 第25回監査 R25-003 で確認したとおり、SIGKILL・ホスト消失では
           # ランナー側が証跡を残せない。**ここが唯一の受け皿**なので外さない。
           if-no-files-found: error
+
+  # ============================================================
+  # 束が全体を覆えているかを数え直すジョブ（第26回監査 R26-002 §11）
+  # ============================================================
+  # ⚠️ 束を1つ落としても、束の中身が重なっても、走った側の証跡はどれも「完了」に
+  # 見える。**読む側**が、いまの正本と突き合わせて「どのIDもちょうど1回」を数える。
+  mutation-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [mutations]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: 束ごとの証跡を集める
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: mutation-receipt-${{ github.sha }}-shard*
+          path: receipts
+
+      - name: 全部を1回ずつ覆えているか数え直す
+        run: |
+          ls -R receipts
+          node scripts/verify-mutation-coverage.mjs \
+            receipts/*/mutation-receipt.json --expected-commit "$GITHUB_SHA"
 
   # ============================================================
   # 提出候補を作るジョブ（第25回監査）
@@ -157,7 +199,7 @@ jobs:
   package-candidate:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [test, windows, mutations]
+    needs: [test, windows, mutation-coverage]
     permissions:
       contents: read
     steps:

@@ -834,7 +834,7 @@ test('strict: Web Intent の判断が未確認なら通らない（R16-005）', 
       webIntentDecision: goodWebIntent(cand, { status })
     }));
     assert.ok(r.problems.some((p) => p.includes('Web Intent')),
-      `status=${status}: Web Intent が未確認なのに strict を通した`);
+      `GXS_MARK.M31 status=${status}: Web Intent が未確認なのに strict を通した`);
   }
 });
 
@@ -905,7 +905,7 @@ test('strict: 証跡がそろっていれば Web Intent は止めない（R18-00
   /* 上の検査が「何を入れても落ちる」ものになっていないこと */
   const r = validateStoreReadiness(strictInputs());
   assert.ok(!r.problems.some((p) => p.includes('Web Intent')),
-    `そろっているのに止めている: ${r.problems.filter((p) => p.includes('Web Intent')).join(' / ')}`);
+    `GXS_MARK.M30 そろっているのに止めている: ${r.problems.filter((p) => p.includes('Web Intent')).join(' / ')}`);
 });
 
 /* ============================================================
