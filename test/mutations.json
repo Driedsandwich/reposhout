@@ -360,7 +360,7 @@
       "id": "M30",
       "file": "scripts/store-readiness.mjs",
       "test": "test/store-readiness.test.mjs",
-      "desc": "Redirection の scope を要求しなくする",
+      "desc": "Redirection の論点の名前を別の綴りにする（本物の2論点では通らなくなる＝陽性の対照が落ちる）",
       "find": "'redirection_policy'",
       "replace": "'redirection_policy_TYPO'",
       "expectedFailure": {
@@ -2587,6 +2587,42 @@
       "expectedFailure": {
         "testName": "証跡の出力先が入力を指していたら、1バイトも書かずに止まる（R27-106）",
         "diagnosticMarker": "GXS_MARK.X26"
+      }
+    },
+    {
+      "id": "X27",
+      "file": "scripts/run-mutations.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "比べた値に出た目印も検知に数える",
+      "find": "  if (String(hits[0].values || '').includes(marker)) {",
+      "replace": "  if (false) {",
+      "expectedFailure": {
+        "testName": "目印が比べた値に出ているだけなら、検知にしない（R27-104 の内側の題材）",
+        "diagnosticMarker": "GXS_MARK.X27"
+      }
+    },
+    {
+      "id": "X28",
+      "file": "scripts/lib/test-decls.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "テストの範囲を、次の宣言の手前までに戻す",
+      "find": "  const end = callEnd(src, decls[idx].start);\n  if (end < 0) return null;",
+      "replace": "  const end = idx + 1 < decls.length ? decls[idx + 1].start : src.length;",
+      "expectedFailure": {
+        "testName": "目印がテストの呼び出しの外にあれば、測る前に断る（R27-104 の外側の題材）",
+        "diagnosticMarker": "GXS_MARK.X28"
+      }
+    },
+    {
+      "id": "X29",
+      "file": "scripts/verify-store-readiness.mjs",
+      "test": "test/cli.test.mjs",
+      "desc": "日付を渡したら時刻帯を確かめない形へ戻す",
+      "find": "let todayInZone;\ntry {\n  todayInZone = dateIn(timeZone);\n} catch (e) {\n  fail(`時間帯として読めません: ${timeZone}`);\n}\ntoday = argOf('--today') || todayInZone;",
+      "replace": "try {\n  today = argOf('--today') || dateIn(timeZone);\n} catch (e) {\n  fail(`時間帯として読めません: ${timeZone}`);\n}",
+      "expectedFailure": {
+        "testName": "日付を渡しても、読めない時刻帯は止まり、実在しない日は倒れずに止まる（R27-111）",
+        "diagnosticMarker": "GXS_MARK.X29"
       }
     }
   ]

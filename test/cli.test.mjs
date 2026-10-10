@@ -53,6 +53,22 @@ test('時間帯として読めない --timezone は止まる', () => {
   assert.equal(r.code, 2, r.err);
 });
 
+test('日付を渡しても、読めない時刻帯は止まり、実在しない日は倒れずに止まる（R27-111）', () => {
+  /*
+   * 第27回監査 R27-111。`--today` を渡すと時刻帯の検査（dateIn）が呼ばれず、
+   * `--today 2026-10-10 --timezone Not/AZone` が通った。`2026-99-99` は toISOString で倒れていた。
+   */
+  const r = run(['--today', '2026-10-10', '--timezone', 'Not/AZone']);
+  assert.equal(r.code, 2, `GXS_MARK.X29 日付を渡すと読めない時刻帯が通る: ${r.err}`);
+  assert.match(r.err, /時間帯として読めません/, `止まった理由が違う: ${r.err}`);
+  const bad = run(['--today', '2026-99-99']);
+  assert.equal(bad.code, 2, `実在しない日で倒れている（exit ${bad.code}）: ${bad.err.slice(0, 200)}`);
+  assert.match(bad.err, /YYYY-MM-DD/, `理由を言わずに倒れている: ${bad.err.slice(0, 200)}`);
+  /* 対照: 正しい時刻帯を渡せば、その時刻帯を基準日の表示に出す */
+  const ok = run(['--today', '2026-10-10', '--timezone', 'UTC']);
+  assert.match(ok.out, /基準日: 2026-10-10（UTC）/, `使った時刻帯を表示していない: ${ok.out.slice(-200)}`);
+});
+
 test('読めない申告ファイルは、理由を出して止まる', () => {
   const r = run(['--strict', '--audit-attestation', join(ROOT, 'package.json'), '--audit-report', join(ROOT, 'README.md')]);
   // package.json は JSON として読めるので、ここは「止まらない」ことだけ見る（別の理由で1になる）

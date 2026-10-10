@@ -485,7 +485,7 @@ function failureDetails(output) {
     const m = /^(\s*)not ok \d+ - (.+?)\s*$/.exec(lines[i]);
     if (!m) continue;
     const indent = m[1].length;
-    const rec = { name: m[2].trim(), failureType: null, code: null, errName: null, body: '' };
+    const rec = { name: m[2].trim(), failureType: null, code: null, errName: null, body: '', values: '' };
     /*
      * ⚠️ **その `not ok` の中だけ**を読む（第25回監査 R25-001）。
      * 目印を出力全体から探すと、別のテストが出した同じ文字列で満たされてしまう。
@@ -497,7 +497,9 @@ function failureDetails(output) {
     if (open && open[1].length > indent) {
       const keyIndent = open[1].length;
       const body = [];
+      const values = [];   /* 比べた値（actual / expected）。目印がここに出ても検知にしない（R27-104） */
       let inError = false;
+      let inValue = false;
       for (let k = j + 1; k < lines.length; k++) {
         const l = lines[k];
         const t = l.trim();
@@ -507,17 +509,25 @@ function failureDetails(output) {
          * キーより深い行は、キーではなく**値の中身**（ブロックスカラー・入れ子）。
          * `error:` のブロックスカラーのときだけ本文として拾い、他は読み飛ばす。
          */
-        if (ind > keyIndent) { if (inError) body.push(l.slice(keyIndent + 2)); continue; }
+        if (ind > keyIndent) {
+          if (inError) body.push(l.slice(keyIndent + 2));
+          else if (inValue) values.push(l.slice(keyIndent + 2));
+          continue;
+        }
         inError = false;
+        inValue = false;
         if (ind < keyIndent || t === '...' || t === '---') break;
         let g;
         if (/^error:\s*[|>][-+]?\s*$/.test(t)) { inError = true; continue; }
+        if (/^(?:actual|expected):\s*[|>][-+]?\s*$/.test(t)) { inValue = true; continue; }
+        if ((g = /^(?:actual|expected):\s*(.+)$/.exec(t))) { values.push(g[1]); continue; }
         if ((g = /^error:\s*(.+)$/.exec(t))) body.push(g[1].replace(/^'|'$/g, ''));
         else if ((g = /^failureType:\s*'?([^']+)'?/.exec(t))) rec.failureType = g[1];
         else if ((g = /^code:\s*'?([^']+)'?/.exec(t))) rec.code = g[1];
         else if ((g = /^name:\s*'?([^']+)'?/.exec(t))) rec.errName = g[1];
       }
       rec.body = body.join('\n');
+      rec.values = values.join('\n');
     }
     out.push(rec);
   }
@@ -1097,6 +1107,20 @@ for (const m of mutations) {
    * ⚠️ **目印は、その `not ok` の本文の中だけ**で探す（第25回監査 R25-001）。
    * 出力全体から探すと、別のテストが出した同じ文字列で満たされてしまう。
    */
+  /*
+   * ⚠️ **比べた値に目印が出ているなら、目印のある assertion が落ちたとは言えない。**（第27回監査 R27-104）
+   * `assert.equal(value === 1 ? 'ok' : mark, 'ok')` のように、目印が**比べる値**として
+   * 出てくると、Node が自動で作る差分（error 欄）にも actual 欄にも目印が載る。
+   * 守りたい `assert.ok(true, mark)` は通っているのに、検知に数えていた。
+   */
+  if (String(hits[0].values || '').includes(marker)) {
+    results.push({ ...withRun, outcome: 'runner_error', failureKind: 'marker_in_compared_value',
+      error: `目印「${marker}」が比べた値（actual / expected）に出ている——目印を持つ assertion が落ちたとは言えない`,
+      expectedFailureKind: wantKind, actualFailureKind: gotKind,
+      expectedFailureMatched: false,
+      matchedBody: maskSecrets(String(hits[0].body || ''), 600) });
+    continue;
+  }
   if (!String(hits[0].body || '').includes(marker)) {
     results.push({ ...withRun, outcome: 'runner_error', failureKind: 'marker_not_found',
       error: `宣言したテストは宣言した種類で落ちたが、目印「${marker}」が本文に無い`

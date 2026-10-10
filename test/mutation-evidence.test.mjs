@@ -191,6 +191,54 @@ test('目印がテスト内で一意でなければ、測れない（R25-001）'
   assert.equal(kindOf(r, 'U5'), 'expectation_invalid', 'GXS_MARK.SHARED_18 一意でない目印を受け取っている');
 });
 
+test('目印が比べた値に出ているだけなら、検知にしない（R27-104 の内側の題材）', () => {
+  /*
+   * 第27回監査 R27-104。守りたい assertion（目印つき）は通り、別の assertion が
+   * **目印を比べる値として**出して落ちた。Node が自動で作る差分と actual 欄に目印が載るので、
+   * 目印の照合が成り立ち、applied_and_killed になっていた（監査で実測）。
+   */
+  const files = {
+    'test/inner.test.mjs': `
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { value } from '../mod.mjs';
+test('比べる値に目印が出る', () => {
+  const mark = 'GXS_MARK.INNER';
+  assert.ok(true, mark);
+  assert.equal(value === 1 ? 'ok' : mark, 'ok');
+});
+`
+  };
+  const dir = makeFixture([mut('U7', { test: 'test/inner.test.mjs',
+    expectedFailure: { testName: '比べる値に目印が出る', diagnosticMarker: 'GXS_MARK.INNER' } })], files).dir;
+  const r = runRunner(dir);
+  assert.equal(outcomeOf(r, 'U7'), 'runner_error', 'GXS_MARK.X27 比べた値に出た目印で検知にしている');
+  assert.equal(kindOf(r, 'U7'), 'marker_in_compared_value', `止まった理由が違う: ${kindOf(r, 'U7')}`);
+});
+
+test('目印がテストの呼び出しの外にあれば、測る前に断る（R27-104 の外側の題材）', () => {
+  /*
+   * 第27回監査 R27-104。範囲を「次の宣言の手前まで」にしていたので、テストの閉じ括弧の
+   * 後ろ（モジュール直下の定数）に置いた目印も「範囲の中」に見えた。
+   */
+  const files = {
+    'test/outer.test.mjs': `
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { value } from '../mod.mjs';
+test('外に目印を置いた', () => {
+  assert.equal(value, 1);
+});
+const mark = 'GXS_MARK.OUTER';
+`
+  };
+  const dir = makeFixture([mut('U8', { test: 'test/outer.test.mjs',
+    expectedFailure: { testName: '外に目印を置いた', diagnosticMarker: 'GXS_MARK.OUTER' } })], files).dir;
+  const r = runRunner(dir);
+  assert.equal(outcomeOf(r, 'U8'), 'runner_error', 'GXS_MARK.X28 テストの外の目印で検知にしている');
+  assert.match(String(of(r, 'U8').error), /対象テストの外/, `止まった理由が違う: ${of(r, 'U8').error}`);
+});
+
 test('目印は、そのテストの本文の中だけで探す（R25-001）', () => {
   /*
    * ⚠️ 出力全体から探すと、**別のテストが出した同じ文字列**で満たされてしまう。

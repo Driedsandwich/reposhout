@@ -122,13 +122,42 @@ export function countTestName(src, want) {
 }
 
 /**
+ * `test(` の開き括弧に対応する閉じ括弧の次の位置。文字列・テンプレート・コメント・正規表現の
+ * 中の括弧は数えない。閉じが見つからなければ -1（推測で範囲を広げない）。
+ */
+function callEnd(src, start) {
+  let i = src.indexOf('(', start);
+  if (i < 0) return -1;
+  let depth = 0;
+  let prev = '(';
+  while (i < src.length) {
+    const c = src[i];
+    const two = src.slice(i, i + 2);
+    if (two === '//') { const e = src.indexOf('\n', i); i = e < 0 ? src.length : e; continue; }
+    if (two === '/*') { const e = src.indexOf('*/', i + 2); i = e < 0 ? src.length : e + 2; continue; }
+    if (c === "'" || c === '"') { i = skipQuoted(src, i, c); prev = c; continue; }
+    if (c === '`') { i = skipTemplate(src, i); prev = c; continue; }
+    if (c === '/' && /[(,=:[!&|?{};+\n]/.test(prev)) { i = skipRegex(src, i); prev = '/'; continue; }
+    if (c === '(') depth++;
+    else if (c === ')') { depth--; if (depth === 0) return i + 1; }
+    if (!/\s/.test(c)) prev = c;
+    i++;
+  }
+  return -1;
+}
+
+/**
  * 宣言名のテスト1件が占める範囲の文字列。
- * 「次の宣言の手前まで」を範囲とする。一意に決まらないときは null。
+ * **`test(` の呼び出しの閉じ括弧まで**を範囲とする（第27回監査 R27-104）。
+ * 第26回は「次の宣言の手前まで」だったので、テストの後ろ（モジュール直下の定数や
+ * コメント）に置いた目印も「範囲の中」に見えた。一意に決まらないとき・閉じが
+ * 見つからないときは null。
  */
 export function testSpanText(src, want) {
   const decls = findTestDeclarations(src);
   const idx = decls.findIndex((d) => d.name === want);
   if (idx < 0 || decls.filter((d) => d.name === want).length !== 1) return null;
-  const end = idx + 1 < decls.length ? decls[idx + 1].start : src.length;
+  const end = callEnd(src, decls[idx].start);
+  if (end < 0) return null;
   return src.slice(decls[idx].start, end);
 }
