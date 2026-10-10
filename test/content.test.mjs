@@ -233,7 +233,8 @@ test('ページ側に同じ ID の要素があっても、それを書き換え�
     }
   });
   m.notify('unsupported');
-  assert.deepEqual(pageEl.children, [pageInput], 'GXS_MARK.X04 ページ側の要素の中身を書き換えた');
+  const untouched = () => pageEl.children.length === 1 && pageEl.children[0] === pageInput;
+  assert.ok(untouched(), 'GXS_MARK.X04 ページ側の要素の中身を書き換えた');
   assert.equal(pageEl.textContent, '', 'ページ側の要素に案内の文を入れた');
   const mine = m.body.children.filter((c) => c !== pageEl && c.id === 'gxs-notice');
   assert.equal(mine.length, 1, `自分の案内を1つ出していない: ${mine.length}`);
@@ -243,7 +244,7 @@ test('ページ側に同じ ID の要素があっても、それを書き換え�
     '自分の案内が消えていない');
   /* 続けてもう一度断っても、ページ側の要素には触らない */
   m.notify('unsupported');
-  assert.deepEqual(pageEl.children, [pageInput], '2回目でページ側の要素を書き換えた');
+  assert.ok(untouched(), '2回目でページ側の要素を書き換えた');
 });
 
 test('自分の案内は1つだけで、続けて断ると同じ要素を使い直す（R27-004 の対照）', () => {
