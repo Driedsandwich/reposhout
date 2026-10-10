@@ -1752,7 +1752,7 @@
     {
       "id": "W07",
       "file": "scripts/run-mutations.mjs",
-      "find": "  evidenceEligible: !allowDirty && provenance.workingTreeDirty === false,",
+      "find": "  evidenceEligible: !fatal && !allowDirty && provenance.workingTreeDirty === false,",
       "replace": "  evidenceEligible: true,",
       "test": "test/mutation-evidence.test.mjs",
       "desc": "--allow-dirty の証跡も証拠だと言う",
@@ -2064,8 +2064,8 @@
     {
       "id": "Z01",
       "file": "scripts/run-mutations.mjs",
-      "find": "if (!saveRunning()) {",
-      "replace": "if (false) {",
+      "find": "if (!saveRunning()) {\n  console.error('★ 測る前に",
+      "replace": "if (false) {\n  console.error('★ 測る前に",
       "test": "test/mutation-evidence.test.mjs",
       "desc": "「走っている」を置けなくても測り始める",
       "expectedFailure": {
@@ -2088,8 +2088,8 @@
     {
       "id": "Z03",
       "file": "scripts/run-mutations.mjs",
-      "find": "  currentMutationId = m.id;\n  saveRunning();",
-      "replace": "  saveRunning();",
+      "find": "  currentMutationId = m.id;\n  if (!saveRunning()) {",
+      "replace": "  if (!saveRunning()) {",
       "test": "test/mutation-evidence.test.mjs",
       "desc": "いま測っている変異を証跡へ書かない",
       "expectedFailure": {
@@ -2539,6 +2539,54 @@
       "expectedFailure": {
         "testName": "変異の束・数え直し・提出候補のジョブが success でなければ strict で落ちる（R27-109）",
         "diagnosticMarker": "GXS_MARK.X22"
+      }
+    },
+    {
+      "id": "X23",
+      "file": "scripts/run-mutations.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "進み具合を書けなくても、次の変異を当てて続ける",
+      "find": "  if (!saveRunning()) {\n    fatal = 'progress_save_failed';",
+      "replace": "  if (saveRunning() === null) {\n    fatal = 'progress_save_failed';",
+      "expectedFailure": {
+        "testName": "途中で証跡を書けなくなったら、次の変異を当てずに止まり、成功の証跡に化けない（R27-105）",
+        "diagnosticMarker": "GXS_MARK.X23"
+      }
+    },
+    {
+      "id": "X24",
+      "file": "scripts/run-mutations.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "戻せなかった変異のあとも、次の変異へ進む",
+      "find": "    fatal = 'restore_failed';\n    break;",
+      "replace": "    continue;",
+      "expectedFailure": {
+        "testName": "戻せなかったら次の変異へ進まず、その変異を「終えた」と書かない（R27-105）",
+        "diagnosticMarker": "GXS_MARK.X24"
+      }
+    },
+    {
+      "id": "X25",
+      "file": "scripts/run-mutations.mjs",
+      "test": "test/mutation-runner.test.mjs",
+      "desc": "hardlink の検査を外す",
+      "find": "  if (st.nlink > 1) return `${label} が他の名前と実体を共有している（hardlink・${st.nlink} 個）: ${rel}`;",
+      "replace": "",
+      "expectedFailure": {
+        "testName": "hardlink で外のファイルを書き換えられない（R27-107）",
+        "diagnosticMarker": "GXS_MARK.X25"
+      }
+    },
+    {
+      "id": "X26",
+      "file": "scripts/run-mutations.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "証跡の出力先が入力を指していても書く",
+      "find": "  if (tracked || forbidden.includes(abs)) {",
+      "replace": "  if (false) {",
+      "expectedFailure": {
+        "testName": "証跡の出力先が入力を指していたら、1バイトも書かずに止まる（R27-106）",
+        "diagnosticMarker": "GXS_MARK.X26"
       }
     }
   ]

@@ -149,6 +149,35 @@ let currentMutationId = null;
 let lastCompletedMutationId = null;
 let lastErrorKind = null;
 /*
+ * ⚠️ **証跡の出力先が入力を指していたら、1バイトも書く前に止まる。**（第27回監査 R27-106）
+ * 前は出力先の検査が無く、`--receipt notes.md`（追跡しているファイル）を指すと、その文書を
+ * 証跡の JSON で上書きしたうえで exit 0・証拠に使える、と報告した（比較の基準を最初の
+ * 書き込みの**後**に取っていたので、上書きした変更が「初めからあった状態」に入った）。
+ * 追跡しているファイル・正本・ランナー自身は出力先にさせない。拒んだときは、終了時の処理も
+ * 同じ危ない場所へ書かないよう「書けない場所」として扱う。
+ */
+let receiptRelInRepo = null;   /* 作業ツリーの比較で、証跡そのものの行を外すために使う */
+if (receiptPath) {
+  /* ⚠️ 実体のパスにそろえてから比べる（macOS の /var は /private/var の別名・題材で実測） */
+  const real = (p) => {
+    try { return join(realpathSync(dirname(p)), basename(p)); } catch (e) { return p; }
+  };
+  const rootReal = (() => { try { return realpathSync(ROOT); } catch (e) { return ROOT; } })();
+  const abs = real(resolve(receiptPath));
+  const rel = relative(rootReal, abs);
+  const insideRepo = rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+  if (insideRepo) receiptRelInRepo = rel.split('\\').join('/');
+  const specAbsForReceipt = real(resolve(ROOT, parsed.out['--spec'] || 'test/mutations.json'));
+  const forbidden = [specAbsForReceipt, real(resolve(ROOT, 'scripts/run-mutations.mjs'))];
+  const tracked = insideRepo
+    && gitOut(['ls-files', '--error-unmatch', '--', rel.split('\\').join('/')]) !== null;
+  if (tracked || forbidden.includes(abs)) {
+    console.error(`★ 証跡の出力先が入力を指している（${receiptPath}）。何も書かずに止まる`);
+    receiptPhase = 'unwritable';
+    process.exit(2);
+  }
+}
+/*
  * ⚠️ **途中の状態が「完了」に見えないようにする。**（第25回監査 R25-003）
  * 一時ファイルへ書いてから rename する。rename は同じファイルシステム上で
  * 不可分なので、読み手が半分だけ書かれた JSON を読むことがない。
@@ -343,6 +372,11 @@ function validatePath(rel, label) {
   }
   if (st.isSymbolicLink()) return `${label} が symlink を指している: ${rel}`;
   if (!st.isFile()) return `${label} が通常ファイルでない: ${rel}`;
+  /*
+   * ⚠️ **hardlink は字面でも realpath でも中に見える。**（第27回監査 R27-107）
+   * 外の名前と実体を共有していると、変異を書いた瞬間に外のファイルも変わる。
+   */
+  if (st.nlink > 1) return `${label} が他の名前と実体を共有している（hardlink・${st.nlink} 個）: ${rel}`;
   let real;
   try {
     real = realpathSync(abs);
@@ -737,6 +771,17 @@ function saveRunning() {
  * 設計が成り立っていない（この時点ではまだ何も書けていないので、
  * 対象のファイルには1バイトも残らない）。
  */
+/*
+ * ⚠️ 実行前後の比較の基準は、**最初に証跡を書く前**に取る（第27回監査 R27-106）。
+ * 前は書いた後に取っていたので、出力先が追跡中のファイルだと、その上書きが基準に入って
+ * 「作業ツリーは変わっていない」になった。比べるときに外すのは、証跡そのもの
+ *（未追跡の1行）だけ。
+ */
+const workspaceBaseline = gitOut(['status', '--porcelain']);
+const receiptRelForStatus = receiptRelInRepo;
+const withoutOwnReceipt = (st) => st === null ? null : st.split('\n')
+  .filter((l) => !(receiptRelForStatus && l === `?? ${receiptRelForStatus}`)).join('\n');
+
 if (!saveRunning()) {
   console.error('★ 測る前に「走っている」と書けなかった。1件も測らずに止まる');
   receiptPhase = 'unwritable';     /* 同じ理由で失敗するので、exit 側でも試さない */
@@ -744,11 +789,6 @@ if (!saveRunning()) {
 }
 receiptPhase = 'running';
 
-/*
- * ⚠️ 実行前後の比較は、**証跡を書いたあと**を基準にする。
- * 証跡そのものは、この実行が意図して作る出力なので「残した」に数えない。
- */
-const workspaceBaseline = gitOut(['status', '--porcelain']);
 
 const results = [];
 let fatal = null;
@@ -760,9 +800,24 @@ for (const m of mutations) {
    * 「復旧まで終わった直前の1件」。強制終了されたとき、**どのファイルが変異したまま
    * 残っているか**を証跡から名指しできるようにするため。
    */
-  if (currentMutationId !== null) lastCompletedMutationId = currentMutationId;
+  /*
+   * ⚠️ **「復旧まで終わった」と言えるのは、直前の結果が戻せていたときだけ。**（第27回監査 R27-105）
+   * ⚠️ **進み具合を書けなければ、新しい変異を当てない。** 前は初回だけ戻り値を見て、
+   * 2件目からは無視していたので、置き場が一時的に書けなくなると証跡は前の変異のまま、
+   * 次の変異を当て、後で置き場が戻ると complete・証拠に使える、で終わっていた。
+   * 強制終了されたら、どのファイルが変異したままか証跡から名指しできない。
+   */
+  const prev = results.length ? results[results.length - 1] : null;
+  if (currentMutationId !== null && prev && prev.id === currentMutationId && prev.restored === true) {
+    lastCompletedMutationId = currentMutationId;
+  }
   currentMutationId = m.id;
-  saveRunning();
+  if (!saveRunning()) {
+    fatal = 'progress_save_failed';
+    currentMutationId = null;          /* この変異にはまだ手を付けていない */
+    console.error(`★ 進み具合を証跡へ書けなかった。${m.id} 以降は当てずに止まる`);
+    break;
+  }
 
   const base = { id: m.id, file: m.file, desc: m.desc, test: m.test,
     expectedFailure: m.expectedFailure || null };
@@ -951,7 +1006,13 @@ for (const m of mutations) {
   if (r.wrote && restored !== true) {
     results.push({ ...common, outcome: 'runner_error', failureKind: 'restore_failed',
       error: restoreError || '変異したファイルを元へ戻せなかった' });
-    continue;
+    /*
+     * ⚠️ 戻せなかったら、そこで止まる（第27回監査 R27-105）。前は次の変異へ進み、
+     * 進み具合に「終えた」と書いていた。currentMutationId はこの変異を指したまま残す
+     * ——証跡から「このファイルが変異したままかもしれない」と名指しできるように。
+     */
+    fatal = 'restore_failed';
+    break;
   }
 
   if (!r.applied) {
@@ -1068,8 +1129,8 @@ for (const m of mutations) {
     matchedBody: savedBody });
 }
 
-/* 最後の1件も「終わった」に数える（R26-003） */
-if (currentMutationId !== null) {
+/* 最後の1件も「終わった」に数える（R26-003）。止まったとき（R27-105）は数えない */
+if (currentMutationId !== null && !fatal) {
   lastCompletedMutationId = currentMutationId;
   currentMutationId = null;
   saveRunning();
@@ -1078,7 +1139,7 @@ if (currentMutationId !== null) {
 /* 作業ツリーが元に戻っているか（第23回監査 R23-002 §6.6） */
 const gitStatusEnd = gitOut(['status', '--porcelain']);
 const workspaceUnchanged = workspaceBaseline === null || gitStatusEnd === null
-  ? null : workspaceBaseline === gitStatusEnd;
+  ? null : withoutOwnReceipt(workspaceBaseline) === withoutOwnReceipt(gitStatusEnd);
 
 const by = (o) => results.filter((r) => r.outcome === o);
 const killed = by('applied_and_killed'), survived = by('applied_but_survived');
@@ -1106,9 +1167,10 @@ if (workspaceUnchanged === false) {
   console.log(`  実行後: ${JSON.stringify(gitStatusEnd).slice(0, 200)}`);
 }
 
+if (fatal) console.log(`★ 途中で止まった（${fatal}）。この証跡は証拠に使えない`);
 const summary = {
-  spec: specPath, state: 'complete',
-  evidenceEligible: !allowDirty && provenance.workingTreeDirty === false,
+  spec: specPath, state: fatal ? 'aborted' : 'complete',
+  evidenceEligible: !fatal && !allowDirty && provenance.workingTreeDirty === false,
   currentMutationId, lastCompletedMutationId, shard,
   total: results.length,
   applied_and_killed: killed.length, applied_but_survived: survived.length,
@@ -1129,6 +1191,6 @@ if (receiptPath) {
 /* ここまで来て初めて最後の1枚。以後、exit 側は aborted を書かない（R26-003） */
 receiptPhase = 'settled';
 
-const ok = survived.length === 0 && notApplied.length === 0
+const ok = !fatal && survived.length === 0 && notApplied.length === 0
   && errors.length === 0 && badRestore.length === 0 && workspaceUnchanged === true;
 process.exit(ok ? 0 : 1);
