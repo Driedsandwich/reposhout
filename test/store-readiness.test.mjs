@@ -23,6 +23,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { validateStoreReadiness, dateIn, pickPushRun } from '../scripts/store-readiness.mjs';
+import { readZip } from '../scripts/zip-read.mjs';
+import { makeInnerZip, makeStoredZip } from './helpers/zip-write.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (f) => readFileSync(join(ROOT, f), 'utf8').replace(/\r\n/g, '\n');
@@ -33,7 +35,11 @@ const DISCLOSURE = JSON.parse(read('store/DATA_DISCLOSURE.json'));
 const CANDIDATE = JSON.parse(read('store/SUBMISSION_CANDIDATE.json'));
 
 /* 中身のZIPの代わり（大きさとハッシュだけ見る） */
-const INNER = Buffer.from('これは中身のZIPの代わり', 'utf8');
+/*
+ * 中身の ZIP は**本物の ZIP**にする（第27回監査 R27-205）。前は ZIP でない文字列を渡していて、
+ * 成功の対照が実際の読み手（zip-read.mjs）を一度も通っていなかった。
+ */
+const INNER = makeInnerZip();
 const INNER_SHA = sha256(INNER);
 
 const META = { sourceCommit: 'a'.repeat(40), treeSha: 'b'.repeat(40), dirty: false };
@@ -166,7 +172,7 @@ function goodRuntime(cand, over = {}) {
     run: {
       id: cand.runId, path: '.github/workflows/ci.yml', event: 'push', branch: 'main',
       headSha: cand.sourceCommit, conclusion: 'success',
-      jobs: { test: 'success', windows: 'success' }
+      jobs: { ...ALL_JOBS_OK }
     },
     artifact: { name: cand.artifactName, expired: false, digest: `sha256:${OUTER_SHA}` },
     ...over
@@ -174,6 +180,10 @@ function goodRuntime(cand, over = {}) {
 }
 
 /* strict が通る状態を1つ作る。ここから1箇所ずつ壊す */
+/* CI の必須ジョブがすべて success（第27回監査 R27-109） */
+const ALL_JOBS_OK = Object.fromEntries(['test', 'windows', 'mutation-coverage', 'package-candidate',
+  ...[1, 2, 3, 4, 5, 6].map((i) => `mutations (${i})`)].map((j) => [j, 'success']));
+
 const GOOD_REMOTE = {
   originUrl: 'https://github.com/Driedsandwich/reposhout.git',
   originMainSha: 'a'.repeat(40),
@@ -182,7 +192,7 @@ const GOOD_REMOTE = {
 const GOOD_CI = {
   conclusion: 'success', event: 'push', branch: 'main',
   path: '.github/workflows/ci.yml',
-  headSha: 'a'.repeat(40), runId: '999', jobs: { test: 'success', windows: 'success' }
+  headSha: 'a'.repeat(40), runId: '999', jobs: { ...ALL_JOBS_OK }
 };
 
 /*
@@ -231,6 +241,8 @@ function strictInputs(over = {}) {
     auditReportSha256: 'e'.repeat(64),
     metadata: { ...META },
     sha256,
+    /* CLI（scripts/verify-store-readiness.mjs）と同じ読み手を渡す（R27-205） */
+    readZipStrict: (buf) => readZip(buf),
     ...over
   };
 }
@@ -272,8 +284,131 @@ test('strict は、外部監査の申告が無ければ必ず落ちる', () => {
   failsWith(strictInputs({ audit: null, auditReportSha256: null }), '外部監査の判定');
 });
 
+test('正本の状態が ready でなければ、他がそろっていても strict で落ちる（R27-006）', () => {
+  /*
+   * 第27回監査 R27-006。`pending_main_ci` 以外の状態を一律に「確定した候補」として扱い、
+   * 未知の値・空・却下の語でも strict を通っていた（status 以外は同じ入力で 0 件の問題）。
+   */
+  for (const status of ['rejected_by_R27', 'pending_review', null, '', 'READY', undefined]) {
+    const cand = { ...readyCandidate(), status };
+    const r = validateStoreReadiness(strictInputs({ candidate: cand, audit: goodAudit(cand) }));
+    assert.ok(r.problems.some((p) => p.includes('正本の状態が ready か pending_main_ci')),
+      `GXS_MARK.X06 status=${JSON.stringify(status)} なのに通った:\n${r.problems.join('\n')}`);
+  }
+  /* 対照: ready なら、この項目では落ちない */
+  const ok = validateStoreReadiness(strictInputs());
+  assert.ok(!ok.problems.some((p) => p.includes('正本の状態')), ok.problems.join('\n'));
+});
+
+test('入力の形で必須の確認や検査を外せない（R27-108）', () => {
+  /*
+   * 第27回監査 R27-108。strict は数しか見ていなかったので、次の入力がどれも problems 0 で通った。
+   */
+  const cases = [
+    ['本人の確認が要る2欄を not_required にして確認の記録を消す', (i) => {
+      for (const c of i.disclosure.categories) {
+        if (c.requiresOwnerConfirmation) { c.confirmationStatus = 'not_required'; delete c.ownerConfirmation; }
+      }
+    }, /本人の確認が要る欄なのに not_required/],
+    ['確認の要否の印を外す', (i) => {
+      for (const c of i.disclosure.categories) c.requiresOwnerConfirmation = false;
+    }, /確認の要否が正本の定数と一致/],
+    ['同じ欄を9個並べる', (i) => {
+      i.disclosure.categories = Array.from({ length: 9 }, () => clone(i.disclosure.categories[0]));
+    }, /欄の種類が9種類そろい/],
+    ['同じ証明を3つ並べる', (i) => {
+      i.disclosure.certifications = Array.from({ length: 3 }, () => clone(i.disclosure.certifications[0]));
+    }, /証明の種類が3種類そろい/],
+    ['正本の収録数の欄を消す', (i) => { delete i.candidate.innerFiles; }, /正本の収録数が正の整数/]
+  ];
+  const passed = [];
+  for (const [name, breakIt, want] of cases) {
+    const inputs = strictInputs();
+    inputs.disclosure = clone(inputs.disclosure);
+    inputs.candidate = clone(inputs.candidate);
+    breakIt(inputs);
+    inputs.audit = goodAudit(inputs.candidate);
+    const r = validateStoreReadiness(inputs);
+    if (!r.problems.some((p) => want.test(p))) passed.push(`${name}: ${r.problems.length ? r.problems.join(' / ') : '通った'}`);
+  }
+  assert.deepEqual(passed, [], `GXS_MARK.X20 入力の形で必須の確認や検査を外せる:\n${passed.join('\n')}`);
+  /* 対照: そろった入力はこの項目では落ちない */
+  const ok = validateStoreReadiness(strictInputs());
+  assert.deepEqual(ok.problems, [], ok.problems.join('\n'));
+});
+
+test('変異の束・数え直し・提出候補のジョブが success でなければ strict で落ちる（R27-109）', () => {
+  /*
+   * 第27回監査 R27-109。strict は test と windows のジョブしか見ていなかったので、
+   * mutation-coverage が skipped でも、束のジョブが1つ欠けていても通った。
+   */
+  const holes = [
+    ['数え直しが skipped', { 'mutation-coverage': 'skipped' }],
+    ['束が1つ失敗', { 'mutations (3)': 'failure' }],
+    ['提出候補のジョブが cancelled', { 'package-candidate': 'cancelled' }]
+  ];
+  const passed = [];
+  for (const [name, over] of holes) {
+    const r = validateStoreReadiness(strictInputs({ metadataCi: { ...GOOD_CI, jobs: { ...ALL_JOBS_OK, ...over } } }));
+    if (r.problems.length === 0) passed.push(`${name}: 通った`);
+  }
+  /* 束のジョブが1つ無い */
+  const missing = { ...ALL_JOBS_OK }; delete missing['mutations (6)'];
+  if (validateStoreReadiness(strictInputs({ metadataCi: { ...GOOD_CI, jobs: missing } })).problems.length === 0) {
+    passed.push('束のジョブが1つ無い: 通った');
+  }
+  /* 配布物の側（正本の run）でも同じ（第27回監査 便C R27-206） */
+  for (const [name, over] of holes) {
+    const cand = readyCandidate();
+    const rt = goodRuntime(cand);
+    rt.run.jobs = { ...ALL_JOBS_OK, ...over };
+    if (validateStoreReadiness(strictInputs({ runtime: rt })).problems.length === 0) passed.push(`正本の run で ${name}: 通った`);
+  }
+  assert.deepEqual(passed, [], `GXS_MARK.X22 必須のジョブを見ずに通している:\n${passed.join('\n')}`);
+});
+
+test('成功の対照は本物の ZIP を実際の読み手に通し、壊れた中身はそれぞれの理由で落ちる（R27-205）', () => {
+  const ok = validateStoreReadiness(strictInputs());
+  assert.deepEqual(ok.problems, [], ok.problems.join('\n'));
+  assert.ok(ok.ok.includes('中身のZIPが厳しい読み手で開ける'),
+    'GXS_MARK.X33 成功の対照が中身の ZIP を読み手に通していない');
+  assert.ok(ok.ok.includes('中身のZIPの収録数') && ok.ok.includes('中身のZIPの直下に manifest.json'),
+    '収録数と manifest の検査まで進んでいない');
+  /* 1つずつ壊す。正本の大きさ・ハッシュは壊した中身に合わせ、読み手だけが気づく形にする */
+  const crcBroken = Buffer.from(INNER); crcBroken[40] ^= 0xff;
+  const cases = [
+    ['ZIP でない中身', Buffer.from('ZIP ではない', 'utf8'), /中身のZIPが厳しい読み手で開ける/],
+    ['CRC が合わない中身', crcBroken, /中身のZIPが厳しい読み手で開ける/],
+    ['収録数が違う中身', makeInnerZip({ files: 10 }), /中身のZIPの収録数/],
+    ['直下に manifest.json が無い中身', makeInnerZip({ withManifest: false }), /直下に manifest.json/]
+  ];
+  const passed = [];
+  for (const [name, inner, want] of cases) {
+    const cand = { ...readyCandidate(), innerBytes: inner.length, innerSha256: sha256(inner) };
+    const r = validateStoreReadiness(strictInputs({
+      candidate: cand, artifact: fakeArtifact(cand, { inner }), audit: goodAudit(cand),
+      runtime: goodRuntime(cand), listing: docsFor(cand).listing, dashboardChanges: docsFor(cand).dashboard
+    }));
+    if (!r.problems.some((p) => want.test(p))) passed.push(`${name}: ${r.problems.join(' / ') || '通った'}`);
+  }
+  assert.deepEqual(passed, [], `壊れた中身を、その理由で拒めていない:\n${passed.join('\n')}`);
+});
+
+test('中身の ZIP を読む手段が無ければ、成果物を見たことにしない（R27-205）', () => {
+  /* 読み手を渡し忘れると、中身の形・収録数・manifest の検査が黙って飛んでいた */
+  const r = validateStoreReadiness(strictInputs({ readZipStrict: null }));
+  assert.ok(r.problems.some((p) => p.includes('中身のZIPを読む手段')),
+    `GXS_MARK.X34 読み手が無いのに通している:\n${r.problems.join('\n')}`);
+});
+
 /* ---- いまのリポジトリの実状態 ------------------------------------------ */
-test('いまの実ファイルは、preflight では本人の確認待ち2件だけで落ちる', () => {
+test('いまの実ファイルは、preflight では本人の確認待ちの欄の数だけ落ちる（R27-007）', () => {
+  /*
+   * 第27回監査 R27-007。以前は「確認待ちがちょうど2件」と決め打ちしていたので、
+   * 本人が正しく確認を記録すると、この試験が落ちて CI が赤になり、提出ゲートが通らなくなった。
+   * 件数は実ファイルの状態から数える（0件になれば問題も0件）。
+   */
+  const want = DISCLOSURE.categories.filter((c) => c.confirmationStatus === 'pending').length;
   const r = validateStoreReadiness({
     ...preflightInputs(),
     disclosure: clone(DISCLOSURE),
@@ -282,8 +417,20 @@ test('いまの実ファイルは、preflight では本人の確認待ち2件だ
     dashboardChanges: read('store/STORE_DASHBOARD_CHANGES.md')
   });
   const pending = r.problems.filter((p) => p.includes('本人の確認がまだ'));
-  assert.equal(pending.length, 2, `確認待ちが2件でない:\n${r.problems.join('\n')}`);
-  assert.equal(r.problems.length, 2, `確認待ち以外の問題が出ている:\n${r.problems.join('\n')}`);
+  assert.equal(pending.length, want, `確認待ちの数が実ファイルと違う（${want}）:\n${r.problems.join('\n')}`);
+  assert.equal(r.problems.length, want, `確認待ち以外の問題が出ている:\n${r.problems.join('\n')}`);
+});
+
+test('申告の欄を本人が確認済みにしても、preflight は確認待ちで止めない（R27-007 の状態遷移）', () => {
+  /* 実ファイルの確認待ちを、正しく記録した形にした場合の対照（実ファイルは書き換えない） */
+  const r = validateStoreReadiness({
+    ...preflightInputs(),
+    disclosure: confirmedDisclosure(),
+    candidate: clone(CANDIDATE),
+    listing: read('store/LISTING.md'),
+    dashboardChanges: read('store/STORE_DASHBOARD_CHANGES.md')
+  });
+  assert.deepEqual(r.problems, [], `GXS_MARK.X07 正しく確認した状態で止まる:\n${r.problems.join('\n')}`);
 });
 
 /* まだ main の CI が作っていない状態の正本（実ファイルの状態に依存させない） */
@@ -610,10 +757,10 @@ test('いまの文書のCIが失敗していれば落ちる', () => {
 
 test('片方のジョブだけ成功では落ちる', () => {
   failsWith(strictInputs({
-    metadataCi: { ...GOOD_CI, jobs: { test: 'cancelled', windows: 'success' } }
+    metadataCi: { ...GOOD_CI, jobs: { ...ALL_JOBS_OK, test: 'cancelled' } }
   }), 'いまの文書のCI（test）');
   failsWith(strictInputs({
-    metadataCi: { ...GOOD_CI, jobs: { test: 'success', windows: 'failure' } }
+    metadataCi: { ...GOOD_CI, jobs: { ...ALL_JOBS_OK, windows: 'failure' } }
   }), 'いまの文書のCI（windows）');
 });
 
@@ -866,17 +1013,47 @@ test('preflight では Web Intent の判断を求めない（関門は提出直�
     `preflight で止めている: ${r.problems.join(' / ')}`);
 });
 
-test('リポジトリの Web Intent の正本は、まだ本人の回答が入っていない（捏造防止）', () => {
-  /*
-   * ストアへ聞くのも、答えを入れるのも本人の作業。
-   * **こちらが埋めてしまっていないこと**を、実ファイルで見張る。
-   */
-  const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
-  assert.equal(wi.status, 'pending', `回答が入っている: ${wi.status}`);
-  for (const k of ['askedOn', 'question', 'responseOn', 'response', 'ticket', 'decision', 'decidedBy']) {
-    assert.equal(wi[k], null, `${k} が埋まっている: ${JSON.stringify(wi[k])}`);
+/*
+ * Web Intent の正本が、その状態に合った欄を持っているか（第27回監査 R27-007）。
+ * 以前は実ファイルに「status は pending・本人の欄はすべて null」を決め打ちしていたので、
+ * 本人が正しく回答を記録すると試験が落ちた。状態ごとに見るものを変える:
+ *   pending          … 本人の欄がすべて空（こちらが埋めていない＝捏造防止）
+ *   それ以外          … strict の Web Intent の検査をそのまま当てて、通ること
+ */
+function webIntentFileProblems(wi) {
+  const out = [];
+  if (wi.appliesToVersion !== JSON.parse(read('manifest.json')).version) out.push('版がずれている');
+  if (wi.status === 'pending') {
+    for (const k of ['askedOn', 'question', 'responseOn', 'response', 'ticket', 'decision', 'decidedBy']) {
+      if (wi[k] !== null) out.push(`pending なのに ${k} が埋まっている`);
+    }
+    if (wi.responseCoversBoth !== null) out.push('pending なのに responseCoversBoth が埋まっている');
+    return out;
   }
-  assert.equal(wi.appliesToVersion, JSON.parse(read('manifest.json')).version, '版がずれている');
+  const r = validateStoreReadiness(strictInputs({ webIntentDecision: wi }));
+  return out.concat(r.problems.filter((p) => p.includes('Web Intent')));
+}
+
+test('リポジトリの Web Intent の正本は、状態に合った欄を持つ（R27-007）', () => {
+  const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
+  const problems = webIntentFileProblems(wi);
+  assert.deepEqual(problems, [], `正本の欄が状態と合わない（status=${wi.status}）: ${problems.join(' / ')}`);
+});
+
+test('Web Intent の正本の状態ごとの検査が、正しい遷移を通し、欠けを拒む（R27-007）', () => {
+  const cand = readyCandidate();
+  const base = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
+  /* pending のまま本人の欄を1つ埋めた（こちらが捏造した形）は拒む */
+  assert.ok(webIntentFileProblems({ ...base, status: 'pending', ticket: 'X-1' }).length > 0,
+    'pending なのに欄が埋まった形を通した');
+  /* 正しく確認を記録した形は通る */
+  const done = { ...base, ...goodWebIntent(cand) };
+  assert.deepEqual(webIntentFileProblems(done), [],
+    `GXS_MARK.X08 正しく記録した形を拒んだ: ${webIntentFileProblems(done).join(' / ')}`);
+  /* 確認済みと書いて証跡が欠けた形は拒む */
+  assert.ok(webIntentFileProblems({ ...done, ticket: null }).length > 0, '証跡の欠けを通した');
+  assert.ok(webIntentFileProblems({ ...done, responseCoversBoth: false }).length > 0,
+    '片方の論点だけの回答を通した');
 });
 
 test('strict: 確認済みと書いても、証跡が欠けていれば通らない（R18-003）', () => {
@@ -943,11 +1120,7 @@ test('リポジトリの正本が、聞くべき2つの論点を宣言してい�
    */
   const wi = JSON.parse(
     readFileSync(join(ROOT, 'store/WEB_INTENT_POLICY_DECISION.json'), 'utf8'));
-  assert.equal(wi.status, 'pending', '正本の状態を勝手に変えている');
   assert.deepEqual(wi.questionScope, ['secure_query_transport', 'redirection_policy'],
     '聞くべき論点が正本に宣言されていない');
-  assert.equal(wi.responseCoversBoth, null, '回答をこちらで作っている');
-  for (const k of ['askedOn', 'question', 'responseOn', 'response', 'ticket', 'decision', 'decidedBy']) {
-    assert.equal(wi[k], null, `${k} に値が入っている（本人が入れる欄）`);
-  }
+  /* 本人の欄が状態に合っているかは「状態に合った欄を持つ（R27-007）」が見る */
 });

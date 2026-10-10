@@ -21,7 +21,7 @@
  *     自前の weightedLength >= 公式の parseTweet().weightedLength
  *
  * 少なく数える方向にだけ実害がある（Xに弾かれる文面を作る）。
- * 多く数えるのは、切り詰めが早まるだけで害にならない。
+ * 多く数えると、共有を断ることがある（切り詰めはしない・理由は overlong_text。第27回監査 R27-002）。
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -196,6 +196,44 @@ test('構造だけの本文は、いちばん長くても公式判定で280を�
   assert.equal(checked, urls.length);
   /* 最大でどこまで行くかを記録に残す（余裕がゼロでも上限超えでもないこと） */
   assert.ok(sawMax > 100 && sawMax <= 280, `最大 ${sawMax}`);
+});
+
+test('ドットの多い名前を多く数えて断るときは、資格情報ではなく長さの理由で断る（R27-002）', () => {
+  /*
+   * 第27回監査 R27-002。リポジトリ名に `a.co` のようなドメインに見える部分が並ぶと、
+   * 自前の weightedLength はそれぞれを URL として数え（多く数える方向）、上限を超えて断る。
+   * 断ること自体は「少なく数えない」の側なので許すが、理由を `credential_like` に畳んで
+   * 「資格情報らしきものが含まれる」と案内していた（資格情報の検査は何も見つけていない）。
+   */
+  const name = 'a.co'.repeat(12);
+  const url = `https://github.com/o/${name}`;
+  assert.equal(GXS.credentialLikeShareUrl(url), null, '前提が崩れている（資格情報の形が無い入力のはず）');
+  const r = GXS.buildShareResult(url);
+  assert.equal(r.ok, false, '前提が崩れている（多く数えて断る入力のはず）');
+  assert.notEqual(r.reason, 'credential_like', 'GXS_MARK.X02 長さで断ったのに資格情報の理由になっている');
+  assert.equal(r.reason, 'overlong_text', `長さの理由で断っていない: ${r.reason}`);
+  /* 断った本文も、公式より少なく数えてはいない（断る向きの誤差であること） */
+  const text = `o/${name}`;
+  assert.ok(GXS.weightedLength(text) >= official(text), '公式より少なく数えている');
+});
+
+test('ドットの多い名前でも、作る本文は公式より少なく数えない（R27-002）', () => {
+  /* 多く数える誤差は残るが、少なく数える誤差（Xに弾かれる文面）は作らない */
+  const parts = ['a.co', 'x.y', 'foo.co.jp', 'a1.io', 'ex-ample.dev', 'b.c.d'];
+  let checked = 0;
+  for (const part of parts) {
+    for (let k = 1; k <= 25; k++) {
+      const name = part.repeat(k).slice(0, 100);
+      const url = `https://github.com/o/${name}`;
+      const s = GXS.buildShare(url);
+      if (!s) continue;                       // 多く数えて断ったもの（上の試験の範囲）
+      const draft = `${s.text} ${s.url}`;
+      assert.ok(GXS.weightedLength(s.text) >= official(s.text), `本文を少なく数えている: ${name}`);
+      assert.ok(official(draft) <= 280, `公式判定で上限を超える投稿を作った: ${name}`);
+      checked++;
+    }
+  }
+  assert.ok(checked > 20, `比べた件数が少なすぎる: ${checked}`);
 });
 
 test('組み立てた投稿全体を、公式の判定器で280以下と確認する', () => {

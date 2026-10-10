@@ -139,7 +139,8 @@
    * 将来GitHubがボタンサイズを変えても自動で追従する。
    */
   function matchSiblingHeight(container) {
-    var btn = document.getElementById(BTN_ID);
+    /* 高さを書き込むのは自分が作ったボタンだけ（同じ ID のページ側の要素に触らない・R27-004） */
+    var btn = isMine(ownButton) ? ownButton : null;
     var sibling = firstSibling(container);
     if (!btn || !sibling) return;
     try {
@@ -205,8 +206,11 @@
          * 第24回監査 R24-003。開いてはいるが Esc が効かないとき、
          * service worker が案内を出せなかった場合だけ、ここで出す
          * （出せていれば `notified` が true なので重ねない）。
+         * 対象は**記録できなかったポップアップだけ**（第27回監査 R27-003）。
+         * ふつうのタブで開いたとき（tab_confirmed）は正本どおり案内しない。
          */
-        else if (res.ok === true && res.escAvailable === false && res.notified !== true) {
+        else if (res.ok === true && res.state === 'popup_confirmed_untracked'
+                 && res.escAvailable === false && res.notified !== true) {
           showNotice('esc_unavailable');
         }
       });
@@ -272,9 +276,21 @@
     return t('noticeUnsupported', 'This page cannot be shared. Nothing was sent to X.');
   }
 
+  /*
+   * 案内の要素は**自分が作った物への参照**だけで扱う（第27回監査 R27-004）。
+   * 以前は `getElementById(NOTICE_ID)` で見つかった物を使い回していたので、
+   * ページ側に同じ ID の要素があると、その中身を案内の文で書き換え、数秒後に要素ごと消していた。
+   * 公開された固定の ID は持ち主の証明にならない。
+   */
+  var ownNotice = null;
+
+  function isMine(el) {
+    return !!(el && el.parentNode && el.isConnected !== false);
+  }
+
   function showNotice(reason) {
     var text = noticeTextFor(reason);
-    var el = document.getElementById(NOTICE_ID);
+    var el = isMine(ownNotice) ? ownNotice : null;
     if (!el) {
       el = document.createElement('div');
       el.id = NOTICE_ID;
@@ -287,6 +303,7 @@
         'background:#1f2328', 'color:#fff', 'box-shadow:0 4px 16px rgba(0,0,0,.3)'
       ].join(';');
       document.body.appendChild(el);
+      ownNotice = el;
     }
     el.textContent = text;          // 文字列として入れる（HTMLとして解釈させない）
     if (el.gxsTimer) clearTimeout(el.gxsTimer);
@@ -321,6 +338,8 @@
     }
   }
 
+  var ownButton = null;
+
   function buildButton() {
     var btn = document.createElement('button');
     btn.id = BTN_ID;
@@ -354,7 +373,8 @@
         li.style.display = 'flex';
         li.style.alignItems = 'center';
       }
-      li.appendChild(buildButton());
+      ownButton = buildButton();
+      li.appendChild(ownButton);
       matchSiblingLayout(li, container);
       container.prepend(li);                           // prepend＝ボタン群の左端
       matchSiblingHeight(container);
@@ -362,7 +382,7 @@
       [100, 500, 1500].forEach(function (delay) {
         setTimeout(function () {
           var c = findContainer();
-          if (c && document.getElementById(BTN_ID)) matchSiblingHeight(c);
+          if (c && isMine(ownButton)) matchSiblingHeight(c);
         }, delay);
       });
       return true;

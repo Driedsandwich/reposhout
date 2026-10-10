@@ -194,12 +194,15 @@ test('投稿全体（本文+空白+URL）が280以下に収まる（切り詰め
 
 test('上限を超えるなら、切り詰めずに共有しない', () => {
   /*
-   * いまの型では到達しないが、境界の扱いを固定しておく。
    * 「超えたら切り詰める」に戻すと、その変換がまた検査を外しうる（R14-001の型）。
+   * 第26回までは「いまの型では到達しない」としていたが、ドメインに見える部分を
+   * URL として多く数えるので、`a.co` を並べた名前で実際に到達する（第27回監査 R27-002）。
    */
+  const url = 'https://github.com/o/' + 'a.co'.repeat(12);
+  assert.equal(GXS.buildShare(url), null, '上限を超えたのに共有している（切り詰めている）');
+  const r = GXS.buildShareResult(url);
+  assert.deepEqual(r, { ok: false, reason: 'overlong_text' }, `断り方が違う: ${JSON.stringify(r)}`);
   const src = readShareSource();
-  assert.ok(/weightedLength\(text\) \+ 1 \+ URL_WEIGHT > MAX_WEIGHTED_TWEET\) return null;/.test(src),
-    '上限を超えたときに共有しない、という書き方になっていない');
   assert.ok(!/function truncate\b/.test(src), '切り詰めが復活している');
 });
 
@@ -224,7 +227,7 @@ test('判定の理由が、値を含まない決まった語で返る（R12-002�
     ['https://github.com/o/r/blob/main/a.js', 'unsupported']
   ];
   const allowed = ['credential_like', 'sensitive_route', 'unsupported', 'malformed_url',
-                   'ambiguous_query', 'overlong_url'];
+                   'ambiguous_query', 'overlong_url', 'overlong_text'];
   for (const [u, want] of cases) {
     const r = GXS.buildShareResult(u);
     assert.equal(r.ok, false, u);
@@ -265,10 +268,20 @@ test('クエリの表に、共有できないルートが残っていない', ()
 });
 
 test('資格情報の判定は、ほどける段数に上限がある（止まらなくならない）', () => {
-  let deep = 'plain-text';
-  for (let i = 0; i < 40; i++) deep = encodeURIComponent(deep);
+  /*
+   * ⚠️ 題材は**エンコードで実際に変わる**ものにする（第27回監査 R27-207）。前の `plain-text` は
+   * エンコードしても1文字も変わらず、40回重ねても `plain-text` のままだった——上限の処理を
+   * 一度も通らないので、上限を緩めても外しても、この試験は通っていた。
+   */
+  const encodeTimes = (s, n) => { for (let i = 0; i < n; i++) s = encodeURIComponent(s); return s; };
+  const base = 'plain text';
+  const deep = encodeTimes(base, 40);
+  assert.ok(deep !== base && /%25/.test(deep), `題材が多層になっていない: ${deep.slice(0, 40)}`);
+  /* 上限の内側（6段）はほどけて、普通の文として通る */
+  assert.equal(GXS.credentialLikeValue(encodeTimes(base, 6)), false, '上限の内側の多層エンコードを拒んでいる');
+  /* 上限を超えると「判定できない」ので落とす。時間も有限 */
   const t0 = Date.now();
-  GXS.credentialLikeValue(deep);
+  assert.equal(GXS.credentialLikeValue(deep), true, 'GXS_MARK.X36 上限を超えた多層エンコードを通している');
   assert.ok(Date.now() - t0 < 1000, '判定が長すぎる');
 });
 
@@ -377,6 +390,36 @@ test('セグメントの数と型を1つずつ崩すと、共有できなくな�
     'https://github.com/o/r@x/issues/12'           // リポジトリ名に @
   ];
   for (const u of broken) assert.equal(GXS.buildShare(u), null, `共有できてしまう: ${u}`);
+});
+
+test('ルートの表は自分の項目だけを見る。継承した名前を許可ルートにしない（R27-001）', () => {
+  /*
+   * 第27回監査 R27-001。LIST_ROUTES・NUMBERED_ROUTES を素のオブジェクトで引いていたので、
+   * `toString`・`constructor`・`__proto__` のような Object.prototype 由来の名前が
+   * 「表にある」と読まれ、9種別の外の `/o/r/toString` を共有していた（配布ZIPで再現）。
+   */
+  const inherited = ['toString', 'constructor', '__proto__', 'hasOwnProperty', 'valueOf'];
+  const sha = 'a'.repeat(40);
+  for (const name of inherited) {
+    for (const u of [`https://github.com/o/r/${name}`, `https://github.com/o/r/${name}/12`,
+                     `https://github.com/o/r/${name}/${sha}`]) {
+      const r = GXS.buildShareResult(u);
+      assert.equal(r.ok, false, `GXS_MARK.X01 継承した名前を許可ルートとして共有してしまう: ${u}`);
+      assert.equal(GXS.fallbackUrl(u), null, `URLだけの経路が共有してしまう: ${u}`);
+    }
+  }
+  /* 正規の9種別は今までどおり通る（境界を狭めすぎていない対照） */
+  for (const u of ['https://github.com/o/r', 'https://github.com/o/r/issues',
+                   'https://github.com/o/r/pulls', 'https://github.com/o/r/discussions',
+                   'https://github.com/o/r/releases', 'https://github.com/o/r/issues/1',
+                   'https://github.com/o/r/pull/2', 'https://github.com/o/r/discussions/3',
+                   `https://github.com/o/r/commit/${sha}`]) {
+    const r = GXS.buildShareResult(u);
+    assert.equal(r.ok, true, `正規のルートを拒否している: ${u}`);
+    /* 成功した結果の種別は、許可した9種別の文字列だけ（第27回監査 便C R27-201） */
+    assert.ok(['repo', 'issue-list', 'pr-list', 'discussion-list', 'releases', 'issue', 'pr', 'discussion', 'commit']
+      .includes(r.share.kind), `許可した種別の外の kind: ${String(r.share.kind)}（${u}）`);
+  }
 });
 
 /* ============================================================

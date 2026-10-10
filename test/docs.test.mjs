@@ -770,7 +770,7 @@ test('文書が、いまの共有方針を正しく説明している（R13-002�
     ['/enterprises/', 'GitHubの機能ページを拒否すること（R16-001）'],
     ['single list', '拒否する語を1つの一覧にしたこと（R16-001）']);
   must['README.ja.md'].push(
-    ['同じ名前のクエリは1回まで', '同じクエリを1回までにしたこと（R16-002）'],
+    ['表に載っている名前のクエリは1回まで', '同じクエリを1回までにしたこと（R16-002・範囲は R27-005）'],
     ['単一の一覧', '拒否する語を1つの一覧にしたこと（R16-001）']);
   must['PRIVACY.md'].push(
     ['the button was pressed', '画面側が合図しか送らないこと（R16-003）'],
@@ -2236,5 +2236,104 @@ test('Escが効く条件が、すべての面で同じことを言っている�
   ]) {
     assert.ok(activeText(file).includes(needle),
       `GXS_MARK.SHARED_11 ${file} が Esc の条件を無条件のまま書いている（「${needle}」が無い）`);
+  }
+});
+
+test('文書の説明が、実挙動の測り直しと食い違わない（R27-005）', () => {
+  /*
+   * 第27回監査 R27-005。要約や貼る原稿の一部が、実挙動より強い言い切りや古い仕様のまま残っていた。
+   * 語を禁じるだけでなく、**その語が言っていた事実を、いまの実物で測り直して**から文を照らす。
+   */
+  const { GXS } = loadShare();
+  /* ① 表に無い名前の繰り返しは落として共有し、表にある名前の繰り返しは断る */
+  assert.equal(GXS.buildShareResult('https://github.com/o/r/issues?foo=1&foo=2').ok, true,
+    '前提: 表に無い名前の繰り返しは落として共有するはず');
+  assert.equal(GXS.buildShareResult('https://github.com/o/r/issues?state=open&state=closed').reason,
+    'ambiguous_query', '前提: 表にある名前の繰り返しは断るはず');
+  /* ② 所有者名・リポジトリ名は投稿本文に入る（意図して送る） */
+  assert.equal(GXS.buildShare('https://github.com/o/CONFIDENTIAL-project-alpha').text,
+    'o/CONFIDENTIAL-project-alpha', '前提: リポジトリ名は本文に入るはず');
+  /* ③ 窓の記録は ID と開いた時刻の2つ（service worker の実物） */
+  const bg = read('src/background.js');
+  assert.ok(/rec\[String\(windowId\)\] = now/.test(bg), '前提: 窓の記録に開いた時刻を入れているはず');
+
+  const stale = [
+    ['README.md', "don't touch the DOM at all", 'ツールバー・ショートカットも案内のために content script を使う'],
+    ['README.ja.md', 'DOMに一切触れません', '同（日本語）'],
+    ['store/LISTING.md', 'do not use\nthis content script at all', '同（貼る原稿）'],
+    ['README.md', 'Nothing a user can type', '所有者名・リポジトリ名は送る（②）'],
+    ['README.ja.md', '利用者が打ち込めるもの（表題・説明・ファイル名・ブランチ名）は、1つもXへ渡りません', '同（日本語）'],
+    ['SECURITY.md', 'Any way to get user-controlled text or an arbitrary path', '同（報告の対象）'],
+    ['README.md', '**A parameter may appear at most once**', '繰り返しを断るのは表にある名前だけ（①）'],
+    ['store/DATA_FLOW_CLAIMS.json', '。同じ名前が2回以上あればURLごと拒否する。', '同（正本）'],
+    ['PRIVACY.md', '成功と報告もしません', '記録できない窓も「開いた」とは伝える'],
+    ['README.ja.md', '**Escキーの検知だけ**', 'すべての keydown の event.key を読んでから捨てる'],
+    ['store/LISTING.md', 'storage holds one thing', '窓の記録は ID と時刻の2つ（③）'],
+    ['store/LISTING.md', 'It cannot be used to observe browsing in the', '権限の能力と、この拡張がしないことを混ぜない'],
+    ['README.md', 'Over-counting only trims a little early', '多く数えると切り詰めずに断る（R27-002）'],
+    ['README.ja.md', '多く数えるのは少し早く切り詰めるだけ', '同（日本語）']
+  ];
+  for (const [f, needle, why] of stale) {
+    assert.ok(!read(f).includes(needle.replace(/\\n/g, '\n')),
+      `GXS_MARK.X09 ${f} に実挙動と食い違う古い説明が残っている（${why}）: ${needle}`);
+  }
+  const must = [
+    ['README.md', 'they ask the content script on that tab to show the status message'],
+    ['store/LISTING.md', 'they ask this content script to show the status message'],
+    ['README.md', 'sent on purpose'],
+    ['README.ja.md', '意図して送ります'],
+    ['store/LISTING.md', 'the window\'s identifier and the time it was opened'],
+    ['store/LISTING.md', 'does not monitor the tab']
+  ];
+  for (const [f, needle] of must) {
+    assert.ok(read(f).includes(needle), `${f} に直した説明が無い: ${needle}`);
+  }
+});
+
+test('名前空間の説明が、台帳の分岐を全部書いている（R27-012）', () => {
+  /*
+   * 第27回監査 R27-012。判定の結果（deny 72・allow 7）はコードと一致していたが、
+   * 説明（Markdown と JSON の _about）は古い3分岐のままで、`account_present_zero_public_repos_auth_route`
+   * を書いていなかった。さらにその分岐の理由が「公開0件だから巻き込まない」と、
+   * 公開情報からは導けない非公開リポジトリの不存在まで言い切っていた。
+   */
+  const inv = JSON.parse(read('store/GITHUB_NAMESPACE_INVENTORY.json'));
+  const md = read('store/NAMESPACE_INVENTORY.md');
+  const block = md.slice(md.indexOf('## 判定の基準'), md.indexOf('## 候補の集め方'));
+  const about = inv._about.join('\n');
+  const phrase = {
+    account_absent: 'アカウントが無い',
+    account_present_zero_public_repos_auth_route: '公開リポジトリが0件',
+    route_shadowed: 'リポジトリUIが出ない',
+    reachable_repo: 'browser でも開ける'
+  };
+  const used = inv.denyCriteria.branches.filter((b) => b.expectedCount > 0);
+  assert.equal(used.length, Object.keys(phrase).length, `使われている分岐の数が変わった: ${used.map((b) => b.id)}`);
+  for (const b of used) {
+    assert.ok(phrase[b.id], `説明の語を決めていない分岐: ${b.id}`);
+    assert.ok(block.includes(phrase[b.id]), `GXS_MARK.X10 NAMESPACE_INVENTORY.md の判定の基準に ${b.id} が無い`);
+    assert.ok(about.includes(phrase[b.id]), `JSON の _about に ${b.id} が無い`);
+  }
+  const zero = inv.denyCriteria.branches.find((b) => b.id === 'account_present_zero_public_repos_auth_route');
+  assert.ok(zero.why.includes('外から確かめられない'), '公開0件から非公開の不存在まで言い切っている');
+});
+
+test('却下の記録の理由文が、指摘IDを1つずつ説明している（R27-011）', () => {
+  /*
+   * 第27回監査 R27-011。findingIds（構造化された指摘ID）と理由文が別の集合になっていた
+   * （R20-001・R19-005・R16-005・R15-002〜005・R14-003・R13-002 が理由文に無く、
+   * 逆に監査の指摘ではない自分の発見を R16-006 と書いていた）。両方向で突き合わせる。
+   */
+  const cand = JSON.parse(read('store/SUBMISSION_CANDIDATE.json'));
+  const rejected = cand.history.filter(
+    (h) => typeof h.status === 'string' && h.status.startsWith('rejected_by_'));
+  assert.ok(rejected.length >= 15, `却下の記録が少なすぎる: ${rejected.length}`);
+  for (const h of rejected) {
+    const round = h.auditRound;
+    const said = new Set(h.reason.match(new RegExp(`R${round}-\\d{3}`, 'g')) || []);
+    const missing = h.findingIds.filter((id) => !said.has(id));
+    const extra = [...said].filter((id) => !h.findingIds.includes(id));
+    assert.deepEqual(missing, [], `GXS_MARK.X11 ${h.status}: 理由文に無い指摘ID`);
+    assert.deepEqual(extra, [], `${h.status}: findingIds に無いIDが理由文にある`);
   }
 });

@@ -57,7 +57,7 @@ function parseArgs(argv) {
     if (!KNOWN.includes(a)) return { error: `知らない引数: ${a}` };
     if (out[a] !== undefined) return { error: `${a} が2回ある` };
     const v = argv[i + 1];
-    if (v === undefined || v.startsWith('--')) return { error: `${a} に値が無い` };
+    if (v === undefined || v === '' || v.startsWith('--')) return { error: `${a} に値が無い` };
     out[a] = v; i++;
   }
   if (rest.length > 1) return { error: `証跡のパスが ${rest.length} 個ある` };
@@ -135,8 +135,30 @@ function gitOut(args) {
     return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch (e) { return null; }
 }
+/* 中身を加工せずに受け取る（trim すると末尾の改行が消えてハッシュが変わる） */
+function gitRaw(args) {
+  try {
+    return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: 64 * 1024 * 1024 });
+  } catch (e) { return null; }
+}
 const headCommit = gitOut(['rev-parse', 'HEAD']);
 const headTree = gitOut(['rev-parse', 'HEAD^{tree}']);
+/* 同じファイルを何度も git から取り出さない（変異の対象は数十ファイルに集まる） */
+const headContentCache = new Map();
+function headContent(file) {
+  if (!headContentCache.has(file)) headContentCache.set(file, gitRaw(['show', `${headCommit}:${file}`]));
+  return headContentCache.get(file);
+}
+/*
+ * ⚠️ HEAD の tree を確かめても、**いまの作業ファイルがその tree どおり**とは限らない
+ *（第27回監査 R27-103）。追跡しているファイルに変更があれば、証跡と手元が対応しない。
+ * 証跡などの出力（追跡外）は数えない。
+ */
+const trackedChanges = gitOut(['status', '--porcelain', '--untracked-files=no']);
+need(trackedChanges !== null, '作業ツリーの状態を取れない。照合できないので通さない');
+need(trackedChanges === null || trackedChanges === '',
+  `追跡しているファイルに変更がある（証跡と手元が対応しない）: ${String(trackedChanges).split('\n').slice(0, 3).join(' / ')}`);
 /*
  * ⚠️ git が使えない場所で「照合できなかった」を成功にしない。
  * 測れないなら、そう言って落とす（第24回 R24-002 と同じ形の穴）。
@@ -176,26 +198,69 @@ if (results.length) {
     + ` ≠ ${results[results.length - 1].id}`);
 }
 need(results.length === r.total, `results が ${results.length} 件、total は ${r.total}`);
+need(results.length > 0, '結果が0件（何も測っていない証跡を「すべて検知」にしない）');
+/*
+ * ⚠️ **4つの分類を、結果行から数え直して上位の欄と厳密に照合する。**（第27回監査 R27-101）
+ * 前は検知の数だけを数え直し、素通り・未適用・ランナー失敗は上位の欄が 0 かしか見ず、
+ * しかも結果行が applied_and_killed でなければ詳細の検査を飛ばしていた。
+ * 結果行が「検知していない」と言っていても、上位の欄を 0 にしておけば通った。
+ */
 const by = (o) => results.filter((x) => x.outcome === o).length;
+const OUTCOMES = ['applied_and_killed', 'applied_but_survived', 'not_applied', 'runner_error'];
+for (const k of OUTCOMES) {
+  need(Number.isInteger(r[k]) && r[k] >= 0, `${k} が 0 以上の整数でない: ${JSON.stringify(r[k])}`);
+  need(by(k) === r[k], `${k} の数が結果行と合わない: 結果行 ${by(k)} / 上位の欄 ${JSON.stringify(r[k])}`);
+}
 const killed = by('applied_and_killed');
-need(killed === r.applied_and_killed, `検知の数が合わない: ${killed} と ${r.applied_and_killed}`);
-need(killed + by('applied_but_survived') + by('not_applied') + by('runner_error') === results.length,
+need(OUTCOMES.reduce((n, k) => n + by(k), 0) === results.length,
   '結果の内訳が全体と合わない（知らない outcome がある）');
-need((r.applied_but_survived || 0) === 0, `素通りが ${r.applied_but_survived} 件ある`);
-need((r.not_applied || 0) === 0, `当たらなかった変異が ${r.not_applied} 件ある`);
-need((r.runner_error || 0) === 0, `ランナー失敗が ${r.runner_error} 件ある`);
+need(killed === results.length, `検知していない結果がある: ${results.length - killed} 件`);
 
 /* ⑥ 変異の一覧・数・中身が、いまの正本と一致すること */
-const specPath = parsed.out['--spec'] || r.spec || 'test/mutations.json';
+/*
+ * ⚠️ **照合先（正本）は、読む側が決める。**（第27回監査 R27-102）
+ * 前は既定の照合先に証跡の `spec` を使っていたので、証跡が `{}` の JSON を指すと、
+ * 「mutations が配列でない」ので件数・ID・正本ハッシュの照合が**黙って飛んで**通った。
+ * 証跡の `spec` は照合する対象の情報であって、照合先ではない。
+ */
+const specPath = parsed.out['--spec'] || 'test/mutations.json';
 const specAbs = isAbsolute(specPath) ? specPath : resolve(ROOT, specPath);
+const receiptSpecAbs = typeof r.spec === 'string' && r.spec !== ''
+  ? (isAbsolute(r.spec) ? r.spec : resolve(ROOT, r.spec)) : null;
+need(receiptSpecAbs === specAbs,
+  `証跡が名乗る正本（${JSON.stringify(r.spec)}）が、照合に使う正本（${specPath}）と違う`);
 let specById = new Map();
 const specIds = new Set();
+/* 正本の形を先に確かめる。確かめられなければ、照合を飛ばさずに落とす */
+function specShapeProblems(spec) {
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return ['正本がオブジェクトでない'];
+  if (!Array.isArray(spec.mutations) || spec.mutations.length === 0) return ['正本の mutations が空か配列でない'];
+  const out = []; const ids = new Set();
+  for (const [i, m] of spec.mutations.entries()) {
+    const at = `正本の ${i} 番目`;
+    if (!m || typeof m !== 'object') { out.push(`${at}がオブジェクトでない`); continue; }
+    if (typeof m.id !== 'string' || m.id === '') out.push(`${at}の id が文字列でない`);
+    else if (ids.has(m.id)) out.push(`正本に同じ id が2度ある: ${m.id}`);
+    else ids.add(m.id);
+    for (const k of ['file', 'test', 'find', 'replace', 'desc']) {
+      if (typeof m[k] !== 'string') out.push(`${at}の ${k} が文字列でない`);
+    }
+    const ef = m.expectedFailure;
+    if (!ef || typeof ef.testName !== 'string' || typeof ef.diagnosticMarker !== 'string') {
+      out.push(`${at}の expectedFailure に testName と diagnosticMarker が無い`);
+    }
+  }
+  return out;
+}
 if (existsSync(specAbs)) {
   const specText = readFileSync(specAbs, 'utf8');
-  let spec = null;
-  try { spec = JSON.parse(specText); }
+  let spec = null; let parsedOk = false;
+  try { spec = JSON.parse(specText); parsedOk = true; }
   catch (e) { problems.push(`正本が JSON として読めない: ${e && e.message}`); }
-  if (spec && Array.isArray(spec.mutations)) {
+  /* ⚠️ 読めたが中身が null・空のときも「照合しなかった」を成功にしない */
+  const shape = parsedOk ? specShapeProblems(spec) : [];
+  for (const p of shape) problems.push(p);
+  if (parsedOk && shape.length === 0) {
     for (const m of spec.mutations) { specById.set(m.id, m); specIds.add(m.id); }
     /*
      * 束に分けて走らせた証跡なら、**その束に属する変異だけ**が入っているはず
@@ -265,6 +330,7 @@ for (const x of results) {
     }
   }
 
+  /* 検知していない結果行は、上の「検知していない結果がある」で全体ごと落ちる（ここで重ねて言わない） */
   if (x.outcome !== 'applied_and_killed') continue;
   seenTests.add(x.test);
 
@@ -274,6 +340,27 @@ for (const x of results) {
   }
   w(x.beforeSha256 !== x.afterSha256, '変異の前後でファイルが変わっていない（当たっていない疑い）');
   w(x.restoredSha256 === x.beforeSha256, '戻したあとが変異前と違う');
+  /*
+   * ⚠️ **前・後・復旧のハッシュを、実体から計算し直して照合する。**（第27回監査 R27-103）
+   * 前は形と証跡の中での関係しか見ていなかったので、実体と無関係な値でも通った。
+   * 測ったコミットのファイルの中身から「変異前」と「正本どおり置き換えた後」を作り、
+   * いまの作業ファイルが変異前（＝戻した状態）であることも見る。
+   */
+  if (m && headCommit !== null) {
+    const raw = headContent(m.file);
+    if (raw === null) {
+      w(false, `測ったコミットに変異の対象が無い: ${m.file}`);
+    } else {
+      const parts = raw.split(m.find);
+      const want = m.expectMatches === undefined ? 1 : m.expectMatches;
+      w(parts.length - 1 === want, `測ったコミットの中身で、置き換えの一致数が ${parts.length - 1}（期待 ${want}）`);
+      w(x.beforeSha256 === sha256(raw), '変異前のハッシュが、測ったコミットの中身と違う');
+      w(x.afterSha256 === sha256(parts.join(m.replace)), '変異後のハッシュが、正本どおり置き換えた中身と違う');
+      const nowAbs = resolve(ROOT, m.file);
+      w(existsSync(nowAbs) && sha256(readFileSync(nowAbs, 'utf8')) === sha256(raw),
+        'いまの作業ファイルが、測ったコミットの中身（戻した状態）と違う');
+    }
+  }
   w(x.changed === true, 'changed が true でない');
   w(x.wrote === true, 'wrote が true でない');
   w(x.actualMatches === x.expectedMatches,
@@ -336,10 +423,13 @@ for (const x of results) {
  */
 const baselines = Array.isArray(r.baselines) ? r.baselines : [];
 const baseByTest = new Map(baselines.map((b) => [b.test, b]));
+/* 同じテストの対照が2つあれば、どちらが本物か決まらない（第27回監査 R27-103） */
+need(baseByTest.size === baselines.length, '変異前の対照に同じテストが2度出ている');
 for (const t of seenTests) {
   const b = baseByTest.get(t);
   if (!b) { problems.push(`変異前の対照が無い対象テストがある: ${t}`); continue; }
   if (b.passed !== true) problems.push(`変異前の対照が通っていない: ${t}`);
+  if (b.exitCode !== 0) problems.push(`変異前の対照の終了コードが 0 でない: ${t}（${JSON.stringify(b.exitCode)}）`);
   if (!HEX64.test(String(b.stdoutSha256 || ''))) {
     problems.push(`変異前の対照の出力ハッシュが 64桁の16進でない: ${t}`);
   }

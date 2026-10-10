@@ -10,7 +10,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, readFileSync, existsSync, readdirSync, mkdirSync, rmSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync, readdirSync, mkdirSync, rmSync, chmodSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { ROOT } from './helpers/load.mjs';
@@ -188,6 +189,55 @@ test('目印がテスト内で一意でなければ、測れない（R25-001）'
   const r = runRunner(dir);
   assert.equal(outcomeOf(r, 'U5'), 'runner_error', '一意でない目印で測っている');
   assert.equal(kindOf(r, 'U5'), 'expectation_invalid', 'GXS_MARK.SHARED_18 一意でない目印を受け取っている');
+});
+
+test('目印が比べた値に出ているだけなら、検知にしない（R27-104 の内側の題材）', () => {
+  /*
+   * 第27回監査 R27-104。守りたい assertion（目印つき）は通り、別の assertion が
+   * **目印を比べる値として**出して落ちた。Node が自動で作る差分と actual 欄に目印が載るので、
+   * 目印の照合が成り立ち、applied_and_killed になっていた（監査で実測）。
+   */
+  const files = {
+    'test/inner.test.mjs': `
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { value } from '../mod.mjs';
+test('比べる値に目印が出る', () => {
+  const mark = 'GXS_MARK.INNER';
+  assert.ok(true, mark);
+  assert.equal(value === 1 ? 'ok' : mark, 'ok');
+});
+`
+  };
+  const dir = makeFixture([mut('U7', { test: 'test/inner.test.mjs',
+    expectedFailure: { testName: '比べる値に目印が出る', diagnosticMarker: 'GXS_MARK.INNER' } })], files).dir;
+  const r = runRunner(dir);
+  assert.equal(outcomeOf(r, 'U7'), 'runner_error', 'GXS_MARK.X27 比べた値に出た目印で検知にしている');
+  assert.equal(kindOf(r, 'U7'), 'marker_in_compared_value', `止まった理由が違う: ${kindOf(r, 'U7')}`);
+});
+
+test('目印がテストの呼び出しの外にあれば、測る前に断る（R27-104 の外側の題材）', () => {
+  /*
+   * 第27回監査 R27-104。範囲を「次の宣言の手前まで」にしていたので、テストの閉じ括弧の
+   * 後ろ（モジュール直下の定数）に置いた目印も「範囲の中」に見えた。
+   */
+  const files = {
+    'test/outer.test.mjs': `
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { value } from '../mod.mjs';
+test('外に目印を置いた', () => {
+  assert.equal(value, 1);
+});
+const mark = 'GXS_MARK.OUTER';
+`
+  };
+  const dir = makeFixture([mut('U8', { test: 'test/outer.test.mjs',
+    expectedFailure: { testName: '外に目印を置いた', diagnosticMarker: 'GXS_MARK.OUTER' } })], files).dir;
+  const r = runRunner(dir);
+  assert.equal(outcomeOf(r, 'U8'), 'runner_error', 'テストの外の目印で検知にしている');
+  /* ⚠️ 走らせたあとの「本文に目印が無い」でも runner_error になるので、測る前に断ったかを理由で見る */
+  assert.match(String(of(r, 'U8').error), /対象テストの外/, `GXS_MARK.X28 測る前に断っていない: ${of(r, 'U8').error}`);
 });
 
 test('目印は、そのテストの本文の中だけで探す（R25-001）', () => {
@@ -426,8 +476,13 @@ test('「走っている」を置けなければ、1件も測らない（R26-003
   assert.equal(r.exitCode, 2, `書けない置き場なのに走っている:\n${r.stdout}`);
   assert.equal(readFileSync(join(dir, 'mod.mjs'), 'utf8'), before,
     'GXS_MARK.SAVERUN_RESTORED 証跡を置けないのに、変異を当てている');
-  assert.ok(!/落ちた 1/.test(r.stdout),
-    `GXS_MARK.SAVERUN_FIRST 1件でも測っている:\n${r.stdout}`);
+  /*
+   * ⚠️ 第27回（R27-105）でループの中にも同じ書き込みの検査を入れたので、ここを外しても
+   * 「1件も当てない」は変わらない。違うのは**集計まで進まずに止まる**こと（測る前の失敗）。
+   * 重複した守りは残し、この試験はその違い（診断）を見る。
+   */
+  assert.ok(!/^変異 \d+ 件/m.test(r.stdout),
+    `GXS_MARK.SAVERUN_FIRST 測る前に止まらず、集計まで進んでいる:\n${r.stdout}`);
   assert.ok(!existsSync(join(dir, 'no-such-dir')),
     '置けない場所にディレクトリを作っている');
 });
@@ -489,6 +544,131 @@ test('終わった証跡は、最後に終えた変異まで書いてある（R2
     `最後に終えた変異が違う: ${r.receipt.lastCompletedMutationId}`);
 });
 
+test('途中で証跡を書けなくなったら、次の変異を当てずに止まり、成功の証跡に化けない（R27-105）', () => {
+  /*
+   * 第27回監査 R27-105。2件目からは進み具合の書き込みの成否を見ていなかったので、
+   * 置き場が一時的に書けなくなっても次の変異を当て、置き場が戻ると complete・証拠に使える、で終わった。
+   * 題材: 1件目の試験が（変異したときだけ）置き場を読み取り専用にし、2件目の試験が戻す。
+   * 直っていれば2件目は当たらないので、置き場は戻らず、成功の証跡は1枚も残らない。
+   */
+  const probe = mkdtempSync(join(tmpdir(), 'reposhout-ro-'));
+  chmodSync(probe, 0o555);
+  let canBlock = true;
+  try { writeFileSync(join(probe, 'x'), 'x'); canBlock = false; } catch (e) { /* 書けない＝題材を作れる */ }
+  chmodSync(probe, 0o755);
+  if (!canBlock) {
+    /* Windows や管理者権限では読み取り専用にしても書ける。作れなかったことを合格に数えない */
+    console.log('# SKIP 読み取り専用のディレクトリを作れない環境（書き込みが通った）');
+    return;
+  }
+  const out = 'out';
+  const fx = makeFixture([
+    mut('Q7', { test: 'test/block.test.mjs',
+      expectedFailure: { testName: '変異したときだけ置き場を塞ぐ', diagnosticMarker: 'GXS_MARK.BLOCK' } }),
+    mut('Q8', { find: 'export const other = 2;', replace: 'export const other = 98;', test: 'test/unblock.test.mjs',
+      expectedFailure: { testName: '変異したときだけ置き場を戻す', diagnosticMarker: 'GXS_MARK.UNBLOCK' } })
+  ], {
+    'test/block.test.mjs': `
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { chmodSync, readFileSync } from 'node:fs';
+const mutated = readFileSync(new URL('../mod.mjs', import.meta.url), 'utf8').includes('value = 99');
+test('変異したときだけ置き場を塞ぐ', () => {
+  if (!mutated) return;
+  chmodSync(new URL('../${out}', import.meta.url), 0o555);
+  assert.ok(false, 'GXS_MARK.BLOCK: わざと落とす');
+});
+`,
+    'test/unblock.test.mjs': `
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { chmodSync, readFileSync } from 'node:fs';
+const mutated = readFileSync(new URL('../mod.mjs', import.meta.url), 'utf8').includes('other = 98');
+test('変異したときだけ置き場を戻す', () => {
+  if (!mutated) return;
+  chmodSync(new URL('../${out}', import.meta.url), 0o755);
+  assert.ok(false, 'GXS_MARK.UNBLOCK: わざと落とす');
+});
+`
+  });
+  mkdirSync(join(fx.dir, out));
+  let r;
+  try {
+    /* 汚れていない木で走らせる（--allow-dirty だと、直す前でも「証拠に使える」にならず差が出ない） */
+    r = runRunner(fx.dir, { receipt: `${out}/receipt.json`, allowDirty: false });
+  } finally {
+    chmodSync(join(fx.dir, out), 0o755);
+  }
+  const mod = readFileSync(join(fx.dir, 'mod.mjs'), 'utf8');
+  assert.ok(mod.includes('export const other = 2;'), '2件目の変異が戻っていない');
+  assert.notEqual(r.exitCode, 0, `GXS_MARK.X23 途中で書けなかったのに exit 0:\n${r.stdout.slice(-300)}`);
+  assert.ok(!(r.receipt && r.receipt.state === 'complete' && r.receipt.evidenceEligible === true),
+    '途中で書けなかったのに、証拠に使える complete の証跡に化けた');
+  assert.match(r.stdout + '', /Q8 以降は当てずに止まる|途中で止まった|証跡を書けなかった/,
+    `止まった理由を言っていない:\n${r.stdout.slice(-400)}`);
+});
+
+test('戻せなかったら次の変異へ進まず、その変異を「終えた」と書かない（R27-105）', () => {
+  const fx = makeFixture([
+    mut('Q9', { test: 'test/wreck2.test.mjs',
+      expectedFailure: { testName: '変異したときだけ、対象を消してディレクトリにする（2）',
+        diagnosticMarker: 'GXS_MARK.WRECK2' } }),
+    mut('Q10', { find: 'export const other = 2;', replace: 'export const other = 97;',
+      test: GUARD, expectedFailure: { testName: '別の検査: other は 2' } })
+  ], {
+    'test/wreck2.test.mjs': `
+import test from 'node:test';
+import { rmSync, mkdirSync, readFileSync } from 'node:fs';
+const p = new URL('../mod.mjs', import.meta.url);
+const mutated = readFileSync(p, 'utf8').includes('99');
+test('変異したときだけ、対象を消してディレクトリにする（2）', () => {
+  if (!mutated) return;
+  rmSync(p, { force: true });
+  mkdirSync(p);
+  throw new Error('GXS_MARK.WRECK2: わざと落とす');
+});
+`
+  });
+  const r = runRunner(fx.dir);
+  assert.ok(r.receipt, `証跡が無い:\n${r.stdout}`);
+  const ids = r.receipt.results.map((x) => x.id);
+  assert.deepEqual(ids, ['Q9'], `GXS_MARK.X24 戻せなかったのに次の変異へ進んだ: ${ids.join(' ')}`);
+  assert.notEqual(r.receipt.lastCompletedMutationId, 'Q9', '戻せなかった変異を「終えた」と書いている');
+  assert.equal(r.receipt.currentMutationId, 'Q9', '戻せなかった変異を証跡が名指ししていない');
+  assert.equal(r.receipt.evidenceEligible, false, '止まった証跡を証拠に使えると書いている');
+  assert.notEqual(r.exitCode, 0);
+});
+
+test('証跡の出力先が入力を指していたら、1バイトも書かずに止まる（R27-106）', () => {
+  /*
+   * 第27回監査 R27-106。`--receipt notes.md`（追跡中の文書）を指すと、その文書を証跡の JSON で
+   * 上書きしたうえで exit 0・証拠に使える、と報告していた（比較の基準を書いた後に取っていた）。
+   */
+  const fx = makeFixture([mut('Q11')], { 'notes.md': '# 大事なメモ\n' });
+  const notes = readFileSync(join(fx.dir, 'notes.md'), 'utf8');
+  const spec = readFileSync(join(fx.dir, 'test/mutations.json'), 'utf8');
+  /* runRunner は出力先を証跡として読むので使わない（出力先は文書そのもの） */
+  const run = (receipt) => {
+    try {
+      execFileSync(process.execPath, [join(fx.dir, 'scripts/run-mutations.mjs'),
+        '--spec', join(fx.dir, 'test/mutations.json'), '--allow-dirty', '--receipt', join(fx.dir, receipt)],
+      { cwd: fx.dir, encoding: 'utf8', stdio: 'pipe', timeout: 120000 });
+      return 0;
+    } catch (e) { return typeof e.status === 'number' ? e.status : -1; }
+  };
+  for (const receipt of ['notes.md', 'sub/../notes.md', 'test/mutations.json', 'mod.mjs']) {
+    const code = run(receipt);
+    assert.equal(code, 2, `GXS_MARK.X26 出力先が入力（${receipt}）なのに走った（exit ${code}）`);
+  }
+  assert.equal(readFileSync(join(fx.dir, 'notes.md'), 'utf8'), notes, '追跡中の文書を上書きした');
+  assert.equal(readFileSync(join(fx.dir, 'test/mutations.json'), 'utf8'), spec, '正本を上書きした');
+  assert.ok(readFileSync(join(fx.dir, 'mod.mjs'), 'utf8').startsWith('export const value = 1;'), '変異の対象を上書きした');
+  /* 対照: ふつうの出力先なら走る */
+  const ok = runRunner(fx.dir, { receipt: 'out-receipt.json' });
+  assert.equal(ok.exitCode, 0, `対照が成立していない:\n${ok.stdout.slice(-300)}`);
+  assert.equal(ok.receipt.workspaceUnchanged, true, '証跡そのものを「作業ツリーの変化」に数えている');
+});
+
 /* ============================================================
  * ⑧ 引数（第26回監査 R26-004）
  * ============================================================ */
@@ -533,4 +713,36 @@ test('別の引数の名前を、値として受け取らない（R26-004）', (
   const ok = run(['--spec', spec, '--timeout', '8000', '--allow-dirty',
     '--receipt', join(dir, 'ok.json')]);
   assert.equal(ok.code, 0, `対照が成立していない＝この検査は何でも拒む: ${ok.out.slice(0, 200)}`);
+});
+
+test('知らない引数の名前も空の値も、値として受け取らない（R27-110）', () => {
+  /*
+   * 第27回監査 R27-110。R26-004 は「知っている引数の名前」だけを値から外していたので、
+   * `--receipt --bogus` は `--bogus` という名前の証跡ファイルを作って exit 0 だった。
+   * `--id ""` は全件、`--receipt ""` は証跡なし、`--spec ""` は既定の正本へ黙って戻っていた
+   * （空の環境変数が展開されたときに、測る範囲や証跡の有無が意図と変わる）。
+   */
+  const dir = makeFixture([mut('Z7')]).dir;
+  const runner = join(dir, 'scripts/run-mutations.mjs');
+  const run = (args) => {
+    try {
+      execFileSync(process.execPath, [runner, ...args],
+        { cwd: dir, encoding: 'utf8', stdio: 'pipe', timeout: 60000 });
+      return { code: 0, out: '' };
+    } catch (e) {
+      return { code: typeof e.status === 'number' ? e.status : -1,
+        out: `${String(e.stdout || '')}${String(e.stderr || '')}` };
+    }
+  };
+  for (const args of [['--receipt', '--bogus'], ['--id', ''], ['--receipt', ''], ['--spec', ''],
+    ['--timeout', ''], ['--shard', ''], ['--id', '--zzz', '--allow-dirty']]) {
+    const r = run(args);
+    assert.equal(r.code, 2, `GXS_MARK.X12 ${JSON.stringify(args)} を受け取って走った（exit ${r.code}）`);
+    assert.match(r.out, /値が無い|値が空/, `${JSON.stringify(args)}: 止まった理由が違う: ${r.out.slice(0, 120)}`);
+  }
+  assert.ok(!existsSync(join(dir, '--bogus')), '意図しない名前のファイルを作っている');
+  /* 対照: 「--」で始まる名前のファイルは ./ を付ければ使える */
+  const ok = run(['--allow-dirty', '--receipt', './--named.json']);
+  assert.equal(ok.code, 0, `対照が成立していない: ${ok.out.slice(0, 200)}`);
+  assert.ok(existsSync(join(dir, '--named.json')), '明示したパスに証跡を書いていない');
 });

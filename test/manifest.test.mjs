@@ -380,6 +380,73 @@ test('配布物にテスト・ストア素材・文書を含めない', () => {
   }
 });
 
+/*
+ * ワークフローをジョブ単位・ステップ単位に切って、**コメントを除いた**本文だけを読む（第27回監査 R27-109）。
+ * YAML の構文解析器は足さない。このリポジトリの ci.yml の書き方（ジョブは2字下げ・ステップは
+ * 6字下げの「- 」）に限った読み手で、その形でなければ null を返して試験を落とす。
+ */
+function ciJobs(wf) {
+  const body = wf.split('\n').filter((l) => !/^\s*#/.test(l)).map((l) => l.replace(/\s+#.*$/, '')).join('\n');
+  const start = body.indexOf('\njobs:\n');
+  if (start < 0) return null;
+  const jobs = {};
+  const re = /^ {2}([a-z][a-z0-9-]*):\n([\s\S]*?)(?=^ {2}[a-z][a-z0-9-]*:\n|(?![\s\S]))/gm;
+  for (const m of body.slice(start).matchAll(re)) {
+    const block = m[2];
+    const head = block.split('\n    steps:\n')[0];
+    const steps = (block.split('\n    steps:\n')[1] || '').split(/\n {6}- /).slice(1);
+    jobs[m[1]] = { head, steps };
+  }
+  return jobs;
+}
+
+/* 必須の検証が「実行される構造」になっているか。問題を文で返す（空なら合格） */
+function ciStructureProblems(wf) {
+  const jobs = ciJobs(wf);
+  if (!jobs) return ['jobs: が読めない'];
+  const out = [];
+  const needs = (j) => { const m = /\n {4}needs:\s*\[([^\]]*)\]/.exec(`\n${(jobs[j] || {}).head || ''}`); return m ? m[1].split(',').map((x) => x.trim()) : null; };
+  for (const j of ['test', 'windows', 'mutations', 'mutation-coverage', 'package-candidate']) {
+    if (!jobs[j]) { out.push(`ジョブ ${j} が無い`); continue; }
+    if (/\n {4}if:/.test(`\n${jobs[j].head}`)) out.push(`ジョブ ${j} に if: がある（飛ばせる）`);
+    if (/\n {4}continue-on-error:/.test(`\n${jobs[j].head}`)) out.push(`ジョブ ${j} に continue-on-error がある`);
+  }
+  const pc = needs('package-candidate');
+  if (!pc || ['test', 'windows', 'mutation-coverage'].some((x) => !pc.includes(x))) out.push(`package-candidate の needs が足りない: ${JSON.stringify(pc)}`);
+  const mc = needs('mutation-coverage');
+  if (!mc || !mc.includes('mutations')) out.push(`mutation-coverage の needs が足りない: ${JSON.stringify(mc)}`);
+  const mustRun = [['mutations', 'verify-mutation-receipt.mjs'], ['mutations', 'test:mutations'],
+    ['mutation-coverage', 'verify-mutation-coverage.mjs']];
+  for (const [j, needle] of mustRun) {
+    const step = jobs[j] && jobs[j].steps.find((st) => st.includes(needle));
+    if (!step) { out.push(`${j} に ${needle} を走らせるステップが無い`); continue; }
+    if (/\n {8}if:/.test(`\n${step}`)) out.push(`${needle} のステップに if: がある（飛ばせる）`);
+    if (/\n {8}continue-on-error:/.test(`\n${step}`)) out.push(`${needle} のステップに continue-on-error がある`);
+  }
+  return out;
+}
+
+test('CI の構造が、必須の検証を飛ばせない形になっている（R27-109）', () => {
+  /*
+   * 第27回監査 R27-109。下の試験はワークフロー全体に文字列があるかしか見ていなかったので、
+   * 数え直しのステップに `if: false` を足しても、needs をコメントにしても通った。
+   */
+  const wf = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8').replace(/\r\n/g, '\n');
+  assert.deepEqual(ciStructureProblems(wf), [], 'GXS_MARK.X21 いまの ci.yml が必須の検証を飛ばせる形になっている');
+  /* 読み手そのものの対照: 監査の3つの壊し方と、辺の削除を当てて、どれも拒むこと */
+  const broken = [
+    ['数え直しのステップに if: false', wf.replace('      - name: 全部を1回ずつ覆えているか数え直す\n', '      - name: 全部を1回ずつ覆えているか数え直す\n        if: false\n')],
+    ['束の検証のステップに if: false', wf.replace('      - name: 証跡が証拠として使える形か、外から確かめる\n', '      - name: 証跡が証拠として使える形か、外から確かめる\n        if: false\n')],
+    ['package-candidate の needs をコメントに', wf.replace('    needs: [test, windows, mutation-coverage]', '    # needs: [test, windows, mutation-coverage]')],
+    ['mutation-coverage の needs から mutations を外す', wf.replace('    needs: [mutations]', '    needs: []')],
+    ['数え直しのステップに continue-on-error', wf.replace('      - name: 全部を1回ずつ覆えているか数え直す\n', '      - name: 全部を1回ずつ覆えているか数え直す\n        continue-on-error: true\n')]
+  ];
+  for (const [name, w] of broken) {
+    assert.notEqual(w, wf, `題材が当たっていない（ci.yml の書き方が変わった？）: ${name}`);
+    assert.ok(ciStructureProblems(w).length > 0, `読み手が壊れた構造を見逃した: ${name}`);
+  }
+});
+
 test('CIが、変異の証跡を外から検証している（R25-003）', () => {
   /*
    * ⚠️ ランナーの終了コードだけを信じると、途中で強制終了された run を

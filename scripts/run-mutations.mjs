@@ -94,9 +94,17 @@ function parseArgs() {
      * 「`--allow-dirty` という名前の証跡ファイル」として通り、しかも
      * **汚れた木を許す指定は効かないまま**走っていた（4通りとも実測）。
      */
-    if (v === undefined || KNOWN_FLAGS.includes(v) || KNOWN_SWITCHES.includes(v)) {
-      return { error: `${a} に値が無い` };
+    /*
+     * ⚠️ **知っているかどうかに関わらず、`--` で始まる語は値にしない。**（第27回監査 R27-110）
+     * R26-004 は知っている名前だけを外していたので、`--receipt --bogus` が `--bogus` という
+     * 名前の証跡ファイルを作って exit 0 だった。そういう名前のファイルは `./--name` と書かせる。
+     * **空の値も受け取らない。** `--id ""` は全件、`--receipt ""` は証跡なし、`--spec ""` は
+     * 既定の正本へ黙って戻っていた（空の環境変数が展開されたとき、測る範囲が意図と変わる）。
+     */
+    if (v === undefined || v.startsWith('--')) {
+      return { error: `${a} に値が無い（「--」で始まる名前のファイルなら ./--name のように書く）` };
     }
+    if (v === '') return { error: `${a} の値が空` };
     out[a] = v;
     i++;
   }
@@ -140,6 +148,35 @@ let receiptPhase = 'none';
 let currentMutationId = null;
 let lastCompletedMutationId = null;
 let lastErrorKind = null;
+/*
+ * ⚠️ **証跡の出力先が入力を指していたら、1バイトも書く前に止まる。**（第27回監査 R27-106）
+ * 前は出力先の検査が無く、`--receipt notes.md`（追跡しているファイル）を指すと、その文書を
+ * 証跡の JSON で上書きしたうえで exit 0・証拠に使える、と報告した（比較の基準を最初の
+ * 書き込みの**後**に取っていたので、上書きした変更が「初めからあった状態」に入った）。
+ * 追跡しているファイル・正本・ランナー自身は出力先にさせない。拒んだときは、終了時の処理も
+ * 同じ危ない場所へ書かないよう「書けない場所」として扱う。
+ */
+let receiptRelInRepo = null;   /* 作業ツリーの比較で、証跡そのものの行を外すために使う */
+if (receiptPath) {
+  /* ⚠️ 実体のパスにそろえてから比べる（macOS の /var は /private/var の別名・題材で実測） */
+  const real = (p) => {
+    try { return join(realpathSync(dirname(p)), basename(p)); } catch (e) { return p; }
+  };
+  const rootReal = (() => { try { return realpathSync(ROOT); } catch (e) { return ROOT; } })();
+  const abs = real(resolve(receiptPath));
+  const rel = relative(rootReal, abs);
+  const insideRepo = rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+  if (insideRepo) receiptRelInRepo = rel.split('\\').join('/');
+  const specAbsForReceipt = real(resolve(ROOT, parsed.out['--spec'] || 'test/mutations.json'));
+  const forbidden = [specAbsForReceipt, real(resolve(ROOT, 'scripts/run-mutations.mjs'))];
+  const tracked = insideRepo
+    && gitOut(['ls-files', '--error-unmatch', '--', rel.split('\\').join('/')]) !== null;
+  if (tracked || forbidden.includes(abs)) {
+    console.error(`★ 証跡の出力先が入力を指している（${receiptPath}）。何も書かずに止まる`);
+    receiptPhase = 'unwritable';
+    process.exit(2);
+  }
+}
 /*
  * ⚠️ **途中の状態が「完了」に見えないようにする。**（第25回監査 R25-003）
  * 一時ファイルへ書いてから rename する。rename は同じファイルシステム上で
@@ -335,6 +372,11 @@ function validatePath(rel, label) {
   }
   if (st.isSymbolicLink()) return `${label} が symlink を指している: ${rel}`;
   if (!st.isFile()) return `${label} が通常ファイルでない: ${rel}`;
+  /*
+   * ⚠️ **hardlink は字面でも realpath でも中に見える。**（第27回監査 R27-107）
+   * 外の名前と実体を共有していると、変異を書いた瞬間に外のファイルも変わる。
+   */
+  if (st.nlink > 1) return `${label} が他の名前と実体を共有している（hardlink・${st.nlink} 個）: ${rel}`;
   let real;
   try {
     real = realpathSync(abs);
@@ -443,7 +485,7 @@ function failureDetails(output) {
     const m = /^(\s*)not ok \d+ - (.+?)\s*$/.exec(lines[i]);
     if (!m) continue;
     const indent = m[1].length;
-    const rec = { name: m[2].trim(), failureType: null, code: null, errName: null, body: '' };
+    const rec = { name: m[2].trim(), failureType: null, code: null, errName: null, body: '', values: '' };
     /*
      * ⚠️ **その `not ok` の中だけ**を読む（第25回監査 R25-001）。
      * 目印を出力全体から探すと、別のテストが出した同じ文字列で満たされてしまう。
@@ -455,7 +497,9 @@ function failureDetails(output) {
     if (open && open[1].length > indent) {
       const keyIndent = open[1].length;
       const body = [];
+      const values = [];   /* 比べた値（actual / expected）。目印がここに出ても検知にしない（R27-104） */
       let inError = false;
+      let inValue = false;
       for (let k = j + 1; k < lines.length; k++) {
         const l = lines[k];
         const t = l.trim();
@@ -465,17 +509,25 @@ function failureDetails(output) {
          * キーより深い行は、キーではなく**値の中身**（ブロックスカラー・入れ子）。
          * `error:` のブロックスカラーのときだけ本文として拾い、他は読み飛ばす。
          */
-        if (ind > keyIndent) { if (inError) body.push(l.slice(keyIndent + 2)); continue; }
+        if (ind > keyIndent) {
+          if (inError) body.push(l.slice(keyIndent + 2));
+          else if (inValue) values.push(l.slice(keyIndent + 2));
+          continue;
+        }
         inError = false;
+        inValue = false;
         if (ind < keyIndent || t === '...' || t === '---') break;
         let g;
         if (/^error:\s*[|>][-+]?\s*$/.test(t)) { inError = true; continue; }
+        if (/^(?:actual|expected):\s*[|>][-+]?\s*$/.test(t)) { inValue = true; continue; }
+        if ((g = /^(?:actual|expected):\s*(.+)$/.exec(t))) { values.push(g[1]); continue; }
         if ((g = /^error:\s*(.+)$/.exec(t))) body.push(g[1].replace(/^'|'$/g, ''));
         else if ((g = /^failureType:\s*'?([^']+)'?/.exec(t))) rec.failureType = g[1];
         else if ((g = /^code:\s*'?([^']+)'?/.exec(t))) rec.code = g[1];
         else if ((g = /^name:\s*'?([^']+)'?/.exec(t))) rec.errName = g[1];
       }
       rec.body = body.join('\n');
+      rec.values = values.join('\n');
     }
     out.push(rec);
   }
@@ -729,6 +781,18 @@ function saveRunning() {
  * 設計が成り立っていない（この時点ではまだ何も書けていないので、
  * 対象のファイルには1バイトも残らない）。
  */
+/*
+ * ⚠️ 実行前後の比較の基準は、**最初に証跡を書く前**に取る（第27回監査 R27-106）。
+ * 前は書いた後に取っていたので、出力先が追跡中のファイルだと、その上書きが基準に入って
+ * 「作業ツリーは変わっていない」になった。比べるときに外すのは、証跡そのもの
+ *（未追跡の1行）だけ。未追跡のフォルダが「?? out/」とまとめて出ると外せないので、
+ * 未追跡はファイル1件ずつ出させる。
+ */
+const workspaceBaseline = gitOut(['status', '--porcelain', '--untracked-files=all']);
+const receiptRelForStatus = receiptRelInRepo;
+const withoutOwnReceipt = (st) => st === null ? null : st.split('\n')
+  .filter((l) => !(receiptRelForStatus && l === `?? ${receiptRelForStatus}`)).join('\n');
+
 if (!saveRunning()) {
   console.error('★ 測る前に「走っている」と書けなかった。1件も測らずに止まる');
   receiptPhase = 'unwritable';     /* 同じ理由で失敗するので、exit 側でも試さない */
@@ -736,11 +800,6 @@ if (!saveRunning()) {
 }
 receiptPhase = 'running';
 
-/*
- * ⚠️ 実行前後の比較は、**証跡を書いたあと**を基準にする。
- * 証跡そのものは、この実行が意図して作る出力なので「残した」に数えない。
- */
-const workspaceBaseline = gitOut(['status', '--porcelain']);
 
 const results = [];
 let fatal = null;
@@ -752,9 +811,24 @@ for (const m of mutations) {
    * 「復旧まで終わった直前の1件」。強制終了されたとき、**どのファイルが変異したまま
    * 残っているか**を証跡から名指しできるようにするため。
    */
-  if (currentMutationId !== null) lastCompletedMutationId = currentMutationId;
+  /*
+   * ⚠️ **「復旧まで終わった」と言えるのは、直前の結果が戻せていたときだけ。**（第27回監査 R27-105）
+   * ⚠️ **進み具合を書けなければ、新しい変異を当てない。** 前は初回だけ戻り値を見て、
+   * 2件目からは無視していたので、置き場が一時的に書けなくなると証跡は前の変異のまま、
+   * 次の変異を当て、後で置き場が戻ると complete・証拠に使える、で終わっていた。
+   * 強制終了されたら、どのファイルが変異したままか証跡から名指しできない。
+   */
+  const prev = results.length ? results[results.length - 1] : null;
+  if (currentMutationId !== null && prev && prev.id === currentMutationId && prev.restored === true) {
+    lastCompletedMutationId = currentMutationId;
+  }
   currentMutationId = m.id;
-  saveRunning();
+  if (!saveRunning()) {
+    fatal = 'progress_save_failed';
+    currentMutationId = null;          /* この変異にはまだ手を付けていない */
+    console.error(`★ 進み具合を証跡へ書けなかった。${m.id} 以降は当てずに止まる`);
+    break;
+  }
 
   const base = { id: m.id, file: m.file, desc: m.desc, test: m.test,
     expectedFailure: m.expectedFailure || null };
@@ -943,7 +1017,13 @@ for (const m of mutations) {
   if (r.wrote && restored !== true) {
     results.push({ ...common, outcome: 'runner_error', failureKind: 'restore_failed',
       error: restoreError || '変異したファイルを元へ戻せなかった' });
-    continue;
+    /*
+     * ⚠️ 戻せなかったら、そこで止まる（第27回監査 R27-105）。前は次の変異へ進み、
+     * 進み具合に「終えた」と書いていた。currentMutationId はこの変異を指したまま残す
+     * ——証跡から「このファイルが変異したままかもしれない」と名指しできるように。
+     */
+    fatal = 'restore_failed';
+    break;
   }
 
   if (!r.applied) {
@@ -1027,6 +1107,20 @@ for (const m of mutations) {
    * ⚠️ **目印は、その `not ok` の本文の中だけ**で探す（第25回監査 R25-001）。
    * 出力全体から探すと、別のテストが出した同じ文字列で満たされてしまう。
    */
+  /*
+   * ⚠️ **比べた値に目印が出ているなら、目印のある assertion が落ちたとは言えない。**（第27回監査 R27-104）
+   * `assert.equal(value === 1 ? 'ok' : mark, 'ok')` のように、目印が**比べる値**として
+   * 出てくると、Node が自動で作る差分（error 欄）にも actual 欄にも目印が載る。
+   * 守りたい `assert.ok(true, mark)` は通っているのに、検知に数えていた。
+   */
+  if (String(hits[0].values || '').includes(marker)) {
+    results.push({ ...withRun, outcome: 'runner_error', failureKind: 'marker_in_compared_value',
+      error: `目印「${marker}」が比べた値（actual / expected）に出ている——目印を持つ assertion が落ちたとは言えない`,
+      expectedFailureKind: wantKind, actualFailureKind: gotKind,
+      expectedFailureMatched: false,
+      matchedBody: maskSecrets(String(hits[0].body || ''), 600) });
+    continue;
+  }
   if (!String(hits[0].body || '').includes(marker)) {
     results.push({ ...withRun, outcome: 'runner_error', failureKind: 'marker_not_found',
       error: `宣言したテストは宣言した種類で落ちたが、目印「${marker}」が本文に無い`
@@ -1060,17 +1154,17 @@ for (const m of mutations) {
     matchedBody: savedBody });
 }
 
-/* 最後の1件も「終わった」に数える（R26-003） */
-if (currentMutationId !== null) {
+/* 最後の1件も「終わった」に数える（R26-003）。止まったとき（R27-105）は数えない */
+if (currentMutationId !== null && !fatal) {
   lastCompletedMutationId = currentMutationId;
   currentMutationId = null;
   saveRunning();
 }
 
 /* 作業ツリーが元に戻っているか（第23回監査 R23-002 §6.6） */
-const gitStatusEnd = gitOut(['status', '--porcelain']);
+const gitStatusEnd = gitOut(['status', '--porcelain', '--untracked-files=all']);
 const workspaceUnchanged = workspaceBaseline === null || gitStatusEnd === null
-  ? null : workspaceBaseline === gitStatusEnd;
+  ? null : withoutOwnReceipt(workspaceBaseline) === withoutOwnReceipt(gitStatusEnd);
 
 const by = (o) => results.filter((r) => r.outcome === o);
 const killed = by('applied_and_killed'), survived = by('applied_but_survived');
@@ -1098,9 +1192,10 @@ if (workspaceUnchanged === false) {
   console.log(`  実行後: ${JSON.stringify(gitStatusEnd).slice(0, 200)}`);
 }
 
+if (fatal) console.log(`★ 途中で止まった（${fatal}）。この証跡は証拠に使えない`);
 const summary = {
-  spec: specPath, state: 'complete',
-  evidenceEligible: !allowDirty && provenance.workingTreeDirty === false,
+  spec: specPath, state: fatal ? 'aborted' : 'complete',
+  evidenceEligible: !fatal && !allowDirty && provenance.workingTreeDirty === false,
   currentMutationId, lastCompletedMutationId, shard,
   total: results.length,
   applied_and_killed: killed.length, applied_but_survived: survived.length,
@@ -1121,6 +1216,6 @@ if (receiptPath) {
 /* ここまで来て初めて最後の1枚。以後、exit 側は aborted を書かない（R26-003） */
 receiptPhase = 'settled';
 
-const ok = survived.length === 0 && notApplied.length === 0
+const ok = !fatal && survived.length === 0 && notApplied.length === 0
   && errors.length === 0 && badRestore.length === 0 && workspaceUnchanged === true;
 process.exit(ok ? 0 : 1);

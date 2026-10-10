@@ -60,7 +60,7 @@ function makeFixture(mutations, files = {}, { git = true } = {}) {
   writeFileSync(join(outer, 'outside.txt'), 'SAFE\n');
   writeFileSync(join(outer, 'outside.test.mjs'), `
 import test from 'node:test';
-test('外にある、ふつうに通るテスト', () => {});  /* GXS_MARK.OUTSIDE */
+test('外にある、ふつうに通るテスト', () => { /* GXS_MARK.OUTSIDE */ });
 `);
   const dir = join(outer, 'repo');
   mkdirSync(dir);
@@ -87,17 +87,19 @@ test(${JSON.stringify(WANT)}, () => {
   /* ⚠️ 失敗の文へ、わざと2種類のパスを混ぜる——伏字の検査を、動いているOSに
      関わらず効かせるため（Windows のパスは macOS では自然には現れない） */
   assert.equal(value, 1, 'GXS_MARK.WANT D:\\\\a\\\\repo\\\\mod.mjs と /var/tmp/repo/mod.mjs を見よ');
+  /* 一意でない目印の題材（第26回監査 R26-001）。わざと2か所に置く。
+     ⚠️ テストの呼び出しの中に置く（第27回 R27-104 で範囲を閉じ括弧までにしたので、外に置くと
+     「範囲の外」が先に止め、一意性の検査を外しても落ちなくなる＝W05・Y05 が素通りした）: */
+  /* GXS_MARK.TWICE */
+  /* GXS_MARK.TWICE */
 });
-/* 一意でない目印の題材（第26回監査 R26-001）。わざと2か所に置く: */
-/* GXS_MARK.TWICE */
-/* GXS_MARK.TWICE */
 test(${JSON.stringify(OTHER)}, () => { assert.equal(other, 2, 'GXS_MARK.OTHER: other が 2 でない'); });
 test('数え上げ: GAMMA が2つ', () => { assert.equal(many.split('GAMMA').length - 1, 2, 'GXS_MARK.COUNT: GAMMA の数が違う'); });
 `);
   /* 題材を何も見ない＝変異しても落ちない */
   writeFileSync(join(dir, 'test/blind.test.mjs'), `
 import test from 'node:test';
-test('題材を何も見ない', () => {});  /* GXS_MARK.BLIND */
+test('題材を何も見ない', () => { /* GXS_MARK.BLIND */ });
 `);
   /* 変異と関係なく、最初から落ちる */
   writeFileSync(join(dir, 'test/fails.test.mjs'), `
@@ -107,7 +109,7 @@ test('もともと落ちる', () => { throw new Error('GXS_MARK.BASELINE: 変異
   /* 上限まで終わらない */
   writeFileSync(join(dir, 'test/hangs.test.mjs'), `
 import test from 'node:test';
-test('終わらない', async () => { setInterval(() => {}, 100); await new Promise(() => {}); });  /* GXS_MARK.HANG */
+test('終わらない', async () => { /* GXS_MARK.HANG */ setInterval(() => {}, 100); await new Promise(() => {}); });
 `);
   /*
    * 変異前は通り、**変異後に初めて**壊れる。
@@ -128,7 +130,7 @@ if (body.includes('BOOMNOW')) {
   process.kill(process.ppid, 'SIGKILL');
   await new Promise((r) => setTimeout(r, 3000));
 }
-test('題材がふつうなら、ふつうに通る', () => {});  /* GXS_MARK.BREAKS */
+test('題材がふつうなら、ふつうに通る', () => { /* GXS_MARK.BREAKS */ });
 `);
   /*
    * 変異後に **assertion ではなく TypeError** で落ちる題材（第24回監査 R24-001）。
@@ -216,7 +218,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const body = readFileSync(new URL('../mod.mjs', import.meta.url), 'utf8');
-test('同じ名前', () => { assert.ok(true); });  /* GXS_MARK.DUP */
+test('同じ名前', () => { assert.ok(true); /* GXS_MARK.DUP */ });
 test('同じ名前', () => { assert.ok(!body.includes('99'), '無関係な同名が落ちた'); });
 `);
   for (const [rel, body] of Object.entries(files)) writeFileSync(join(dir, rel), body);

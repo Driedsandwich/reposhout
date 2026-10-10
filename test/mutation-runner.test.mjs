@@ -10,7 +10,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, readFileSync, existsSync, symlinkSync, readdirSync, mkdirSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync, symlinkSync, readdirSync, mkdirSync, linkSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { ROOT } from './helpers/load.mjs';
@@ -272,8 +273,25 @@ test('変異する対象が、リポジトリの外を指せない（R23-002）'
   assert.equal(after, before, '外のファイルが書き換わっている');
 });
 
-test('リポジトリの中の symlink で外へ出られない（R23-002）', { skip: process.platform === 'win32'
-  ? 'Windows では symlink の作成に権限が要るため、この題材を作れない' : false }, () => {
+/*
+ * 題材を作れるかを、OS の名前ではなく**実際に作って**確かめる（第27回監査 便B §5）。
+ * 作れなかったときは理由を出して飛ばし、守りが効いたことには数えない。
+ */
+function canMake(kind) {
+  const d = mkdtempSync(join(tmpdir(), 'reposhout-link-'));
+  try {
+    writeFileSync(join(d, 'a'), 'a');
+    if (kind === 'symlink') symlinkSync(join(d, 'a'), join(d, 'b'));
+    else linkSync(join(d, 'a'), join(d, 'b'));
+    return false;
+  } catch (e) {
+    return `${kind} を作れない環境（${e && e.code}）。この題材は作れないので測らない`;
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+}
+
+test('リポジトリの中の symlink で外へ出られない（R23-002）', { skip: canMake('symlink') }, () => {
   const { outer, dir } = makeFixture([
     mut('L1', { file: 'link.txt', find: 'SAFE', replace: 'BROKEN' })
   ]);
@@ -283,6 +301,21 @@ test('リポジトリの中の symlink で外へ出られない（R23-002）', {
   assert.equal(outcomeOf(r, 'L1'), 'runner_error', 'symlink 越しに外を書き換えている');
   assert.match(of(r, 'L1').error, /symlink/, `GXS_MARK.P10 symlink の検査で止めていない: ${of(r, 'L1').error}`);
   assert.equal(readFileSync(join(outer, 'outside.txt'), 'utf8'), before);
+});
+
+test('hardlink で外のファイルを書き換えられない（R27-107）', { skip: canMake('hardlink') }, () => {
+  /*
+   * 第27回監査 R27-107。symlink と realpath は見ていたが、hardlink は字面でも realpath でも
+   * 中に見えるので受け取り、変異中に外の outside.txt が書き換わっていた（復旧後に戻るだけ）。
+   */
+  const { outer, dir } = makeFixture([
+    mut('L2', { file: 'hl.txt', find: 'SAFE', replace: 'BROKEN' })
+  ]);
+  linkSync(join(outer, 'outside.txt'), join(dir, 'hl.txt'));
+  const r = runRunner(dir);
+  assert.equal(outcomeOf(r, 'L2'), 'runner_error', 'GXS_MARK.X25 hardlink 越しに外を書き換えている');
+  assert.match(String(of(r, 'L2').error), /hardlink/, `hardlink の検査で止めていない: ${of(r, 'L2').error}`);
+  assert.equal(readFileSync(join(outer, 'outside.txt'), 'utf8'), 'SAFE\n', '外のファイルが変わった');
 });
 
 test('対象テストがリポジトリの外を指せない（外に実在しても）（R23-002）', () => {

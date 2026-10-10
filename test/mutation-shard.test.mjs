@@ -181,3 +181,19 @@ test('証跡が1枚も無ければ拒む（R26-002）', () => {
   assert.match(r.out, /証跡が無い/, `止まった理由が違う:\n${r.out}`);
   assert.equal(runIn(ROOT, [COVERAGE, '--spec', set.specPath]).code, 2, 'パス無しで走っている');
 });
+
+test('正本の形が壊れていれば、倒れずに理由を言って拒む（第27回監査 便B の検収）', () => {
+  /*
+   * 第27回の検収で見つけた。`{}` や `null` の正本を渡すと spec.mutations.map で
+   * TypeError に倒れていた（止まりはするが、理由が言えない）。
+   */
+  const set = buildSet();
+  for (const body of ['{}', 'null', '{"mutations":[]}', '{"mutations":[{"id":3}]}']) {
+    const bad = join(DIR, `bad-cov-spec-${++seq}.json`);
+    writeFileSync(bad, body);
+    const r = runIn(ROOT, [COVERAGE, ...set.paths, '--spec', bad]);
+    assert.notEqual(r.code, 0, `壊れた正本（${body}）で通している`);
+    assert.match(r.out, /正本の形が壊れている/, `GXS_MARK.X19 正本（${body}）の形を見ずに倒れている:\n${r.out.slice(0, 300)}`);
+  }
+  assert.equal(runIn(ROOT, [COVERAGE, ...set.paths, '--spec', '']).code, 2, '空の値を受け取っている');
+});

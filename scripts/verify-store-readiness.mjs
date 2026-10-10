@@ -80,13 +80,21 @@ function readJsonOrNull(rel) {
 /* 確認日は本人の暮らしている時間帯で見る（第11回監査 R11-005） */
 const timeZone = argOf('--timezone') || candidate.confirmationTimeZone || 'Asia/Tokyo';
 let today;
+/*
+ * 時刻帯は、日付を渡したときも確かめる（第27回監査 R27-111）。前は `--today` を渡すと
+ * dateIn が呼ばれず、読めない時刻帯がそのまま通って表示にも残った。
+ */
+let todayInZone;
 try {
-  today = argOf('--today') || dateIn(timeZone);
+  todayInZone = dateIn(timeZone);
 } catch (e) {
   fail(`時間帯として読めません: ${timeZone}`);
 }
-if (!/^\d{4}-\d{2}-\d{2}$/.test(today) ||
-    new Date(`${today}T00:00:00Z`).toISOString().slice(0, 10) !== today) {
+today = argOf('--today') || todayInZone;
+/* ⚠️ 実在しない日は toISOString の前に弾く（2026-99-99 で RangeError に倒れていた） */
+const todayDate = new Date(`${today}T00:00:00Z`);
+if (!/^\d{4}-\d{2}-\d{2}$/.test(today) || Number.isNaN(todayDate.getTime()) ||
+    todayDate.toISOString().slice(0, 10) !== today) {
   fail(`--today は YYYY-MM-DD の実在する日で渡してください: ${today}`);
 }
 
@@ -244,7 +252,7 @@ console.log(strict
 for (const line of result.ok) console.log(`  ✅ ${line}`);
 for (const line of result.problems) console.log(`  ❌ ${line}`);
 console.log();
-console.log(`  基準日: ${today}（${candidate.confirmationTimeZone || 'Asia/Tokyo'}）`);
+console.log(`  基準日: ${today}（${timeZone}）`);   /* 実際に使った時刻帯を出す（R27-111） */
 if (!result.artifactChecked) console.log('  ※ 実物の成果物は見ていません');
 if (!result.auditChecked) console.log('  ※ 外部監査の判定は見ていません');
 

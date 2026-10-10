@@ -889,6 +889,10 @@
     commit: { route: 'commit', type: 'sha40' }
   };
 
+  function ownRoute(table, name) {
+    return Object.prototype.hasOwnProperty.call(table, name) ? table[name] : null;
+  }
+
   /*
    * 型で決まるルートだけを認める。1つでも当てはまらなければ null（＝共有しない）。
    * 返すのは**検査済みのパーツ**だけで、元の pathname は持ち出さない。
@@ -910,14 +914,19 @@
     }
 
     var third = seg[2];
+    /*
+     * 表は**自分の項目だけ**を見る（第27回監査 R27-001）。素のオブジェクトを
+     * そのまま引くと `toString`・`constructor`・`__proto__` が継承した値で「ある」と読まれ、
+     * 9種別の外のルートを共有していた。
+     */
     if (seg.length === 3) {
-      var listed = LIST_ROUTES[third];
+      var listed = ownRoute(LIST_ROUTES, third);
       if (!listed) return null;
       return { route: listed, owner: owner, name: repo, repo: full, number: null, sha: null,
                section: third };
     }
 
-    var rule = NUMBERED_ROUTES[third];
+    var rule = ownRoute(NUMBERED_ROUTES, third);
     if (!rule) return null;
     var fourth = seg[3];
     if (rule.type === 'int') {
@@ -1119,15 +1128,27 @@
   function buildShareResult(rawUrl) {
     var res = canonicalResult(rawUrl);
     if (!res.ok) return { ok: false, reason: res.reason };
-    var share = buildShare(rawUrl);
-    if (!share) return { ok: false, reason: 'credential_like' };
-    return { ok: true, share: share };
+    /*
+     * 組み立てで断った理由も**そのまま**返す（第27回監査 R27-002）。以前は null を一律に
+     * `credential_like` へ畳んでいたので、文字数の上限で断ったときにも
+     * 「資格情報らしきものが含まれる」と案内していた。
+     */
+    return assembleShare(res);
   }
 
   function buildShare(rawUrl) {
     var res = canonicalResult(rawUrl);
     if (!res.ok) return null;                  // 理由つきが要るときは buildShareResult を使う
+    var built = assembleShare(res);
+    return built.ok ? built.share : null;
+  }
 
+  /*
+   * 検査済みの判定（canonicalResult の結果）から文面とXのURLを作る。理由つきで返す。
+   *   'overlong_text'  本文＋URL が上限を超える（自前の数え方は公式より多く数えることがある）
+   *   'overlong_url'   Xへ渡すURLが長すぎる
+   */
+  function assembleShare(res) {
     var info = res.info;
     var url = res.url;
     /*
@@ -1137,11 +1158,14 @@
     var text = structuralText(info);
 
     /*
-     * 上限は**切り詰めずに守る**。所有者39文字＋リポジトリ100文字の最大でも
-     * 上限に届かない（テストで公式実装に照らして実測）。万一届いたら共有しない——
-     * 切り詰めると、その変換がまた検査を外しうる（第14回監査 R14-001 で実際に起きた型）。
+     * 上限は**切り詰めずに守る**。届いたら共有しない——切り詰めると、その変換が
+     * また検査を外しうる（第14回監査 R14-001 で実際に起きた型）。
+     * 文字の数としては所有者39文字＋リポジトリ100文字の最大でも届かないが、
+     * weightedLength はドメインに見える部分（`a.co` など）を URL として多く数えるので、
+     * そういう名前では届く（第27回監査 R27-002）。多く数える向きの誤差なので、
+     * Xに弾かれる文面は作らない。断るときは長さの理由で断る。
      */
-    if (weightedLength(text) + 1 + URL_WEIGHT > MAX_WEIGHTED_TWEET) return null;
+    if (weightedLength(text) + 1 + URL_WEIGHT > MAX_WEIGHTED_TWEET) return { ok: false, reason: 'overlong_text' };
 
     /*
      * 本文は info（所有者名・リポジトリ名・整数・16進）だけから作るので、
@@ -1152,16 +1176,16 @@
 
     var intentUrl = intentUrlFor(text, url);
     /* 2層目。Xへ渡すURLの長さ（第16回監査 R16-002。いまの文法では届かない） */
-    if (intentUrl.length > MAX_INTENT_URL_BYTES) return null;
+    if (intentUrl.length > MAX_INTENT_URL_BYTES) return { ok: false, reason: 'overlong_url' };
 
-    return {
+    return { ok: true, share: {
       kind: info.route,
       repo: info.repo,
       number: info.number,
       text: text,
       url: url,
       intentUrl: intentUrl
-    };
+    } };
   }
 
   root.GXS = {

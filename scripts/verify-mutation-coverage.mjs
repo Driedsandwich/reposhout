@@ -32,7 +32,7 @@ function parseArgs(argv) {
     if (!KNOWN.includes(a)) return { error: `知らない引数: ${a}` };
     if (out[a] !== undefined) return { error: `${a} が2回ある` };
     const v = argv[i + 1];
-    if (v === undefined || v.startsWith('--')) return { error: `${a} に値が無い` };
+    if (v === undefined || v === '' || v.startsWith('--')) return { error: `${a} に値が無い` };
     out[a] = v; i++;
   }
   return { out, rest };
@@ -68,7 +68,16 @@ if (!existsSync(specAbs)) problems.push(`正本が見つからない: ${specPath
 else {
   specText = readFileSync(specAbs, 'utf8');
   try { spec = JSON.parse(specText); }
-  catch (e) { problems.push(`正本が JSON として読めない: ${e && e.message}`); }
+  catch (e) { problems.push(`正本が JSON として読めない: ${e && e.message}`); spec = undefined; }
+  /*
+   * ⚠️ 形が壊れた正本で TypeError に倒れない・照合を飛ばして通さない（第27回監査 便B の検収で見つけた）。
+   * `{}` や `null` を渡すと spec.mutations.map で落ちていた。
+   */
+  if (spec !== undefined) {
+    const ok = spec && typeof spec === 'object' && Array.isArray(spec.mutations) && spec.mutations.length > 0
+      && spec.mutations.every((m) => m && typeof m.id === 'string' && m.id !== '');
+    if (!ok) { problems.push('正本の形が壊れている（mutations が空か、id が文字列でない項目がある）'); spec = null; }
+  } else spec = null;
 }
 
 if (spec && receipts.length) {

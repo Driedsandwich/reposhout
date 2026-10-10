@@ -94,19 +94,19 @@ PRのCIはそもそも成果物を残しません（作れることの確認だ�
 **今回出す正本**（正本のファイルは [SUBMISSION_CANDIDATE.json](SUBMISSION_CANDIDATE.json)）:
 
 ```
-成果物 : reposhout-package-e29fb2e23d5d61451f09c9402246663d09831bf8
+status : pending_main_ci
+成果物 : まだ無い
 中のZIP : reposhout-1.1.8.zip
-大きさ : 45,404 B / 11ファイル
-SHA-256 : 82439a7b52c89deabde4ad863dedc26e07315789230a646b81a3eea8be780896
+大きさ : 未確定
+SHA-256 : 未確定
 ```
 
-第26回監査の是正を main へマージしたあと、main への push で走った CI（run 37843550213）が
-作ったものを、ダウンロードして実測した値です（外側の成果物のバイト数とハッシュも、
-GitHub の API が申告する digest と一致することを確かめました）。同じコミットを独立に
-クローンして作り直したZIPとも**バイト一致**します。第26回の是正はテストと検査の側だけなので、
-出荷物は第26回で却下した候補と同じバイト列です（却下の理由は出荷物ではありません）。
-**タグはまだ打っていません**（外部監査に合格してから打ちます）。
-却下した成果物は提出しません（理由は正本の `history` にあります）。
+**いま出せる成果物はありません。** 第27回監査（技術の指摘 R27-001〜R27-207）で、前の候補
+`1.1.8` を却下したためです（理由は正本の `history` にあります）。次の成果物は、
+是正を main へマージしたあとに走る CI が作ります。そのときに、ダウンロードして
+バイト数・収録数・SHA-256 を実測してから、ここと正本へ書きます。
+**まだ無い値を、それらしく書きません。**
+**タグも打っていません**（外部監査に合格してから打ちます）。
 
 **「最新の main」で成果物を選ばないでください。** 選ぶ基準は上の成果物名とSHA-256です
 （第10回監査 R10-006）。実物が正本どおりかは、次で機械的に確かめられます。
@@ -178,9 +178,11 @@ Changed your mind? Press Escape in the share window to dismiss it — this works
 ── Privacy ──
 
 RepoShout requests two API permissions: activeTab and storage. activeTab lets it
-read the current tab's URL, only at the moment you invoke it, purely to
-build the post text. The page title is not read at all. storage holds one thing: the identifiers of the windows the
-extension itself opened, kept in memory and cleared when you quit the browser.
+read the current tab's URL when you invoke it; RepoShout reads that URL once, at
+that moment, purely to build the post text, and does not watch the tab afterwards.
+The page title is not read at all. storage holds two values for each window the
+extension itself opened: the window's identifier and the time it was opened. They
+are kept in memory and cleared when you quit the browser.
 
 Nothing is sent to the developer, and there is no analytics or tracking. The page
 generated line and URL are sent to X, because that is what the extension does: they are
@@ -277,10 +279,11 @@ compose the post text (for example "owner/repo" or "Issue #123 · owner/repo")
 and to build the x.com share link. The page title is not read.
 
 activeTab was chosen deliberately over host permissions or the "tabs" permission
-because it grants access only at the moment the user explicitly invokes the
-extension -- by clicking the toolbar icon or pressing the keyboard shortcut --
-and only for that one tab. It cannot be used to observe browsing in the
-background.
+because access is granted only when the user explicitly invokes the extension --
+by clicking the toolbar icon or pressing the keyboard shortcut -- and only for
+that one tab, instead of standing access to every site. RepoShout reads that
+tab's URL once, at the moment of invocation, and does not monitor the tab or
+browsing in the background.
 
 The URL is used solely to decide whether the page may be shared and to construct
 the share link from its validated parts. The extension does not store it, does
@@ -348,9 +351,10 @@ What the content script does on github.com:
   network request of its own.
 
 The toolbar icon and the keyboard shortcut are a separate path: they do not use
-this content script at all. They read the current tab's URL through
-the activeTab permission, which is granted only at the moment the user invokes
-the extension, and only for that one tab.
+this content script to build the post or to read the page. They read the current
+tab's URL through the activeTab permission, which is granted when the user
+invokes the extension, and only for that one tab. When they cannot share the
+page, they ask this content script to show the status message described above.
 ```
 
 **Host permission: x.com**
@@ -362,7 +366,7 @@ Escape, so the user can dismiss the share window the extension just opened.
 
 It reads no page content from X. This script itself stores nothing and transmits
 nothing; the extension's storage permission is used only by its service worker,
-to remember the identifiers of windows it opened.
+to remember the identifier and opening time of each window it opened.
 
 Before closing anything it asks the extension's service worker whether this
 window is one the extension opened itself. The only evidence accepted is the
@@ -466,7 +470,7 @@ https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md
 
 RepoShout は宛先をXに絞り、サイドパネルもカード生成も持ちません。差別化は次の3点です（いずれも実測に基づく事実で、README にも記載済み）。
 
-1. ログイン状態とログアウト状態の**両方**に対応（GitHubはこの2つで実装が別物。ログイン時のIssue/PRにはボタン行自体が無いため、ツールバー/ショートカットで補っている）
+1. ログイン状態とログアウト状態の**両方**に対応（GitHubはこの2つで実装が別物。どちらの操作列にもボタンを置き、ボタンを置けないページはツールバー/ショートカットで補っている）
 2. 文字数の数え方を**Xの規則に沿わせ、ずれるときは多めに数える側へ倒している**（半角カタカナ・絵文字・スキーム無しドメインを含む）。固定した公式コーパスの文字数対象節・手書きの期待値・生成した敵対的コーパスを `twitter-text` 3.1.0 と突き合わせた範囲では、過少計数は検出されていない（有限の回帰検査であり、全入力の証明ではない）。実際のChromeへ拡張を読み込む**E2E**も含め、`npm test` の全テストが通ることを確認している
 3. Open / Merged / Closed の状態を**意図的に出さない**（ログイン状態で読み取り値が食い違う事象を実測したため）
 

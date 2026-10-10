@@ -21,23 +21,55 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, copyFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { ROOT } from './helpers/load.mjs';
 import { shardOf } from '../scripts/lib/shard.mjs';
 
-const VERIFIER = join(ROOT, 'scripts/verify-mutation-receipt.mjs');
 const sha = (s) => createHash('sha256').update(s).digest('hex');
-const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8' }).trim();
 
-const SPEC_TEXT = readFileSync(join(ROOT, 'test/mutations.json'), 'utf8');
+/*
+ * ⚠️ **題材は「いまの作業ツリーをそのまま写した、使い捨ての git リポジトリ」。**（第27回監査 R27-103）
+ * 検証器は、各変異の前・後・復旧のハッシュを**測ったコミットの実体から計算し直し**、
+ * 追跡しているファイルに変更が無いことも見るようになった。作り物のハッシュの題材は
+ * 通らなくなるので、検証器を緩めずに題材のほうを実体のあるものへ直した。
+ * 作業ツリーをそのまま写すので、手元で未コミットの変更があっても、変異が当たった状態でも、
+ * その状態の検証器と正本を試せる。
+ */
+function cleanCopyOfWorkingTree() {
+  const dir = mkdtempSync(join(tmpdir(), 'reposhout-verify-root-'));
+  const files = execFileSync('git', ['ls-files', '-co', '--exclude-standard', '-z'],
+    { cwd: ROOT, encoding: 'utf8' }).split('\0').filter(Boolean);
+  for (const f of files) {
+    mkdirSync(dirname(join(dir, f)), { recursive: true });
+    try { copyFileSync(join(ROOT, f), join(dir, f)); } catch (e) { /* 消えたファイルは写さない */ }
+  }
+  const g = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+  g('init', '-q');
+  g('add', '-A');
+  g('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false',
+    'commit', '-q', '-m', 'fixture');
+  return dir;
+}
+const FIX = cleanCopyOfWorkingTree();
+const VERIFIER = join(FIX, 'scripts/verify-mutation-receipt.mjs');
+const git = (...a) => execFileSync('git', a, { cwd: FIX, encoding: 'utf8' }).trim();
+
+const SPEC_TEXT = readFileSync(join(FIX, 'test/mutations.json'), 'utf8');
 const SPEC = JSON.parse(SPEC_TEXT);
-const RUNNER_TEXT = readFileSync(join(ROOT, 'scripts/run-mutations.mjs'), 'utf8');
+const RUNNER_TEXT = readFileSync(join(FIX, 'scripts/run-mutations.mjs'), 'utf8');
 const HEAD = git('rev-parse', 'HEAD');
 const TREE = git('rev-parse', 'HEAD^{tree}');
+/* 変異の対象の中身から、前・後のハッシュを実際に作る */
+const CONTENT_AT_START = new Map();
+const contentOf = (f) => {
+  if (!CONTENT_AT_START.has(f)) CONTENT_AT_START.set(f, readFileSync(join(FIX, f), 'utf8'));
+  return CONTENT_AT_START.get(f);
+};
+const buildReceiptFrom = () => buildReceipt();
 
 const hex = (seed) => sha(String(seed));
 
@@ -46,14 +78,16 @@ function buildReceipt() {
   const results = SPEC.mutations.map((m) => {
     const ef = m.expectedFailure;
     const kind = ef.kind || 'assertion';
-    const before = hex(`${m.id}-before`);
+    const text = contentOf(m.file);
+    const before = sha(text);
+    const after = sha(text.split(m.find).join(m.replace));
     return {
       id: m.id, file: m.file, desc: m.desc, test: m.test,
       expectedFailure: { ...ef },
       expectedMatches: m.expectMatches === undefined ? 1 : m.expectMatches,
       actualMatches: m.expectMatches === undefined ? 1 : m.expectMatches,
       appliedReplacementCount: m.expectMatches === undefined ? 1 : m.expectMatches,
-      beforeSha256: before, afterSha256: hex(`${m.id}-after`), restoredSha256: before,
+      beforeSha256: before, afterSha256: after, restoredSha256: before,
       changed: true, wrote: true, restored: true, restoreError: null,
       exitCode: 1, signal: null, timedOut: false, spawnError: null,
       failedTestNames: [ef.testName],
@@ -95,7 +129,7 @@ function runVerifier(receipt, { expectedCommit = HEAD, write = true } = {}) {
   const args = [VERIFIER, p, ...(expectedCommit ? ['--expected-commit', expectedCommit] : [])];
   try {
     const out = execFileSync(process.execPath, args,
-      { cwd: ROOT, encoding: 'utf8', stdio: 'pipe', timeout: 60000 });
+      { cwd: FIX, encoding: 'utf8', stdio: 'pipe', timeout: 60000 });
     return { code: 0, out };
   } catch (e) {
     return { code: typeof e.status === 'number' ? e.status : -1,
@@ -178,7 +212,36 @@ const CASES = [
     (r) => { r.results[0].afterSha256 = r.results[0].beforeSha256; },
     /変異の前後でファイルが変わっていない/],
   ['戻したあとが変異前と違う', (r) => { r.results[0].restoredSha256 = hex('other2'); },
-    /戻したあとが変異前と違う/]
+    /戻したあとが変異前と違う/],
+  /* ---- 第27回監査 R27-101: 結果行が「検知していない」と言っているのに通していた ---- */
+  ['結果行を素通りにし、上位の欄は検知を1つ減らすだけ',
+    (r) => { r.results[0].outcome = 'applied_but_survived'; r.applied_and_killed -= 1; },
+    /applied_but_survived の数が結果行と合わない/],
+  ['結果行を未適用にし、上位の欄は0のまま',
+    (r) => { r.results[0].outcome = 'not_applied'; r.applied_and_killed -= 1; },
+    /not_applied の数が結果行と合わない/],
+  ['結果行をランナー失敗にし、上位の欄は0のまま',
+    (r) => { r.results[0].outcome = 'runner_error'; r.applied_and_killed -= 1; },
+    /runner_error の数が結果行と合わない/],
+  ['上位の欄も結果行と矛盾なく素通りを1件数えた（内訳は合っている）', (r) => {
+    r.results[0].outcome = 'applied_but_survived';
+    r.applied_and_killed -= 1; r.applied_but_survived += 1;
+  }, /検知していない結果がある/],
+  ['非検知の件数の欄を消す', (r) => { delete r.not_applied; },
+    /not_applied が 0 以上の整数でない/],
+  ['非検知の件数の欄を文字列にする', (r) => { r.runner_error = '0'; },
+    /runner_error が 0 以上の整数でない/],
+  /* ---- 第27回監査 R27-103: ハッシュと変異前の対照を実体へ結び付けていなかった ---- */
+  ['前・後・復旧のハッシュを実体と無関係な値にする', (r) => {
+    r.results[0].beforeSha256 = 'a'.repeat(64); r.results[0].restoredSha256 = 'a'.repeat(64);
+    r.results[0].afterSha256 = 'b'.repeat(64);
+  }, /変異前のハッシュが、測ったコミットの中身と違う/],
+  ['変異後のハッシュだけを実体と無関係な値にする', (r) => { r.results[0].afterSha256 = 'b'.repeat(64); },
+    /変異後のハッシュが、正本どおり置き換えた中身と違う/],
+  ['変異前の対照の終了コードを1にして passed は残す', (r) => { r.baselines[0].exitCode = 1; },
+    /変異前の対照の終了コードが 0 でない/],
+  ['変異前の対照を2度書く', (r) => { r.baselines.push({ ...r.baselines[0] }); },
+    /変異前の対照に同じテストが2度出ている/]
 ];
 
 /*
@@ -254,7 +317,7 @@ test('引数を厳格に読む（R26-002）', () => {
   const run = (args) => {
     try {
       execFileSync(process.execPath, [VERIFIER, ...args],
-        { cwd: ROOT, encoding: 'utf8', stdio: 'pipe', timeout: 60000 });
+        { cwd: FIX, encoding: 'utf8', stdio: 'pipe', timeout: 60000 });
       return { code: 0, out: '' };
     } catch (e) {
       return { code: typeof e.status === 'number' ? e.status : -1,
@@ -267,4 +330,57 @@ test('引数を厳格に読む（R26-002）', () => {
     '同じ引数を2回受け取っている');
   assert.equal(run([p, p]).code, 2, 'GXS_MARK.Y18 証跡のパスを2つ受け取っている');
   assert.equal(run([]).code, 2, 'パス無しで走っている');
+});
+
+test('証跡に正本を選ばせない・正本の形が壊れていれば照合を飛ばさずに落とす（R27-102）', () => {
+  /*
+   * 第27回監査 R27-102。検証器は既定の照合先に証跡の `spec` を使っていたので、
+   * `{}` の JSON を指させると件数・ID・正本ハッシュの照合が黙って飛び、exit 0 だった。
+   */
+  const empty = join(DIR, 'empty-spec.json');
+  writeFileSync(empty, '{}');
+  const r = buildReceipt();
+  r.spec = empty;
+  const out = runVerifier(r);
+  assert.notEqual(out.code, 0, '証跡が指した別の正本で照合している');
+  /* ⚠️ 止まった理由まで見る。正本の形の検査も {} を拒むので、止まっただけでは区別できない */
+  assert.match(out.out, /証跡が名乗る正本/, `GXS_MARK.VR08 証跡が名乗る正本だと気づいて止めていない:\n${out.out}`);
+  /* 呼び出し側が壊れた正本を渡しても、照合を飛ばさずに落とす */
+  for (const body of ['{}', 'null', '{"mutations":[]}', '{"mutations":[{"id":1}]}',
+    JSON.stringify({ mutations: [SPEC.mutations[0], SPEC.mutations[0]] })]) {
+    const bad = join(DIR, `bad-spec-${++seq}.json`);
+    writeFileSync(bad, body);
+    const r2 = buildReceipt();
+    r2.spec = bad;
+    const p = join(DIR, `receipt-${++seq}.json`);
+    writeFileSync(p, JSON.stringify(r2));
+    let code = 0; let text = '';
+    try {
+      execFileSync(process.execPath, [VERIFIER, p, '--expected-commit', HEAD, '--spec', bad],
+        { cwd: FIX, encoding: 'utf8', stdio: 'pipe', timeout: 60000 });
+    } catch (e) { code = e.status; text = `${e.stdout}${e.stderr}`; }
+    assert.notEqual(code, 0, `壊れた正本（${body.slice(0, 40)}）で照合を飛ばして通している`);
+    assert.match(text, /正本/, `止まった理由が違う（${body.slice(0, 40)}）: ${text.slice(0, 200)}`);
+  }
+});
+
+test('証跡を作ったあとで追跡中のファイルを変えたら通さない（R27-103）', () => {
+  /*
+   * 第27回監査 R27-103。HEAD の tree を確かめることと、いまの作業ファイルがその tree どおりで
+   * あることは別。変異の対象を書き換えても、同じ証跡が通っていた。
+   */
+  const target = SPEC.mutations[0].file;
+  const abs = join(FIX, target);
+  const original = readFileSync(abs, 'utf8');
+  try {
+    writeFileSync(abs, original + '\n/* 証跡のあとで書き換えた */\n');
+    const out = runVerifier(buildReceiptFrom(original));
+    assert.notEqual(out.code, 0, '手元の変更があるのに通している');
+    /* ⚠️ 作業ファイルの中身の照合も同じ変更で止まるので、理由まで見て区別する */
+    assert.match(out.out, /追跡しているファイルに変更がある/, `GXS_MARK.VR09 追跡中のファイルの変更だと気づいて止めていない:\n${out.out}`);
+  } finally {
+    writeFileSync(abs, original);
+  }
+  /* 対照: 戻せば通る */
+  assert.equal(runVerifier(buildReceipt()).code, 0, '戻したのに通らない');
 });
