@@ -2492,6 +2492,18 @@
         "testName": "改竄した証跡を、項目ごとに拒む（R26-002）",
         "diagnosticMarker": "GXS_MARK.VR02"
       }
+    },
+    {
+      "id": "X19",
+      "file": "scripts/verify-mutation-coverage.mjs",
+      "test": "test/mutation-shard.test.mjs",
+      "desc": "数え直しの道具が正本の形を見ない",
+      "find": "    if (!ok) { problems.push('正本の形が壊れている（mutations が空か、id が文字列でない項目がある）'); spec = null; }",
+      "replace": "    if (false) { spec = null; }",
+      "expectedFailure": {
+        "testName": "正本の形が壊れていれば、倒れずに理由を言って拒む（第27回監査 便B の検収）",
+        "diagnosticMarker": "GXS_MARK.X19"
+      }
     }
   ]
 }

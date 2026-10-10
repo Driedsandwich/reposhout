@@ -57,7 +57,7 @@ function parseArgs(argv) {
     if (!KNOWN.includes(a)) return { error: `知らない引数: ${a}` };
     if (out[a] !== undefined) return { error: `${a} が2回ある` };
     const v = argv[i + 1];
-    if (v === undefined || v.startsWith('--')) return { error: `${a} に値が無い` };
+    if (v === undefined || v === '' || v.startsWith('--')) return { error: `${a} に値が無い` };
     out[a] = v; i++;
   }
   if (rest.length > 1) return { error: `証跡のパスが ${rest.length} 個ある` };
@@ -144,6 +144,12 @@ function gitRaw(args) {
 }
 const headCommit = gitOut(['rev-parse', 'HEAD']);
 const headTree = gitOut(['rev-parse', 'HEAD^{tree}']);
+/* 同じファイルを何度も git から取り出さない（変異の対象は数十ファイルに集まる） */
+const headContentCache = new Map();
+function headContent(file) {
+  if (!headContentCache.has(file)) headContentCache.set(file, gitRaw(['show', `${headCommit}:${file}`]));
+  return headContentCache.get(file);
+}
 /*
  * ⚠️ HEAD の tree を確かめても、**いまの作業ファイルがその tree どおり**とは限らない
  *（第27回監査 R27-103）。追跡しているファイルに変更があれば、証跡と手元が対応しない。
@@ -341,7 +347,7 @@ for (const x of results) {
    * いまの作業ファイルが変異前（＝戻した状態）であることも見る。
    */
   if (m && headCommit !== null) {
-    const raw = gitRaw(['show', `${headCommit}:${m.file}`]);
+    const raw = headContent(m.file);
     if (raw === null) {
       w(false, `測ったコミットに変異の対象が無い: ${m.file}`);
     } else {

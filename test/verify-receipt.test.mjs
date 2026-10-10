@@ -342,8 +342,9 @@ test('証跡に正本を選ばせない・正本の形が壊れていれば照�
   const r = buildReceipt();
   r.spec = empty;
   const out = runVerifier(r);
-  assert.notEqual(out.code, 0, 'GXS_MARK.VR08 証跡が指した別の正本で照合している');
-  assert.match(out.out, /証跡が名乗る正本/, `止まった理由が違う:\n${out.out}`);
+  assert.notEqual(out.code, 0, '証跡が指した別の正本で照合している');
+  /* ⚠️ 止まった理由まで見る。正本の形の検査も {} を拒むので、止まっただけでは区別できない */
+  assert.match(out.out, /証跡が名乗る正本/, `GXS_MARK.VR08 証跡が名乗る正本だと気づいて止めていない:\n${out.out}`);
   /* 呼び出し側が壊れた正本を渡しても、照合を飛ばさずに落とす */
   for (const body of ['{}', 'null', '{"mutations":[]}', '{"mutations":[{"id":1}]}',
     JSON.stringify({ mutations: [SPEC.mutations[0], SPEC.mutations[0]] })]) {
@@ -374,8 +375,9 @@ test('証跡を作ったあとで追跡中のファイルを変えたら通さ�
   try {
     writeFileSync(abs, original + '\n/* 証跡のあとで書き換えた */\n');
     const out = runVerifier(buildReceiptFrom(original));
-    assert.notEqual(out.code, 0, 'GXS_MARK.VR09 手元の変更があるのに通している');
-    assert.match(out.out, /追跡しているファイルに変更がある/, `止まった理由が違う:\n${out.out}`);
+    assert.notEqual(out.code, 0, '手元の変更があるのに通している');
+    /* ⚠️ 作業ファイルの中身の照合も同じ変更で止まるので、理由まで見て区別する */
+    assert.match(out.out, /追跡しているファイルに変更がある/, `GXS_MARK.VR09 追跡中のファイルの変更だと気づいて止めていない:\n${out.out}`);
   } finally {
     writeFileSync(abs, original);
   }
