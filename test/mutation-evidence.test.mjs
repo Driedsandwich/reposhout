@@ -545,16 +545,16 @@ test('変異したときだけ置き場を戻す', () => {
   mkdirSync(join(fx.dir, out));
   let r;
   try {
-    r = runRunner(fx.dir, { receipt: `${out}/receipt.json` });
+    /* 汚れていない木で走らせる（--allow-dirty だと、直す前でも「証拠に使える」にならず差が出ない） */
+    r = runRunner(fx.dir, { receipt: `${out}/receipt.json`, allowDirty: false });
   } finally {
     chmodSync(join(fx.dir, out), 0o755);
   }
   const mod = readFileSync(join(fx.dir, 'mod.mjs'), 'utf8');
   assert.ok(mod.includes('export const other = 2;'), '2件目の変異が戻っていない');
-  const fakeSuccess = r.exitCode === 0 && r.receipt && r.receipt.state === 'complete'
-    && r.receipt.evidenceEligible === true;
-  assert.ok(!fakeSuccess, `GXS_MARK.X23 途中で書けなかったのに成功の証跡に化けた（exit ${r.exitCode}）`);
-  assert.notEqual(r.exitCode, 0, '途中で書けなかったのに exit 0');
+  assert.notEqual(r.exitCode, 0, `GXS_MARK.X23 途中で書けなかったのに exit 0:\n${r.stdout.slice(-300)}`);
+  assert.ok(!(r.receipt && r.receipt.state === 'complete' && r.receipt.evidenceEligible === true),
+    '途中で書けなかったのに、証拠に使える complete の証跡に化けた');
   assert.match(r.stdout + '', /Q8 以降は当てずに止まる|途中で止まった|証跡を書けなかった/,
     `止まった理由を言っていない:\n${r.stdout.slice(-400)}`);
 });
