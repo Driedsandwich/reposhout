@@ -889,6 +889,10 @@
     commit: { route: 'commit', type: 'sha40' }
   };
 
+  function ownRoute(table, name) {
+    return Object.prototype.hasOwnProperty.call(table, name) ? table[name] : null;
+  }
+
   /*
    * 型で決まるルートだけを認める。1つでも当てはまらなければ null（＝共有しない）。
    * 返すのは**検査済みのパーツ**だけで、元の pathname は持ち出さない。
@@ -910,14 +914,19 @@
     }
 
     var third = seg[2];
+    /*
+     * 表は**自分の項目だけ**を見る（第27回監査 R27-001）。素のオブジェクトを
+     * そのまま引くと `toString`・`constructor`・`__proto__` が継承した値で「ある」と読まれ、
+     * 9種別の外のルートを共有していた。
+     */
     if (seg.length === 3) {
-      var listed = LIST_ROUTES[third];
+      var listed = ownRoute(LIST_ROUTES, third);
       if (!listed) return null;
       return { route: listed, owner: owner, name: repo, repo: full, number: null, sha: null,
                section: third };
     }
 
-    var rule = NUMBERED_ROUTES[third];
+    var rule = ownRoute(NUMBERED_ROUTES, third);
     if (!rule) return null;
     var fourth = seg[3];
     if (rule.type === 'int') {

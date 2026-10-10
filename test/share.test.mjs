@@ -379,6 +379,32 @@ test('セグメントの数と型を1つずつ崩すと、共有できなくな�
   for (const u of broken) assert.equal(GXS.buildShare(u), null, `共有できてしまう: ${u}`);
 });
 
+test('ルートの表は自分の項目だけを見る。継承した名前を許可ルートにしない（R27-001）', () => {
+  /*
+   * 第27回監査 R27-001。LIST_ROUTES・NUMBERED_ROUTES を素のオブジェクトで引いていたので、
+   * `toString`・`constructor`・`__proto__` のような Object.prototype 由来の名前が
+   * 「表にある」と読まれ、9種別の外の `/o/r/toString` を共有していた（配布ZIPで再現）。
+   */
+  const inherited = ['toString', 'constructor', '__proto__', 'hasOwnProperty', 'valueOf'];
+  const sha = 'a'.repeat(40);
+  for (const name of inherited) {
+    for (const u of [`https://github.com/o/r/${name}`, `https://github.com/o/r/${name}/12`,
+                     `https://github.com/o/r/${name}/${sha}`]) {
+      const r = GXS.buildShareResult(u);
+      assert.equal(r.ok, false, `GXS_MARK.X01 継承した名前を許可ルートとして共有してしまう: ${u}`);
+      assert.equal(GXS.fallbackUrl(u), null, `GXS_MARK.X01 URLだけの経路が共有してしまう: ${u}`);
+    }
+  }
+  /* 正規の9種別は今までどおり通る（境界を狭めすぎていない対照） */
+  for (const u of ['https://github.com/o/r', 'https://github.com/o/r/issues',
+                   'https://github.com/o/r/pulls', 'https://github.com/o/r/discussions',
+                   'https://github.com/o/r/releases', 'https://github.com/o/r/issues/1',
+                   'https://github.com/o/r/pull/2', 'https://github.com/o/r/discussions/3',
+                   `https://github.com/o/r/commit/${sha}`]) {
+    assert.equal(GXS.buildShareResult(u).ok, true, `正規のルートを拒否している: ${u}`);
+  }
+});
+
 /* ============================================================
  * 出口の境界（第16回監査 R16-001 / R16-002）
  * ============================================================ */

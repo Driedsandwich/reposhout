@@ -2276,6 +2276,18 @@
         "testName": "CIが、変異の証跡を外から検証している（R25-003）",
         "diagnosticMarker": "GXS_MARK.W15"
       }
+    },
+    {
+      "id": "X01",
+      "file": "src/share.js",
+      "test": "test/share.test.mjs",
+      "desc": "ルートの表を自分の項目に限らず、継承した名前も「ある」と読む",
+      "find": "return Object.prototype.hasOwnProperty.call(table, name) ? table[name] : null;",
+      "replace": "return table[name] || null;",
+      "expectedFailure": {
+        "testName": "ルートの表は自分の項目だけを見る。継承した名前を許可ルートにしない（R27-001）",
+        "diagnosticMarker": "GXS_MARK.X01"
+      }
     }
   ]
 }
