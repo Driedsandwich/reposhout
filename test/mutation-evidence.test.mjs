@@ -235,8 +235,9 @@ const mark = 'GXS_MARK.OUTER';
   const dir = makeFixture([mut('U8', { test: 'test/outer.test.mjs',
     expectedFailure: { testName: '外に目印を置いた', diagnosticMarker: 'GXS_MARK.OUTER' } })], files).dir;
   const r = runRunner(dir);
-  assert.equal(outcomeOf(r, 'U8'), 'runner_error', 'GXS_MARK.X28 テストの外の目印で検知にしている');
-  assert.match(String(of(r, 'U8').error), /対象テストの外/, `止まった理由が違う: ${of(r, 'U8').error}`);
+  assert.equal(outcomeOf(r, 'U8'), 'runner_error', 'テストの外の目印で検知にしている');
+  /* ⚠️ 走らせたあとの「本文に目印が無い」でも runner_error になるので、測る前に断ったかを理由で見る */
+  assert.match(String(of(r, 'U8').error), /対象テストの外/, `GXS_MARK.X28 測る前に断っていない: ${of(r, 'U8').error}`);
 });
 
 test('目印は、そのテストの本文の中だけで探す（R25-001）', () => {
