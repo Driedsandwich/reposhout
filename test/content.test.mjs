@@ -50,7 +50,8 @@ function makeEl(tag) {
     querySelectorAll() { return []; },
     addEventListener(type, fn) { (this._ls || (this._ls = {}))[type] = fn; }, focus() {}, contains() { return false; },
     getBoundingClientRect() { return { height: 28, width: 80 }; },
-    get textContent() { return this._text; }, set textContent(v) { this._text = v; },
+    /* 本物と同じく、textContent を入れると子は消える（R27-004 の題材が当たるように） */
+    get textContent() { return this._text; }, set textContent(v) { this._text = v; this.children = []; },
     get innerHTML() { return this._html || ''; },
     /* 文字列を本物に解釈はしない。**出てくるタグ名の分だけ**子を作る（span を引けるように） */
     set innerHTML(v) {
