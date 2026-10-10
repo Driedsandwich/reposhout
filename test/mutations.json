@@ -1776,7 +1776,7 @@
     {
       "id": "W09",
       "file": ".github/workflows/ci.yml",
-      "find": "      - name: 証跡が証拠として使える形か、外から確かめる\n        run: node scripts/verify-mutation-receipt.mjs mutation-receipt.json --expected-commit \"$GITHUB_SHA\"\n\n",
+      "find": "      - name: 証跡が証拠として使える形か、外から確かめる\n        run: node scripts/verify-mutation-receipt.mjs mutation-receipt.json --expected-commit \"$GITHUB_SHA\" --spec test/mutations.json\n\n",
       "replace": "",
       "test": "test/manifest.test.mjs",
       "desc": "CIから証跡の外部検証を外す",
@@ -2503,6 +2503,42 @@
       "expectedFailure": {
         "testName": "正本の形が壊れていれば、倒れずに理由を言って拒む（第27回監査 便B の検収）",
         "diagnosticMarker": "GXS_MARK.X19"
+      }
+    },
+    {
+      "id": "X20",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "本人の確認が要る欄を not_required にすると確認の検査を外せる形へ戻す",
+      "find": "    if (c.confirmationStatus === 'not_required' && mustConfirm) {",
+      "replace": "    if (false) {",
+      "expectedFailure": {
+        "testName": "入力の形で必須の確認や検査を外せない（R27-108）",
+        "diagnosticMarker": "GXS_MARK.X20"
+      }
+    },
+    {
+      "id": "X21",
+      "file": ".github/workflows/ci.yml",
+      "test": "test/manifest.test.mjs",
+      "desc": "数え直しのステップに if: false を足して飛ばせるようにする",
+      "find": "      - name: 全部を1回ずつ覆えているか数え直す\n        run: |",
+      "replace": "      - name: 全部を1回ずつ覆えているか数え直す\n        if: false\n        run: |",
+      "expectedFailure": {
+        "testName": "CI の構造が、必須の検証を飛ばせない形になっている（R27-109）",
+        "diagnosticMarker": "GXS_MARK.X21"
+      }
+    },
+    {
+      "id": "X22",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "strict が見る CI のジョブを test と windows だけに戻す",
+      "find": "const REQUIRED_CI_JOBS = ['test', 'windows', 'mutation-coverage', 'package-candidate',\n  ...[1, 2, 3, 4, 5, 6].map((i) => `mutations (${i})`)];",
+      "replace": "const REQUIRED_CI_JOBS = ['test', 'windows'];",
+      "expectedFailure": {
+        "testName": "変異の束・数え直し・提出候補のジョブが success でなければ strict で落ちる（R27-109）",
+        "diagnosticMarker": "GXS_MARK.X22"
       }
     }
   ]

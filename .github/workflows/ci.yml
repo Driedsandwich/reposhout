@@ -146,7 +146,7 @@ jobs:
       # 途中で強制終了されると証跡は running のままか、そもそも残らない。
       # **読む側**が、完了していること・綺麗な木で測ったこと・件数が合うことを見る。
       - name: 証跡が証拠として使える形か、外から確かめる
-        run: node scripts/verify-mutation-receipt.mjs mutation-receipt.json --expected-commit "$GITHUB_SHA"
+        run: node scripts/verify-mutation-receipt.mjs mutation-receipt.json --expected-commit "$GITHUB_SHA" --spec test/mutations.json
 
       - name: 変異対照の証跡を残す
         if: always()
@@ -190,7 +190,7 @@ jobs:
         run: |
           ls -R receipts
           node scripts/verify-mutation-coverage.mjs \
-            receipts/*/mutation-receipt.json --expected-commit "$GITHUB_SHA"
+            receipts/*/mutation-receipt.json --expected-commit "$GITHUB_SHA" --spec test/mutations.json
 
   # ============================================================
   # 提出候補を作るジョブ（第25回監査）

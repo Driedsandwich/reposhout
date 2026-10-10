@@ -166,7 +166,7 @@ function goodRuntime(cand, over = {}) {
     run: {
       id: cand.runId, path: '.github/workflows/ci.yml', event: 'push', branch: 'main',
       headSha: cand.sourceCommit, conclusion: 'success',
-      jobs: { test: 'success', windows: 'success' }
+      jobs: { ...ALL_JOBS_OK }
     },
     artifact: { name: cand.artifactName, expired: false, digest: `sha256:${OUTER_SHA}` },
     ...over
@@ -174,6 +174,10 @@ function goodRuntime(cand, over = {}) {
 }
 
 /* strict が通る状態を1つ作る。ここから1箇所ずつ壊す */
+/* CI の必須ジョブがすべて success（第27回監査 R27-109） */
+const ALL_JOBS_OK = Object.fromEntries(['test', 'windows', 'mutation-coverage', 'package-candidate',
+  ...[1, 2, 3, 4, 5, 6].map((i) => `mutations (${i})`)].map((j) => [j, 'success']));
+
 const GOOD_REMOTE = {
   originUrl: 'https://github.com/Driedsandwich/reposhout.git',
   originMainSha: 'a'.repeat(40),
@@ -182,7 +186,7 @@ const GOOD_REMOTE = {
 const GOOD_CI = {
   conclusion: 'success', event: 'push', branch: 'main',
   path: '.github/workflows/ci.yml',
-  headSha: 'a'.repeat(40), runId: '999', jobs: { test: 'success', windows: 'success' }
+  headSha: 'a'.repeat(40), runId: '999', jobs: { ...ALL_JOBS_OK }
 };
 
 /*
@@ -286,6 +290,66 @@ test('正本の状態が ready でなければ、他がそろっていても str
   /* 対照: ready なら、この項目では落ちない */
   const ok = validateStoreReadiness(strictInputs());
   assert.ok(!ok.problems.some((p) => p.includes('正本の状態')), ok.problems.join('\n'));
+});
+
+test('入力の形で必須の確認や検査を外せない（R27-108）', () => {
+  /*
+   * 第27回監査 R27-108。strict は数しか見ていなかったので、次の入力がどれも problems 0 で通った。
+   */
+  const cases = [
+    ['本人の確認が要る2欄を not_required にして確認の記録を消す', (i) => {
+      for (const c of i.disclosure.categories) {
+        if (c.requiresOwnerConfirmation) { c.confirmationStatus = 'not_required'; delete c.ownerConfirmation; }
+      }
+    }, /本人の確認が要る欄なのに not_required/],
+    ['確認の要否の印を外す', (i) => {
+      for (const c of i.disclosure.categories) c.requiresOwnerConfirmation = false;
+    }, /確認の要否が正本の定数と一致/],
+    ['同じ欄を9個並べる', (i) => {
+      i.disclosure.categories = Array.from({ length: 9 }, () => clone(i.disclosure.categories[0]));
+    }, /欄の種類が9種類そろい/],
+    ['同じ証明を3つ並べる', (i) => {
+      i.disclosure.certifications = Array.from({ length: 3 }, () => clone(i.disclosure.certifications[0]));
+    }, /証明の種類が3種類そろい/],
+    ['正本の収録数の欄を消す', (i) => { delete i.candidate.innerFiles; }, /正本の収録数が正の整数/]
+  ];
+  const passed = [];
+  for (const [name, breakIt, want] of cases) {
+    const inputs = strictInputs();
+    inputs.disclosure = clone(inputs.disclosure);
+    inputs.candidate = clone(inputs.candidate);
+    breakIt(inputs);
+    inputs.audit = goodAudit(inputs.candidate);
+    const r = validateStoreReadiness(inputs);
+    if (!r.problems.some((p) => want.test(p))) passed.push(`${name}: ${r.problems.length ? r.problems.join(' / ') : '通った'}`);
+  }
+  assert.deepEqual(passed, [], `GXS_MARK.X20 入力の形で必須の確認や検査を外せる:\n${passed.join('\n')}`);
+  /* 対照: そろった入力はこの項目では落ちない */
+  const ok = validateStoreReadiness(strictInputs());
+  assert.deepEqual(ok.problems, [], ok.problems.join('\n'));
+});
+
+test('変異の束・数え直し・提出候補のジョブが success でなければ strict で落ちる（R27-109）', () => {
+  /*
+   * 第27回監査 R27-109。strict は test と windows のジョブしか見ていなかったので、
+   * mutation-coverage が skipped でも、束のジョブが1つ欠けていても通った。
+   */
+  const holes = [
+    ['数え直しが skipped', { 'mutation-coverage': 'skipped' }],
+    ['束が1つ失敗', { 'mutations (3)': 'failure' }],
+    ['提出候補のジョブが cancelled', { 'package-candidate': 'cancelled' }]
+  ];
+  const passed = [];
+  for (const [name, over] of holes) {
+    const r = validateStoreReadiness(strictInputs({ metadataCi: { ...GOOD_CI, jobs: { ...ALL_JOBS_OK, ...over } } }));
+    if (r.problems.length === 0) passed.push(`${name}: 通った`);
+  }
+  /* 束のジョブが1つ無い */
+  const missing = { ...ALL_JOBS_OK }; delete missing['mutations (6)'];
+  if (validateStoreReadiness(strictInputs({ metadataCi: { ...GOOD_CI, jobs: missing } })).problems.length === 0) {
+    passed.push('束のジョブが1つ無い: 通った');
+  }
+  assert.deepEqual(passed, [], `GXS_MARK.X22 必須のジョブを見ずに通している:\n${passed.join('\n')}`);
 });
 
 /* ---- いまのリポジトリの実状態 ------------------------------------------ */
@@ -644,10 +708,10 @@ test('いまの文書のCIが失敗していれば落ちる', () => {
 
 test('片方のジョブだけ成功では落ちる', () => {
   failsWith(strictInputs({
-    metadataCi: { ...GOOD_CI, jobs: { test: 'cancelled', windows: 'success' } }
+    metadataCi: { ...GOOD_CI, jobs: { ...ALL_JOBS_OK, test: 'cancelled' } }
   }), 'いまの文書のCI（test）');
   failsWith(strictInputs({
-    metadataCi: { ...GOOD_CI, jobs: { test: 'success', windows: 'failure' } }
+    metadataCi: { ...GOOD_CI, jobs: { ...ALL_JOBS_OK, windows: 'failure' } }
   }), 'いまの文書のCI（windows）');
 });
 

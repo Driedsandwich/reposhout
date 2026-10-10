@@ -20,6 +20,23 @@
  */
 
 const HEX40 = /^[0-9a-f]{40}$/;
+/*
+ * ダッシュボードの「データの使用」の9欄と3つの証明（第27回監査 R27-108）。
+ * 判定する側が持つ。入力（store/DATA_DISCLOSURE.json）の数や状態だけを信じない。
+ */
+const DISCLOSURE_IDS = ['personally_identifiable_information', 'health_information',
+  'financial_and_payment_information', 'authentication_information', 'personal_communications',
+  'location', 'web_history', 'user_activity', 'website_content'];
+/* 本人がダッシュボードの設問文を読んで決める欄（第10回監査 R10-003 から） */
+const OWNER_CONFIRMATION_IDS = ['authentication_information', 'user_activity'];
+const CERTIFICATION_IDS = ['no_unapproved_use', 'no_selling', 'no_creditworthiness'];
+/*
+ * CI で success でなければならないジョブ（第27回監査 R27-109）。前は test と windows だけを
+ * 見ていたので、変異の束や数え直しが skipped・失敗でも、run 全体が success なら通った。
+ * 束の名前は GitHub が matrix から付ける「mutations (1)」〜「mutations (6)」。
+ */
+const REQUIRED_CI_JOBS = ['test', 'windows', 'mutation-coverage', 'package-candidate',
+  ...[1, 2, 3, 4, 5, 6].map((i) => `mutations (${i})`)];
 const HEX64 = /^[0-9a-f]{64}$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -132,9 +149,26 @@ export function validateStoreReadiness(input) {
   /* ---- 2. データ申告 ------------------------------------------------- */
   check('データ申告の欄が9つ', disclosure.categories.length === 9,
     `欄が ${disclosure.categories.length} 個`);
+  /*
+   * 欄の**種類の集合**と、本人の確認が要る欄を、判定する側の定数で持つ（第27回監査 R27-108）。
+   * 前は数（9）しか見ず、同じ欄を9個並べても通った。本人の確認が要る2欄も、入力側の
+   * confirmationStatus を `not_required` に付け替えるだけで確認の検査を外せた。
+   */
+  const ids = disclosure.categories.map((c) => c.id);
+  check('データ申告の欄の種類が9種類そろい、重複が無い',
+    new Set(ids).size === ids.length && DISCLOSURE_IDS.every((id) => ids.includes(id))
+      && ids.every((id) => DISCLOSURE_IDS.includes(id)),
+    `欄の id: ${JSON.stringify(ids)}`);
 
   for (const c of disclosure.categories) {
     const at = `申告 ${c.label}`;
+    const mustConfirm = OWNER_CONFIRMATION_IDS.includes(c.id);
+    check(`${at} の確認の要否が正本の定数と一致`, (c.requiresOwnerConfirmation === true) === mustConfirm,
+      `requiresOwnerConfirmation=${JSON.stringify(c.requiresOwnerConfirmation)}（本人の確認が要る欄: ${mustConfirm}）`);
+    if (c.confirmationStatus === 'not_required' && mustConfirm) {
+      problems.push(`${at} — 本人の確認が要る欄なのに not_required になっている（入力側で義務を外せない）`);
+      continue;
+    }
     if (c.confirmationStatus === 'not_required') {
       check(at, ['Yes', 'No'].includes(c.answer), `答えが Yes / No でない: ${c.answer}`);
       continue;
@@ -161,6 +195,10 @@ export function validateStoreReadiness(input) {
   /* ---- 3. 3つの証明 --------------------------------------------------- */
   const certs = disclosure.certifications || [];
   check('証明が3つ', certs.length === 3, `${certs.length} 個`);
+  const certIds = certs.map((c) => c.id);
+  check('証明の種類が3種類そろい、重複が無い（R27-108）',
+    new Set(certIds).size === certIds.length && CERTIFICATION_IDS.every((id) => certIds.includes(id)),
+    `証明の id: ${JSON.stringify(certIds)}`);
   for (const cert of certs) {
     check(`証明 ${cert.id}`, cert.checked === true, 'チェックが入っていない');
   }
@@ -250,6 +288,9 @@ export function validateStoreReadiness(input) {
       `sourceCommit が不正: ${candidate.sourceCommit}`);
     check('正本のハッシュが64桁の16進', HEX64.test(candidate.innerSha256 || ''),
       `innerSha256 が不正: ${candidate.innerSha256}`);
+    /* 収録数が無ければ、成果物の中身の数の照合が黙って飛ぶ（第27回監査 R27-108） */
+    check('正本の収録数が正の整数', Number.isInteger(candidate.innerFiles) && candidate.innerFiles > 0,
+      `innerFiles が正の整数でない: ${JSON.stringify(candidate.innerFiles)}`);
   }
 
   /*
@@ -331,7 +372,8 @@ export function validateStoreReadiness(input) {
       let why = '';
       try { entries = readZipStrict(innerZip); } catch (e) { why = e.message; }
       check('中身のZIPが厳しい読み手で開ける', Boolean(entries), why);
-      if (entries && candidate.innerFiles) {
+      /* 収録数の検査を、正本の欄があるかどうかで飛ばさない（第27回監査 R27-108） */
+      if (entries) {
         check('中身のZIPの収録数', entries.length === candidate.innerFiles,
           `実測 ${entries.length} ≠ 正本 ${candidate.innerFiles}`);
         check('中身のZIPの直下に manifest.json',
@@ -409,7 +451,7 @@ export function validateStoreReadiness(input) {
         `${metadataCi.headSha} ≠ ${metadata && metadata.sourceCommit}`);
       check('いまの文書のCIが success', metadataCi.conclusion === 'success',
         `conclusion=${metadataCi.conclusion}`);
-      for (const job of ['test', 'windows']) {
+      for (const job of REQUIRED_CI_JOBS) {
         check(`いまの文書のCI（${job}）`,
           metadataCi.jobs && metadataCi.jobs[job] === 'success',
           `${job}=${metadataCi.jobs && metadataCi.jobs[job]}`);
@@ -444,7 +486,7 @@ export function validateStoreReadiness(input) {
         run.headSha === candidate.sourceCommit,
         `${run.headSha} ≠ ${candidate.sourceCommit}`);
       check('正本の run が success', run.conclusion === 'success', `conclusion=${run.conclusion}`);
-      for (const job of ['test', 'windows']) {
+      for (const job of REQUIRED_CI_JOBS) {
         check(`正本の run（${job}）`,
           run.jobs && run.jobs[job] === 'success',
           `${job}=${run.jobs && run.jobs[job]}`);
