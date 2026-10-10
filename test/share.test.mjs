@@ -392,7 +392,7 @@ test('ルートの表は自分の項目だけを見る。継承した名前を�
                      `https://github.com/o/r/${name}/${sha}`]) {
       const r = GXS.buildShareResult(u);
       assert.equal(r.ok, false, `GXS_MARK.X01 継承した名前を許可ルートとして共有してしまう: ${u}`);
-      assert.equal(GXS.fallbackUrl(u), null, `GXS_MARK.X01 URLだけの経路が共有してしまう: ${u}`);
+      assert.equal(GXS.fallbackUrl(u), null, `URLだけの経路が共有してしまう: ${u}`);
     }
   }
   /* 正規の9種別は今までどおり通る（境界を狭めすぎていない対照） */
