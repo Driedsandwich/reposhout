@@ -521,22 +521,24 @@ test('途中で証跡を書けなくなったら、次の変異を当てずに�
   ], {
     'test/block.test.mjs': `
 import test from 'node:test';
+import assert from 'node:assert/strict';
 import { chmodSync, readFileSync } from 'node:fs';
 const mutated = readFileSync(new URL('../mod.mjs', import.meta.url), 'utf8').includes('value = 99');
 test('変異したときだけ置き場を塞ぐ', () => {
   if (!mutated) return;
   chmodSync(new URL('../${out}', import.meta.url), 0o555);
-  throw new Error('GXS_MARK.BLOCK: わざと落とす');
+  assert.ok(false, 'GXS_MARK.BLOCK: わざと落とす');
 });
 `,
     'test/unblock.test.mjs': `
 import test from 'node:test';
+import assert from 'node:assert/strict';
 import { chmodSync, readFileSync } from 'node:fs';
 const mutated = readFileSync(new URL('../mod.mjs', import.meta.url), 'utf8').includes('other = 98');
 test('変異したときだけ置き場を戻す', () => {
   if (!mutated) return;
   chmodSync(new URL('../${out}', import.meta.url), 0o755);
-  throw new Error('GXS_MARK.UNBLOCK: わざと落とす');
+  assert.ok(false, 'GXS_MARK.UNBLOCK: わざと落とす');
 });
 `
   });
