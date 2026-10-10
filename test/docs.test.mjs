@@ -2317,3 +2317,23 @@ test('名前空間の説明が、台帳の分岐を全部書いている（R27-0
   const zero = inv.denyCriteria.branches.find((b) => b.id === 'account_present_zero_public_repos_auth_route');
   assert.ok(zero.why.includes('外から確かめられない'), '公開0件から非公開の不存在まで言い切っている');
 });
+
+test('却下の記録の理由文が、指摘IDを1つずつ説明している（R27-011）', () => {
+  /*
+   * 第27回監査 R27-011。findingIds（構造化された指摘ID）と理由文が別の集合になっていた
+   * （R20-001・R19-005・R16-005・R15-002〜005・R14-003・R13-002 が理由文に無く、
+   * 逆に監査の指摘ではない自分の発見を R16-006 と書いていた）。両方向で突き合わせる。
+   */
+  const cand = JSON.parse(read('store/SUBMISSION_CANDIDATE.json'));
+  const rejected = cand.history.filter(
+    (h) => typeof h.status === 'string' && h.status.startsWith('rejected_by_'));
+  assert.ok(rejected.length >= 15, `却下の記録が少なすぎる: ${rejected.length}`);
+  for (const h of rejected) {
+    const round = h.auditRound;
+    const said = new Set(h.reason.match(new RegExp(`R${round}-\\d{3}`, 'g')) || []);
+    const missing = h.findingIds.filter((id) => !said.has(id));
+    const extra = [...said].filter((id) => !h.findingIds.includes(id));
+    assert.deepEqual(missing, [], `GXS_MARK.X11 ${h.status}: 理由文に無い指摘ID`);
+    assert.deepEqual(extra, [], `${h.status}: findingIds に無いIDが理由文にある`);
+  }
+});

@@ -2396,6 +2396,18 @@
         "testName": "名前空間の説明が、台帳の分岐を全部書いている（R27-012）",
         "diagnosticMarker": "GXS_MARK.X10"
       }
+    },
+    {
+      "id": "X11",
+      "file": "store/SUBMISSION_CANDIDATE.json",
+      "test": "test/docs.test.mjs",
+      "desc": "却下の記録の理由文から R20-001 の説明を落とす",
+      "find": " R20-001: 実在するリポジトリ（",
+      "replace": " 実在するリポジトリ（",
+      "expectedFailure": {
+        "testName": "却下の記録の理由文が、指摘IDを1つずつ説明している（R27-011）",
+        "diagnosticMarker": "GXS_MARK.X11"
+      }
     }
   ]
 }
