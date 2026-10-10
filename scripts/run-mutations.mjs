@@ -775,9 +775,10 @@ function saveRunning() {
  * ⚠️ 実行前後の比較の基準は、**最初に証跡を書く前**に取る（第27回監査 R27-106）。
  * 前は書いた後に取っていたので、出力先が追跡中のファイルだと、その上書きが基準に入って
  * 「作業ツリーは変わっていない」になった。比べるときに外すのは、証跡そのもの
- *（未追跡の1行）だけ。
+ *（未追跡の1行）だけ。未追跡のフォルダが「?? out/」とまとめて出ると外せないので、
+ * 未追跡はファイル1件ずつ出させる。
  */
-const workspaceBaseline = gitOut(['status', '--porcelain']);
+const workspaceBaseline = gitOut(['status', '--porcelain', '--untracked-files=all']);
 const receiptRelForStatus = receiptRelInRepo;
 const withoutOwnReceipt = (st) => st === null ? null : st.split('\n')
   .filter((l) => !(receiptRelForStatus && l === `?? ${receiptRelForStatus}`)).join('\n');
@@ -1137,7 +1138,7 @@ if (currentMutationId !== null && !fatal) {
 }
 
 /* 作業ツリーが元に戻っているか（第23回監査 R23-002 §6.6） */
-const gitStatusEnd = gitOut(['status', '--porcelain']);
+const gitStatusEnd = gitOut(['status', '--porcelain', '--untracked-files=all']);
 const workspaceUnchanged = workspaceBaseline === null || gitStatusEnd === null
   ? null : withoutOwnReceipt(workspaceBaseline) === withoutOwnReceipt(gitStatusEnd);
 

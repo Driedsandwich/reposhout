@@ -427,8 +427,13 @@ test('「走っている」を置けなければ、1件も測らない（R26-003
   assert.equal(r.exitCode, 2, `書けない置き場なのに走っている:\n${r.stdout}`);
   assert.equal(readFileSync(join(dir, 'mod.mjs'), 'utf8'), before,
     'GXS_MARK.SAVERUN_RESTORED 証跡を置けないのに、変異を当てている');
-  assert.ok(!/落ちた 1/.test(r.stdout),
-    `GXS_MARK.SAVERUN_FIRST 1件でも測っている:\n${r.stdout}`);
+  /*
+   * ⚠️ 第27回（R27-105）でループの中にも同じ書き込みの検査を入れたので、ここを外しても
+   * 「1件も当てない」は変わらない。違うのは**集計まで進まずに止まる**こと（測る前の失敗）。
+   * 重複した守りは残し、この試験はその違い（診断）を見る。
+   */
+  assert.ok(!/^変異 \d+ 件/m.test(r.stdout),
+    `GXS_MARK.SAVERUN_FIRST 測る前に止まらず、集計まで進んでいる:\n${r.stdout}`);
   assert.ok(!existsSync(join(dir, 'no-such-dir')),
     '置けない場所にディレクトリを作っている');
 });

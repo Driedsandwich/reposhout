@@ -313,8 +313,8 @@ test('hardlink で外のファイルを書き換えられない（R27-107）', {
   ]);
   linkSync(join(outer, 'outside.txt'), join(dir, 'hl.txt'));
   const r = runRunner(dir);
-  assert.equal(outcomeOf(r, 'L2'), 'runner_error', 'hardlink 越しに外を書き換えている');
-  assert.match(String(of(r, 'L2').error), /hardlink/, `GXS_MARK.X25 hardlink の検査で止めていない: ${of(r, 'L2').error}`);
+  assert.equal(outcomeOf(r, 'L2'), 'runner_error', 'GXS_MARK.X25 hardlink 越しに外を書き換えている');
+  assert.match(String(of(r, 'L2').error), /hardlink/, `hardlink の検査で止めていない: ${of(r, 'L2').error}`);
   assert.equal(readFileSync(join(outer, 'outside.txt'), 'utf8'), 'SAFE\n', '外のファイルが変わった');
 });
 
