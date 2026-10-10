@@ -2372,6 +2372,18 @@
         "testName": "Web Intent の正本の状態ごとの検査が、正しい遷移を通し、欠けを拒む（R27-007）",
         "diagnosticMarker": "GXS_MARK.X08"
       }
+    },
+    {
+      "id": "X09",
+      "file": "README.md",
+      "test": "test/docs.test.mjs",
+      "desc": "所有者名・リポジトリ名も送るのに「利用者が打ち込めるものは何も渡らない」へ戻す",
+      "find": "Free text from the page — a title, a description, a file name, a branch name — never reaches X.",
+      "replace": "Nothing a user can type — a title, a description, a file name, a branch name — reaches X.",
+      "expectedFailure": {
+        "testName": "文書の説明が、実挙動の測り直しと食い違わない（R27-005）",
+        "diagnosticMarker": "GXS_MARK.X09"
+      }
     }
   ]
 }

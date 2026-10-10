@@ -178,9 +178,11 @@ Changed your mind? Press Escape in the share window to dismiss it — this works
 ── Privacy ──
 
 RepoShout requests two API permissions: activeTab and storage. activeTab lets it
-read the current tab's URL, only at the moment you invoke it, purely to
-build the post text. The page title is not read at all. storage holds one thing: the identifiers of the windows the
-extension itself opened, kept in memory and cleared when you quit the browser.
+read the current tab's URL when you invoke it; RepoShout reads that URL once, at
+that moment, purely to build the post text, and does not watch the tab afterwards.
+The page title is not read at all. storage holds two values for each window the
+extension itself opened: the window's identifier and the time it was opened. They
+are kept in memory and cleared when you quit the browser.
 
 Nothing is sent to the developer, and there is no analytics or tracking. The page
 generated line and URL are sent to X, because that is what the extension does: they are
@@ -277,10 +279,11 @@ compose the post text (for example "owner/repo" or "Issue #123 · owner/repo")
 and to build the x.com share link. The page title is not read.
 
 activeTab was chosen deliberately over host permissions or the "tabs" permission
-because it grants access only at the moment the user explicitly invokes the
-extension -- by clicking the toolbar icon or pressing the keyboard shortcut --
-and only for that one tab. It cannot be used to observe browsing in the
-background.
+because access is granted only when the user explicitly invokes the extension --
+by clicking the toolbar icon or pressing the keyboard shortcut -- and only for
+that one tab, instead of standing access to every site. RepoShout reads that
+tab's URL once, at the moment of invocation, and does not monitor the tab or
+browsing in the background.
 
 The URL is used solely to decide whether the page may be shared and to construct
 the share link from its validated parts. The extension does not store it, does
@@ -348,9 +351,10 @@ What the content script does on github.com:
   network request of its own.
 
 The toolbar icon and the keyboard shortcut are a separate path: they do not use
-this content script at all. They read the current tab's URL through
-the activeTab permission, which is granted only at the moment the user invokes
-the extension, and only for that one tab.
+this content script to build the post or to read the page. They read the current
+tab's URL through the activeTab permission, which is granted when the user
+invokes the extension, and only for that one tab. When they cannot share the
+page, they ask this content script to show the status message described above.
 ```
 
 **Host permission: x.com**
@@ -362,7 +366,7 @@ Escape, so the user can dismiss the share window the extension just opened.
 
 It reads no page content from X. This script itself stores nothing and transmits
 nothing; the extension's storage permission is used only by its service worker,
-to remember the identifiers of windows it opened.
+to remember the identifier and opening time of each window it opened.
 
 Before closing anything it asks the extension's service worker whether this
 window is one the extension opened itself. The only evidence accepted is the
@@ -466,7 +470,7 @@ https://github.com/Driedsandwich/reposhout/blob/main/PRIVACY.md
 
 RepoShout は宛先をXに絞り、サイドパネルもカード生成も持ちません。差別化は次の3点です（いずれも実測に基づく事実で、README にも記載済み）。
 
-1. ログイン状態とログアウト状態の**両方**に対応（GitHubはこの2つで実装が別物。ログイン時のIssue/PRにはボタン行自体が無いため、ツールバー/ショートカットで補っている）
+1. ログイン状態とログアウト状態の**両方**に対応（GitHubはこの2つで実装が別物。どちらの操作列にもボタンを置き、ボタンを置けないページはツールバー/ショートカットで補っている）
 2. 文字数の数え方を**Xの規則に沿わせ、ずれるときは多めに数える側へ倒している**（半角カタカナ・絵文字・スキーム無しドメインを含む）。固定した公式コーパスの文字数対象節・手書きの期待値・生成した敵対的コーパスを `twitter-text` 3.1.0 と突き合わせた範囲では、過少計数は検出されていない（有限の回帰検査であり、全入力の証明ではない）。実際のChromeへ拡張を読み込む**E2E**も含め、`npm test` の全テストが通ることを確認している
 3. Open / Merged / Closed の状態を**意図的に出さない**（ログイン状態で読み取り値が食い違う事象を実測したため）
 

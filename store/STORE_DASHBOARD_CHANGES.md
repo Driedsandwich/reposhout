@@ -56,7 +56,7 @@ viewing, together with that page's link. The page title is not read or sent.
 
 ### Permission justification
 
-`activeTab` は変更なし。**`storage` の欄が新しく必要**です（1.1.0 で追加した権限）。文面は `LISTING.md` §3 の「storage」をそのまま貼ってください。
+`activeTab` の欄は、いま掲載中の文面と `LISTING.md` §3 の「activeTab」を見比べ、違っていれば §3 の文面へ貼り替えてください（1.1.8 で説明を直しています・第27回監査 R27-005）。**`storage` の欄が新しく必要**です（1.1.0 で追加した権限）。文面は `LISTING.md` §3 の「storage」をそのまま貼ってください。
 
 ### Data usage — ⚠️ ここが今回いちばん判断の要る欄
 

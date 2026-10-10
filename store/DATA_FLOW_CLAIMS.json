@@ -89,7 +89,7 @@
     "pull/<n>/files"
   ],
   "fragmentPolicy": "drop_all",
-  "queryPolicy": "int / bool / enum の値だけを、名前ごとに1回だけ残す。同じ名前が2回以上あればURLごと拒否する。自由文（q / query / discussions_q / title / body）は落とす",
+  "queryPolicy": "int / bool / enum の値だけを、名前ごとに1回だけ残す。表に載っている名前が2回以上あればURLごと拒否する（表に無い名前は繰り返していても落とす）。自由文（q / query / discussions_q / title / body）は落とす",
   "recipient": "x.com（X Corp.）— 拡張の開発者のサーバーは存在しない",
   "transferTiming": "利用者が共有を操作し、Xの投稿画面が開いた時点。Postを押す前",
   "storage": "chrome.storage.session に、拡張自身が開いたウィンドウのIDと、開いた時刻だけ。URLも投稿本文もタイトルも保存しない",

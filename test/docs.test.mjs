@@ -770,7 +770,7 @@ test('文書が、いまの共有方針を正しく説明している（R13-002�
     ['/enterprises/', 'GitHubの機能ページを拒否すること（R16-001）'],
     ['single list', '拒否する語を1つの一覧にしたこと（R16-001）']);
   must['README.ja.md'].push(
-    ['同じ名前のクエリは1回まで', '同じクエリを1回までにしたこと（R16-002）'],
+    ['表に載っている名前のクエリは1回まで', '同じクエリを1回までにしたこと（R16-002・範囲は R27-005）'],
     ['単一の一覧', '拒否する語を1つの一覧にしたこと（R16-001）']);
   must['PRIVACY.md'].push(
     ['the button was pressed', '画面側が合図しか送らないこと（R16-003）'],
@@ -2236,5 +2236,56 @@ test('Escが効く条件が、すべての面で同じことを言っている�
   ]) {
     assert.ok(activeText(file).includes(needle),
       `GXS_MARK.SHARED_11 ${file} が Esc の条件を無条件のまま書いている（「${needle}」が無い）`);
+  }
+});
+
+test('文書の説明が、実挙動の測り直しと食い違わない（R27-005）', () => {
+  /*
+   * 第27回監査 R27-005。要約や貼る原稿の一部が、実挙動より強い言い切りや古い仕様のまま残っていた。
+   * 語を禁じるだけでなく、**その語が言っていた事実を、いまの実物で測り直して**から文を照らす。
+   */
+  const { GXS } = loadShare();
+  /* ① 表に無い名前の繰り返しは落として共有し、表にある名前の繰り返しは断る */
+  assert.equal(GXS.buildShareResult('https://github.com/o/r/issues?foo=1&foo=2').ok, true,
+    '前提: 表に無い名前の繰り返しは落として共有するはず');
+  assert.equal(GXS.buildShareResult('https://github.com/o/r/issues?state=open&state=closed').reason,
+    'ambiguous_query', '前提: 表にある名前の繰り返しは断るはず');
+  /* ② 所有者名・リポジトリ名は投稿本文に入る（意図して送る） */
+  assert.equal(GXS.buildShare('https://github.com/o/CONFIDENTIAL-project-alpha').text,
+    'o/CONFIDENTIAL-project-alpha', '前提: リポジトリ名は本文に入るはず');
+  /* ③ 窓の記録は ID と開いた時刻の2つ（service worker の実物） */
+  const bg = read('src/background.js');
+  assert.ok(/rec\[String\(windowId\)\] = now/.test(bg), '前提: 窓の記録に開いた時刻を入れているはず');
+
+  const stale = [
+    ['README.md', "don't touch the DOM at all", 'ツールバー・ショートカットも案内のために content script を使う'],
+    ['README.ja.md', 'DOMに一切触れません', '同（日本語）'],
+    ['store/LISTING.md', 'do not use\nthis content script at all', '同（貼る原稿）'],
+    ['README.md', 'Nothing a user can type', '所有者名・リポジトリ名は送る（②）'],
+    ['README.ja.md', '利用者が打ち込めるもの（表題・説明・ファイル名・ブランチ名）は、1つもXへ渡りません', '同（日本語）'],
+    ['SECURITY.md', 'Any way to get user-controlled text or an arbitrary path', '同（報告の対象）'],
+    ['README.md', '**A parameter may appear at most once**', '繰り返しを断るのは表にある名前だけ（①）'],
+    ['store/DATA_FLOW_CLAIMS.json', '。同じ名前が2回以上あればURLごと拒否する。', '同（正本）'],
+    ['PRIVACY.md', '成功と報告もしません', '記録できない窓も「開いた」とは伝える'],
+    ['README.ja.md', '**Escキーの検知だけ**', 'すべての keydown の event.key を読んでから捨てる'],
+    ['store/LISTING.md', 'storage holds one thing', '窓の記録は ID と時刻の2つ（③）'],
+    ['store/LISTING.md', 'It cannot be used to observe browsing in the', '権限の能力と、この拡張がしないことを混ぜない'],
+    ['README.md', 'Over-counting only trims a little early', '多く数えると切り詰めずに断る（R27-002）'],
+    ['README.ja.md', '多く数えるのは少し早く切り詰めるだけ', '同（日本語）']
+  ];
+  for (const [f, needle, why] of stale) {
+    assert.ok(!read(f).includes(needle.replace(/\\n/g, '\n')),
+      `GXS_MARK.X09 ${f} に実挙動と食い違う古い説明が残っている（${why}）: ${needle}`);
+  }
+  const must = [
+    ['README.md', 'they ask the content script on that tab to show the status message'],
+    ['store/LISTING.md', 'they ask this content script to show the status message'],
+    ['README.md', 'sent on purpose'],
+    ['README.ja.md', '意図して送ります'],
+    ['store/LISTING.md', 'the window\'s identifier and the time it was opened'],
+    ['store/LISTING.md', 'does not monitor the tab']
+  ];
+  for (const [f, needle] of must) {
+    assert.ok(read(f).includes(needle), `${f} に直した説明が無い: ${needle}`);
   }
 });
