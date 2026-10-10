@@ -2624,6 +2624,90 @@
         "testName": "日付を渡しても、読めない時刻帯は止まり、実在しない日は倒れずに止まる（R27-111）",
         "diagnosticMarker": "GXS_MARK.X29"
       }
+    },
+    {
+      "id": "X30",
+      "test": "test/extension.e2e.mjs",
+      "file": "test/extension.e2e.mjs",
+      "desc": "評価の例外を、まだ成立していない（false）と同じに扱う",
+      "find": "        if (r.exceptionDetails) throw new Error(`SW評価で例外: ${JSON.stringify(r.exceptionDetails.exception)}`);\n        if (r.result.value === true) return true;",
+      "replace": "        if (r.result.value === true) return true;",
+      "expectedFailure": {
+        "testName": "実装を待つ仕掛けが、待たずに通っていない（対照）",
+        "diagnosticMarker": "GXS_MARK.X30"
+      }
+    },
+    {
+      "id": "X31",
+      "test": "test/extension.e2e.mjs",
+      "file": "test/extension.e2e.mjs",
+      "desc": "swSession から、読み終わりの印を待つ処理を外す",
+      "find": "    await waitInSw(sessionId,\n      \"typeof self.GXS_BG === 'object' && typeof self.GXS === 'object'\");\n    return sessionId;",
+      "replace": "    return sessionId;",
+      "expectedFailure": {
+        "testName": "swSession は、実装の読み終わりの印が立つまで待つ（R27-204）",
+        "diagnosticMarker": "GXS_MARK.X31"
+      }
+    },
+    {
+      "id": "X32",
+      "test": "test/extension.e2e.mjs",
+      "file": "test/extension.e2e.mjs",
+      "desc": "待ちを、評価の結果に関わらず即座に成立させる",
+      "find": "        if (r.result.value === true) return true;\n        observedFalse++;",
+      "replace": "        return true;\n        observedFalse++;",
+      "expectedFailure": {
+        "testName": "実装を待つ仕掛けが、待たずに通っていない（対照）",
+        "diagnosticMarker": "GXS_MARK.X32"
+      }
+    },
+    {
+      "id": "X33",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "中身の ZIP を読み手に通す検査を呼ばない",
+      "find": "    if (innerZip && readZipStrict) {",
+      "replace": "    if (false) {",
+      "expectedFailure": {
+        "testName": "成功の対照は本物の ZIP を実際の読み手に通し、壊れた中身はそれぞれの理由で落ちる（R27-205）",
+        "diagnosticMarker": "GXS_MARK.X33"
+      }
+    },
+    {
+      "id": "X34",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "読み手が無くても成果物を見たことにする",
+      "find": "    if (innerZip && !readZipStrict) {",
+      "replace": "    if (false) {",
+      "expectedFailure": {
+        "testName": "中身の ZIP を読む手段が無ければ、成果物を見たことにしない（R27-205）",
+        "diagnosticMarker": "GXS_MARK.X34"
+      }
+    },
+    {
+      "id": "X35",
+      "file": "scripts/verify-store-readiness.mjs",
+      "test": "test/cli.test.mjs",
+      "desc": "CLI が中身の ZIP の読み手を渡さない",
+      "find": "  readZipStrict: (buf) => readZip(buf)",
+      "replace": "  readZipStrict: null",
+      "expectedFailure": {
+        "testName": "CLI の境界で、全部そろえば exit 0・不備は 1・入力不正は 2（R27-205）",
+        "diagnosticMarker": "GXS_MARK.X35"
+      }
+    },
+    {
+      "id": "X36",
+      "file": "src/share.js",
+      "test": "test/share.test.mjs",
+      "desc": "ほどく段数の上限を大きく緩める",
+      "find": "  var VALUE_MAX_DECODE_ROUNDS = 6;",
+      "replace": "  var VALUE_MAX_DECODE_ROUNDS = 1000;",
+      "expectedFailure": {
+        "testName": "資格情報の判定は、ほどける段数に上限がある（止まらなくならない）",
+        "diagnosticMarker": "GXS_MARK.X36"
+      }
     }
   ]
 }

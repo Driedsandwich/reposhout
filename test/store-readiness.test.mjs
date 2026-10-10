@@ -23,6 +23,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { validateStoreReadiness, dateIn, pickPushRun } from '../scripts/store-readiness.mjs';
+import { readZip } from '../scripts/zip-read.mjs';
+import { makeInnerZip, makeStoredZip } from './helpers/zip-write.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (f) => readFileSync(join(ROOT, f), 'utf8').replace(/\r\n/g, '\n');
@@ -33,7 +35,11 @@ const DISCLOSURE = JSON.parse(read('store/DATA_DISCLOSURE.json'));
 const CANDIDATE = JSON.parse(read('store/SUBMISSION_CANDIDATE.json'));
 
 /* 中身のZIPの代わり（大きさとハッシュだけ見る） */
-const INNER = Buffer.from('これは中身のZIPの代わり', 'utf8');
+/*
+ * 中身の ZIP は**本物の ZIP**にする（第27回監査 R27-205）。前は ZIP でない文字列を渡していて、
+ * 成功の対照が実際の読み手（zip-read.mjs）を一度も通っていなかった。
+ */
+const INNER = makeInnerZip();
 const INNER_SHA = sha256(INNER);
 
 const META = { sourceCommit: 'a'.repeat(40), treeSha: 'b'.repeat(40), dirty: false };
@@ -235,6 +241,8 @@ function strictInputs(over = {}) {
     auditReportSha256: 'e'.repeat(64),
     metadata: { ...META },
     sha256,
+    /* CLI（scripts/verify-store-readiness.mjs）と同じ読み手を渡す（R27-205） */
+    readZipStrict: (buf) => readZip(buf),
     ...over
   };
 }
@@ -349,7 +357,48 @@ test('変異の束・数え直し・提出候補のジョブが success でな�
   if (validateStoreReadiness(strictInputs({ metadataCi: { ...GOOD_CI, jobs: missing } })).problems.length === 0) {
     passed.push('束のジョブが1つ無い: 通った');
   }
+  /* 配布物の側（正本の run）でも同じ（第27回監査 便C R27-206） */
+  for (const [name, over] of holes) {
+    const cand = readyCandidate();
+    const rt = goodRuntime(cand);
+    rt.run.jobs = { ...ALL_JOBS_OK, ...over };
+    if (validateStoreReadiness(strictInputs({ runtime: rt })).problems.length === 0) passed.push(`正本の run で ${name}: 通った`);
+  }
   assert.deepEqual(passed, [], `GXS_MARK.X22 必須のジョブを見ずに通している:\n${passed.join('\n')}`);
+});
+
+test('成功の対照は本物の ZIP を実際の読み手に通し、壊れた中身はそれぞれの理由で落ちる（R27-205）', () => {
+  const ok = validateStoreReadiness(strictInputs());
+  assert.deepEqual(ok.problems, [], ok.problems.join('\n'));
+  assert.ok(ok.ok.includes('中身のZIPが厳しい読み手で開ける'),
+    'GXS_MARK.X33 成功の対照が中身の ZIP を読み手に通していない');
+  assert.ok(ok.ok.includes('中身のZIPの収録数') && ok.ok.includes('中身のZIPの直下に manifest.json'),
+    '収録数と manifest の検査まで進んでいない');
+  /* 1つずつ壊す。正本の大きさ・ハッシュは壊した中身に合わせ、読み手だけが気づく形にする */
+  const crcBroken = Buffer.from(INNER); crcBroken[40] ^= 0xff;
+  const cases = [
+    ['ZIP でない中身', Buffer.from('ZIP ではない', 'utf8'), /中身のZIPが厳しい読み手で開ける/],
+    ['CRC が合わない中身', crcBroken, /中身のZIPが厳しい読み手で開ける/],
+    ['収録数が違う中身', makeInnerZip({ files: 10 }), /中身のZIPの収録数/],
+    ['直下に manifest.json が無い中身', makeInnerZip({ withManifest: false }), /直下に manifest.json/]
+  ];
+  const passed = [];
+  for (const [name, inner, want] of cases) {
+    const cand = { ...readyCandidate(), innerBytes: inner.length, innerSha256: sha256(inner) };
+    const r = validateStoreReadiness(strictInputs({
+      candidate: cand, artifact: fakeArtifact(cand, { inner }), audit: goodAudit(cand),
+      runtime: goodRuntime(cand), listing: docsFor(cand).listing, dashboardChanges: docsFor(cand).dashboard
+    }));
+    if (!r.problems.some((p) => want.test(p))) passed.push(`${name}: ${r.problems.join(' / ') || '通った'}`);
+  }
+  assert.deepEqual(passed, [], `壊れた中身を、その理由で拒めていない:\n${passed.join('\n')}`);
+});
+
+test('中身の ZIP を読む手段が無ければ、成果物を見たことにしない（R27-205）', () => {
+  /* 読み手を渡し忘れると、中身の形・収録数・manifest の検査が黙って飛んでいた */
+  const r = validateStoreReadiness(strictInputs({ readZipStrict: null }));
+  assert.ok(r.problems.some((p) => p.includes('中身のZIPを読む手段')),
+    `GXS_MARK.X34 読み手が無いのに通している:\n${r.problems.join('\n')}`);
 });
 
 /* ---- いまのリポジトリの実状態 ------------------------------------------ */

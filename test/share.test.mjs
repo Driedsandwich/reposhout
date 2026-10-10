@@ -268,10 +268,20 @@ test('クエリの表に、共有できないルートが残っていない', ()
 });
 
 test('資格情報の判定は、ほどける段数に上限がある（止まらなくならない）', () => {
-  let deep = 'plain-text';
-  for (let i = 0; i < 40; i++) deep = encodeURIComponent(deep);
+  /*
+   * ⚠️ 題材は**エンコードで実際に変わる**ものにする（第27回監査 R27-207）。前の `plain-text` は
+   * エンコードしても1文字も変わらず、40回重ねても `plain-text` のままだった——上限の処理を
+   * 一度も通らないので、上限を緩めても外しても、この試験は通っていた。
+   */
+  const encodeTimes = (s, n) => { for (let i = 0; i < n; i++) s = encodeURIComponent(s); return s; };
+  const base = 'plain text';
+  const deep = encodeTimes(base, 40);
+  assert.ok(deep !== base && /%25/.test(deep), `題材が多層になっていない: ${deep.slice(0, 40)}`);
+  /* 上限の内側（6段）はほどけて、普通の文として通る */
+  assert.equal(GXS.credentialLikeValue(encodeTimes(base, 6)), false, '上限の内側の多層エンコードを拒んでいる');
+  /* 上限を超えると「判定できない」ので落とす。時間も有限 */
   const t0 = Date.now();
-  GXS.credentialLikeValue(deep);
+  assert.equal(GXS.credentialLikeValue(deep), true, 'GXS_MARK.X36 上限を超えた多層エンコードを通している');
   assert.ok(Date.now() - t0 < 1000, '判定が長すぎる');
 });
 
@@ -404,7 +414,11 @@ test('ルートの表は自分の項目だけを見る。継承した名前を�
                    'https://github.com/o/r/releases', 'https://github.com/o/r/issues/1',
                    'https://github.com/o/r/pull/2', 'https://github.com/o/r/discussions/3',
                    `https://github.com/o/r/commit/${sha}`]) {
-    assert.equal(GXS.buildShareResult(u).ok, true, `正規のルートを拒否している: ${u}`);
+    const r = GXS.buildShareResult(u);
+    assert.equal(r.ok, true, `正規のルートを拒否している: ${u}`);
+    /* 成功した結果の種別は、許可した9種別の文字列だけ（第27回監査 便C R27-201） */
+    assert.ok(['repo', 'issue-list', 'pr-list', 'discussion-list', 'releases', 'issue', 'pr', 'discussion', 'commit']
+      .includes(r.share.kind), `許可した種別の外の kind: ${String(r.share.kind)}（${u}）`);
   }
 });
 

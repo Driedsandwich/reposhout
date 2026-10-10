@@ -367,6 +367,13 @@ export function validateStoreReadiness(input) {
       check('中身のZIPの大きさ', innerZip.length === candidate.innerBytes,
         `実測 ${innerZip.length} B ≠ 正本 ${candidate.innerBytes} B`);
     }
+    /*
+     * ⚠️ 読み手が無ければ、中身の形・収録数・manifest の検査は1つも走らない（第27回監査 R27-205）。
+     * 走らないまま成果物を見たことにしない。
+     */
+    if (innerZip && !readZipStrict) {
+      problems.push('中身のZIPを読む手段が渡されていない — 中身の形・収録数・manifest を見ないまま通さない');
+    }
     if (innerZip && readZipStrict) {
       let entries = null;
       let why = '';

@@ -70,11 +70,29 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
    * 上の「読み終えるまで待つ」は素通りするが、素通りしても見た目は同じ。
    */
   async function waitInSw(sessionId, expression, opts) {
-    return waitFor(`service worker で ${expression}`, async () => {
-      const r = await cdp.send('Runtime.evaluate',
-        { expression, returnByValue: true }, sessionId);
-      return r && r.result && r.result.value === true;
-    }, opts);
+    /*
+     * ⚠️ **評価できなかったことを「まだ成立していない」と混ぜない。**（第27回監査 R27-204）
+     * 前は exceptionDetails を見ず、true 以外を全部「まだ」と扱っていたので、式が例外を
+     * 投げても、通信が壊れても、陰性の時間切れと同じ形で終わった。例外はその場で失敗にし、
+     * 時間切れのときは「正常に評価して false を何回見たか」を文言に入れる。
+     */
+    let observedFalse = 0;
+    try {
+      return await waitFor(`service worker で ${expression}`, async () => {
+        const r = await cdp.send('Runtime.evaluate',
+          { expression, returnByValue: true }, sessionId);
+        if (!r || !r.result) throw new Error(`SW評価の応答が無い: ${JSON.stringify(r)}`);
+        if (r.exceptionDetails) throw new Error(`SW評価で例外: ${JSON.stringify(r.exceptionDetails.exception)}`);
+        if (r.result.value === true) return true;
+        observedFalse++;
+        return false;
+      }, opts);
+    } catch (e) {
+      if (/待ち時間内に成立しなかった/.test(e.message)) {
+        e.message += `（正常に評価して false を ${observedFalse} 回見た）`;
+      }
+      throw e;
+    }
   }
 
   async function evalInSw(expression) {
@@ -180,11 +198,39 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
      * ちゃんと時間切れになることを確かめる。
      */
     const s = await swSession();
+    /* 正常に評価して false を何度も見たうえでの時間切れだけを、陰性の対照として受け取る（R27-204） */
     await assert.rejects(
       () => waitInSw(s, "typeof self.__gxs_does_not_exist__ === 'object'",
         { timeout: 1500, interval: 100 }),
-      /待ち時間内に成立しなかった/,
-      '存在しない印でも通ってしまう＝待ちが効いていない');
+      /待ち時間内に成立しなかった.*false を ([2-9]|\d{2,}) 回見た/,
+      'GXS_MARK.X32 存在しない印でも通ってしまう、または false を正常に観測しないまま時間切れにしている');
+    /* 評価で例外が出たら、時間切れ（陰性）ではなく、その場で失敗にする */
+    await assert.rejects(
+      () => waitInSw(s, "(() => { throw new Error('わざと') })()", { timeout: 1500, interval: 100 }),
+      /SW評価で例外/,
+      'GXS_MARK.X30 評価の例外を、陰性の時間切れと同じ形で扱っている');
+  });
+
+  it('swSession は、実装の読み終わりの印が立つまで待つ（R27-204）', async () => {
+    /*
+     * ⚠️ 上の対照は waitInSw だけを叩くので、swSession から待ちを外しても捕まらなかった。
+     * service worker の中で印をいったん外し、少し後に戻す。swSession が本当に待つなら、
+     * 戻すまで返らない。
+     */
+    const s = await swSession();
+    await cdp.send('Runtime.evaluate', { expression:
+      "self.__gxs_saved_bg__ = self.GXS_BG; delete self.GXS_BG; " +
+      "setTimeout(() => { self.GXS_BG = self.__gxs_saved_bg__; }, 1200); true", returnByValue: true }, s);
+    const started = Date.now();
+    try {
+      await swSession();
+      const waited = Date.now() - started;
+      assert.ok(waited >= 1000, `GXS_MARK.X31 印が無いのに待たずに返った（${waited} ms）`);
+    } finally {
+      await cdp.send('Runtime.evaluate', { expression:
+        'if (!self.GXS_BG) self.GXS_BG = self.__gxs_saved_bg__; true', returnByValue: true }, s);
+    }
+    assert.equal(await evalInSw('typeof self.GXS_BG'), 'object', '印を戻せていない');
   });
 
   it('service worker が起動し、実装が読めている', async () => {
