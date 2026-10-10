@@ -2288,6 +2288,18 @@
         "testName": "ルートの表は自分の項目だけを見る。継承した名前を許可ルートにしない（R27-001）",
         "diagnosticMarker": "GXS_MARK.X01"
       }
+    },
+    {
+      "id": "X02",
+      "file": "src/share.js",
+      "test": "test/oracle.test.mjs",
+      "desc": "文字数の上限で断ったときの理由を、資格情報の理由へ畳み直す",
+      "find": "return { ok: false, reason: 'overlong_text' };",
+      "replace": "return { ok: false, reason: 'credential_like' };",
+      "expectedFailure": {
+        "testName": "ドットの多い名前を多く数えて断るときは、資格情報ではなく長さの理由で断る（R27-002）",
+        "diagnosticMarker": "GXS_MARK.X02"
+      }
     }
   ]
 }

@@ -194,12 +194,15 @@ test('投稿全体（本文+空白+URL）が280以下に収まる（切り詰め
 
 test('上限を超えるなら、切り詰めずに共有しない', () => {
   /*
-   * いまの型では到達しないが、境界の扱いを固定しておく。
    * 「超えたら切り詰める」に戻すと、その変換がまた検査を外しうる（R14-001の型）。
+   * 第26回までは「いまの型では到達しない」としていたが、ドメインに見える部分を
+   * URL として多く数えるので、`a.co` を並べた名前で実際に到達する（第27回監査 R27-002）。
    */
+  const url = 'https://github.com/o/' + 'a.co'.repeat(12);
+  assert.equal(GXS.buildShare(url), null, '上限を超えたのに共有している（切り詰めている）');
+  const r = GXS.buildShareResult(url);
+  assert.deepEqual(r, { ok: false, reason: 'overlong_text' }, `断り方が違う: ${JSON.stringify(r)}`);
   const src = readShareSource();
-  assert.ok(/weightedLength\(text\) \+ 1 \+ URL_WEIGHT > MAX_WEIGHTED_TWEET\) return null;/.test(src),
-    '上限を超えたときに共有しない、という書き方になっていない');
   assert.ok(!/function truncate\b/.test(src), '切り詰めが復活している');
 });
 
@@ -224,7 +227,7 @@ test('判定の理由が、値を含まない決まった語で返る（R12-002�
     ['https://github.com/o/r/blob/main/a.js', 'unsupported']
   ];
   const allowed = ['credential_like', 'sensitive_route', 'unsupported', 'malformed_url',
-                   'ambiguous_query', 'overlong_url'];
+                   'ambiguous_query', 'overlong_url', 'overlong_text'];
   for (const [u, want] of cases) {
     const r = GXS.buildShareResult(u);
     assert.equal(r.ok, false, u);
