@@ -2384,6 +2384,18 @@
         "testName": "文書の説明が、実挙動の測り直しと食い違わない（R27-005）",
         "diagnosticMarker": "GXS_MARK.X09"
       }
+    },
+    {
+      "id": "X10",
+      "file": "store/NAMESPACE_INVENTORY.md",
+      "test": "test/docs.test.mjs",
+      "desc": "判定の基準から「公開リポジトリが0件の認証入口」の分岐を消す",
+      "find": "   公開リポジトリが0件で、\n",
+      "replace": "",
+      "expectedFailure": {
+        "testName": "名前空間の説明が、台帳の分岐を全部書いている（R27-012）",
+        "diagnosticMarker": "GXS_MARK.X10"
+      }
     }
   ]
 }

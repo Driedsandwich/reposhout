@@ -2289,3 +2289,31 @@ test('文書の説明が、実挙動の測り直しと食い違わない（R27-0
     assert.ok(read(f).includes(needle), `${f} に直した説明が無い: ${needle}`);
   }
 });
+
+test('名前空間の説明が、台帳の分岐を全部書いている（R27-012）', () => {
+  /*
+   * 第27回監査 R27-012。判定の結果（deny 72・allow 7）はコードと一致していたが、
+   * 説明（Markdown と JSON の _about）は古い3分岐のままで、`account_present_zero_public_repos_auth_route`
+   * を書いていなかった。さらにその分岐の理由が「公開0件だから巻き込まない」と、
+   * 公開情報からは導けない非公開リポジトリの不存在まで言い切っていた。
+   */
+  const inv = JSON.parse(read('store/GITHUB_NAMESPACE_INVENTORY.json'));
+  const md = read('store/NAMESPACE_INVENTORY.md');
+  const block = md.slice(md.indexOf('## 判定の基準'), md.indexOf('## 候補の集め方'));
+  const about = inv._about.join('\n');
+  const phrase = {
+    account_absent: 'アカウントが無い',
+    account_present_zero_public_repos_auth_route: '公開リポジトリが0件',
+    route_shadowed: 'リポジトリUIが出ない',
+    reachable_repo: 'browser でも開ける'
+  };
+  const used = inv.denyCriteria.branches.filter((b) => b.expectedCount > 0);
+  assert.equal(used.length, Object.keys(phrase).length, `使われている分岐の数が変わった: ${used.map((b) => b.id)}`);
+  for (const b of used) {
+    assert.ok(phrase[b.id], `説明の語を決めていない分岐: ${b.id}`);
+    assert.ok(block.includes(phrase[b.id]), `GXS_MARK.X10 NAMESPACE_INVENTORY.md の判定の基準に ${b.id} が無い`);
+    assert.ok(about.includes(phrase[b.id]), `JSON の _about に ${b.id} が無い`);
+  }
+  const zero = inv.denyCriteria.branches.find((b) => b.id === 'account_present_zero_public_repos_auth_route');
+  assert.ok(zero.why.includes('外から確かめられない'), '公開0件から非公開の不存在まで言い切っている');
+});
