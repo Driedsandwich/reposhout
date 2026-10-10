@@ -87,10 +87,12 @@ test(${JSON.stringify(WANT)}, () => {
   /* ⚠️ 失敗の文へ、わざと2種類のパスを混ぜる——伏字の検査を、動いているOSに
      関わらず効かせるため（Windows のパスは macOS では自然には現れない） */
   assert.equal(value, 1, 'GXS_MARK.WANT D:\\\\a\\\\repo\\\\mod.mjs と /var/tmp/repo/mod.mjs を見よ');
+  /* 一意でない目印の題材（第26回監査 R26-001）。わざと2か所に置く。
+     ⚠️ テストの呼び出しの中に置く（第27回 R27-104 で範囲を閉じ括弧までにしたので、外に置くと
+     「範囲の外」が先に止め、一意性の検査を外しても落ちなくなる＝W05・Y05 が素通りした）: */
+  /* GXS_MARK.TWICE */
+  /* GXS_MARK.TWICE */
 });
-/* 一意でない目印の題材（第26回監査 R26-001）。わざと2か所に置く: */
-/* GXS_MARK.TWICE */
-/* GXS_MARK.TWICE */
 test(${JSON.stringify(OTHER)}, () => { assert.equal(other, 2, 'GXS_MARK.OTHER: other が 2 でない'); });
 test('数え上げ: GAMMA が2つ', () => { assert.equal(many.split('GAMMA').length - 1, 2, 'GXS_MARK.COUNT: GAMMA の数が違う'); });
 `);
