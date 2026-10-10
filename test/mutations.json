@@ -1511,7 +1511,7 @@
     {
       "id": "U05",
       "file": "src/content.js",
-      "find": "        else if (res.ok === true && res.escAvailable === false && res.notified !== true) {",
+      "find": "        else if (res.ok === true && res.state === 'popup_confirmed_untracked'\n                 && res.escAvailable === false && res.notified !== true) {",
       "replace": "        else if (false) {",
       "test": "test/background.test.mjs",
       "desc": "画面側の受け皿を外す",
@@ -2299,6 +2299,30 @@
       "expectedFailure": {
         "testName": "ドットの多い名前を多く数えて断るときは、資格情報ではなく長さの理由で断る（R27-002）",
         "diagnosticMarker": "GXS_MARK.X02"
+      }
+    },
+    {
+      "id": "X03",
+      "file": "src/content.js",
+      "test": "test/content.test.mjs",
+      "desc": "画面側の Esc の案内を、状態を見ずに escAvailable だけで出す形へ戻す",
+      "find": "else if (res.ok === true && res.state === 'popup_confirmed_untracked'\n                 && res.escAvailable === false && res.notified !== true) {",
+      "replace": "else if (res.ok === true\n                 && res.escAvailable === false && res.notified !== true) {",
+      "expectedFailure": {
+        "testName": "開いた結果ごとの画面側の案内が、service worker の正本どおり（R27-003）",
+        "diagnosticMarker": "GXS_MARK.X03"
+      }
+    },
+    {
+      "id": "X04",
+      "file": "src/content.js",
+      "test": "test/content.test.mjs",
+      "desc": "案内の要素を、固定の ID で見つかった物を使い回す形へ戻す",
+      "find": "    var el = isMine(ownNotice) ? ownNotice : null;",
+      "replace": "    var el = document.getElementById(NOTICE_ID);",
+      "expectedFailure": {
+        "testName": "ページ側に同じ ID の要素があっても、それを書き換えも削除もしない（R27-004）",
+        "diagnosticMarker": "GXS_MARK.X04"
       }
     }
   ]

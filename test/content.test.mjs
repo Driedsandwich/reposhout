@@ -48,7 +48,7 @@ function makeEl(tag) {
       return walk(this);
     },
     querySelectorAll() { return []; },
-    addEventListener() {}, focus() {}, contains() { return false; },
+    addEventListener(type, fn) { (this._ls || (this._ls = {}))[type] = fn; }, focus() {}, contains() { return false; },
     getBoundingClientRect() { return { height: 28, width: 80 }; },
     get textContent() { return this._text; }, set textContent(v) { this._text = v; },
     get innerHTML() { return this._html || ''; },
@@ -62,7 +62,7 @@ function makeEl(tag) {
 }
 
 /* container=null なら「操作列がどこにも無いページ」 */
-function mountContent({ container = null } = {}) {
+function mountContent({ container = null, reply = { ok: false, reason: 'unsupported', notified: false }, before = null } = {}) {
   const selectorsAsked = [];
   const body = makeEl('body'), head = makeEl('head');
   const timers = new Map(); let seq = 0, now = 0;
@@ -100,11 +100,12 @@ function mountContent({ container = null } = {}) {
     runtime: {
       id: 'test', lastError: null,
       onMessage: { addListener(fn) { onMessage = fn; } },
-      sendMessage(msg, cb) { sent.push(msg); if (cb) cb({ ok: false, reason: 'unsupported', notified: false }); },
+      sendMessage(msg, cb) { sent.push(msg); if (cb) cb(reply); },
       getURL: (p) => `chrome-extension://test/${p}`
     },
     i18n: { getMessage: () => '' }
   };
+  if (before) before(body);
   vm.createContext(win);
   vm.runInContext(CONTENT, win, { filename: 'content.js' });
 
@@ -118,6 +119,17 @@ function mountContent({ container = null } = {}) {
     win, body, head, sent, selectorsAsked, advance,
     notify: (reason) => { if (!onMessage) throw new Error('メッセージの受け口が無い'); onMessage({ type: 'gxs-notice', reason }, {}, () => {}); },
     hasListener: () => onMessage !== null,
+    /* 入れ物の中の click の受け口を、利用者の操作として呼ぶ */
+    clickButton: () => {
+      const walk = (n) => {
+        if (n._ls && n._ls.click) return n;
+        for (const c of n.children || []) { const r = walk(c); if (r) return r; }
+        return null;
+      };
+      const btn = container && walk(container);
+      if (!btn) throw new Error('押せるボタンが無い');
+      btn._ls.click({ isTrusted: true, preventDefault() {}, stopPropagation() {} });
+    },
     noticeEls: () => body.children.filter((c) => c.id === 'gxs-notice')
   };
 }
@@ -174,4 +186,68 @@ test('目印があるページでは、ボタンの入れ物を1つだけ足す�
   assert.equal(row.children.length, 1, `入れ物を1つだけ足していない: ${row.children.length}`);
   assert.equal(m.head.children.length, 1, '<style> を1つだけ足していない');
   assert.equal(m.noticeEls().length, 0, 'まだ何も断っていないのに案内が出ている');
+});
+
+test('開いた結果ごとの画面側の案内が、service worker の正本どおり（R27-003）', () => {
+  /*
+   * 第27回監査 R27-003。画面内ボタンの応答で、content.js は状態を見ずに
+   * `escAvailable === false` だけで「Esc では閉じられない」を出していた。
+   * ポップアップを作れずに**ふつうのタブで開いた**とき（tab_confirmed）は、
+   * 正本（store/DATA_FLOW_CLAIMS.json の openOutcomes）もツールバー・ショートカットの経路も
+   * 「案内しない」なのに、ボタンの経路だけ案内が出ていた。
+   */
+  const cases = [
+    [{ ok: true, state: 'popup_confirmed_tracked', escAvailable: true, notified: false }, 0],
+    [{ ok: true, state: 'popup_confirmed_untracked', escAvailable: false, notified: false }, 1],
+    [{ ok: true, state: 'popup_confirmed_untracked', escAvailable: false, notified: true }, 0],
+    [{ ok: true, state: 'tab_confirmed', escAvailable: false, notified: false }, 0],
+    [{ ok: false, reason: 'open_unknown', notified: true }, 0],
+    [{ ok: false, reason: 'open_failed', notified: false }, 1]
+  ];
+  for (const [reply, want] of cases) {
+    const row = makeEl('ul');
+    const m = mountContent({ container: row, reply });
+    m.clickButton();
+    assert.equal(m.sent.length, 1, `依頼を送っていない: ${JSON.stringify(reply)}`);
+    assert.equal(m.noticeEls().length, want,
+      `GXS_MARK.X03 案内の数が正本と違う（${reply.state || reply.reason}・notified=${reply.notified}）`);
+  }
+});
+
+test('ページ側に同じ ID の要素があっても、それを書き換えも削除もしない（R27-004）', () => {
+  /*
+   * 第27回監査 R27-004。案内の要素を `getElementById('gxs-notice')` で探して使い回していたので、
+   * ページ側に同じ ID の要素があると、その子（書きかけの入力欄など）を案内の文で置き換え、
+   * 約6秒後に要素ごと消していた（実 Chromium で再現）。
+   */
+  let pageEl = null;
+  let pageInput = null;
+  const m = mountContent({
+    before(body) {
+      pageEl = makeEl('section');
+      pageEl.setAttribute('id', 'gxs-notice');
+      pageInput = makeEl('input');
+      pageEl.appendChild(pageInput);
+      body.appendChild(pageEl);
+    }
+  });
+  m.notify('unsupported');
+  assert.deepEqual(pageEl.children, [pageInput], 'GXS_MARK.X04 ページ側の要素の中身を書き換えた');
+  assert.equal(pageEl.textContent, '', 'ページ側の要素に案内の文を入れた');
+  const mine = m.body.children.filter((c) => c !== pageEl && c.id === 'gxs-notice');
+  assert.equal(mine.length, 1, `自分の案内を1つ出していない: ${mine.length}`);
+  m.advance(7000);
+  assert.ok(m.body.children.includes(pageEl), 'ページ側の要素を消した');
+  assert.equal(m.body.children.filter((c) => c !== pageEl && c.id === 'gxs-notice').length, 0,
+    '自分の案内が消えていない');
+  /* 続けてもう一度断っても、ページ側の要素には触らない */
+  m.notify('unsupported');
+  assert.deepEqual(pageEl.children, [pageInput], '2回目でページ側の要素を書き換えた');
+});
+
+test('自分の案内は1つだけで、続けて断ると同じ要素を使い直す（R27-004 の対照）', () => {
+  const m = mountContent();
+  m.notify('unsupported');
+  m.notify('credential_like');
+  assert.equal(m.noticeEls().length, 1, `案内を二重に出している: ${m.noticeEls().length}`);
 });
