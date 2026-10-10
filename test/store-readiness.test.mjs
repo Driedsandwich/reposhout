@@ -272,8 +272,30 @@ test('strict は、外部監査の申告が無ければ必ず落ちる', () => {
   failsWith(strictInputs({ audit: null, auditReportSha256: null }), '外部監査の判定');
 });
 
+test('正本の状態が ready でなければ、他がそろっていても strict で落ちる（R27-006）', () => {
+  /*
+   * 第27回監査 R27-006。`pending_main_ci` 以外の状態を一律に「確定した候補」として扱い、
+   * 未知の値・空・却下の語でも strict を通っていた（status 以外は同じ入力で 0 件の問題）。
+   */
+  for (const status of ['rejected_by_R27', 'pending_review', null, '', 'READY', undefined]) {
+    const cand = { ...readyCandidate(), status };
+    const r = validateStoreReadiness(strictInputs({ candidate: cand, audit: goodAudit(cand) }));
+    assert.ok(r.problems.some((p) => p.includes('正本の状態が ready か pending_main_ci')),
+      `GXS_MARK.X06 status=${JSON.stringify(status)} なのに通った:\n${r.problems.join('\n')}`);
+  }
+  /* 対照: ready なら、この項目では落ちない */
+  const ok = validateStoreReadiness(strictInputs());
+  assert.ok(!ok.problems.some((p) => p.includes('正本の状態')), ok.problems.join('\n'));
+});
+
 /* ---- いまのリポジトリの実状態 ------------------------------------------ */
-test('いまの実ファイルは、preflight では本人の確認待ち2件だけで落ちる', () => {
+test('いまの実ファイルは、preflight では本人の確認待ちの欄の数だけ落ちる（R27-007）', () => {
+  /*
+   * 第27回監査 R27-007。以前は「確認待ちがちょうど2件」と決め打ちしていたので、
+   * 本人が正しく確認を記録すると、この試験が落ちて CI が赤になり、提出ゲートが通らなくなった。
+   * 件数は実ファイルの状態から数える（0件になれば問題も0件）。
+   */
+  const want = DISCLOSURE.categories.filter((c) => c.confirmationStatus === 'pending').length;
   const r = validateStoreReadiness({
     ...preflightInputs(),
     disclosure: clone(DISCLOSURE),
@@ -282,8 +304,20 @@ test('いまの実ファイルは、preflight では本人の確認待ち2件だ
     dashboardChanges: read('store/STORE_DASHBOARD_CHANGES.md')
   });
   const pending = r.problems.filter((p) => p.includes('本人の確認がまだ'));
-  assert.equal(pending.length, 2, `確認待ちが2件でない:\n${r.problems.join('\n')}`);
-  assert.equal(r.problems.length, 2, `確認待ち以外の問題が出ている:\n${r.problems.join('\n')}`);
+  assert.equal(pending.length, want, `確認待ちの数が実ファイルと違う（${want}）:\n${r.problems.join('\n')}`);
+  assert.equal(r.problems.length, want, `確認待ち以外の問題が出ている:\n${r.problems.join('\n')}`);
+});
+
+test('申告の欄を本人が確認済みにしても、preflight は確認待ちで止めない（R27-007 の状態遷移）', () => {
+  /* 実ファイルの確認待ちを、正しく記録した形にした場合の対照（実ファイルは書き換えない） */
+  const r = validateStoreReadiness({
+    ...preflightInputs(),
+    disclosure: confirmedDisclosure(),
+    candidate: clone(CANDIDATE),
+    listing: read('store/LISTING.md'),
+    dashboardChanges: read('store/STORE_DASHBOARD_CHANGES.md')
+  });
+  assert.deepEqual(r.problems, [], `GXS_MARK.X07 正しく確認した状態で止まる:\n${r.problems.join('\n')}`);
 });
 
 /* まだ main の CI が作っていない状態の正本（実ファイルの状態に依存させない） */
@@ -866,17 +900,47 @@ test('preflight では Web Intent の判断を求めない（関門は提出直�
     `preflight で止めている: ${r.problems.join(' / ')}`);
 });
 
-test('リポジトリの Web Intent の正本は、まだ本人の回答が入っていない（捏造防止）', () => {
-  /*
-   * ストアへ聞くのも、答えを入れるのも本人の作業。
-   * **こちらが埋めてしまっていないこと**を、実ファイルで見張る。
-   */
-  const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
-  assert.equal(wi.status, 'pending', `回答が入っている: ${wi.status}`);
-  for (const k of ['askedOn', 'question', 'responseOn', 'response', 'ticket', 'decision', 'decidedBy']) {
-    assert.equal(wi[k], null, `${k} が埋まっている: ${JSON.stringify(wi[k])}`);
+/*
+ * Web Intent の正本が、その状態に合った欄を持っているか（第27回監査 R27-007）。
+ * 以前は実ファイルに「status は pending・本人の欄はすべて null」を決め打ちしていたので、
+ * 本人が正しく回答を記録すると試験が落ちた。状態ごとに見るものを変える:
+ *   pending          … 本人の欄がすべて空（こちらが埋めていない＝捏造防止）
+ *   それ以外          … strict の Web Intent の検査をそのまま当てて、通ること
+ */
+function webIntentFileProblems(wi) {
+  const out = [];
+  if (wi.appliesToVersion !== JSON.parse(read('manifest.json')).version) out.push('版がずれている');
+  if (wi.status === 'pending') {
+    for (const k of ['askedOn', 'question', 'responseOn', 'response', 'ticket', 'decision', 'decidedBy']) {
+      if (wi[k] !== null) out.push(`pending なのに ${k} が埋まっている`);
+    }
+    if (wi.responseCoversBoth !== null) out.push('pending なのに responseCoversBoth が埋まっている');
+    return out;
   }
-  assert.equal(wi.appliesToVersion, JSON.parse(read('manifest.json')).version, '版がずれている');
+  const r = validateStoreReadiness(strictInputs({ webIntentDecision: wi }));
+  return out.concat(r.problems.filter((p) => p.includes('Web Intent')));
+}
+
+test('リポジトリの Web Intent の正本は、状態に合った欄を持つ（R27-007）', () => {
+  const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
+  const problems = webIntentFileProblems(wi);
+  assert.deepEqual(problems, [], `正本の欄が状態と合わない（status=${wi.status}）: ${problems.join(' / ')}`);
+});
+
+test('Web Intent の正本の状態ごとの検査が、正しい遷移を通し、欠けを拒む（R27-007）', () => {
+  const cand = readyCandidate();
+  const base = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
+  /* pending のまま本人の欄を1つ埋めた（こちらが捏造した形）は拒む */
+  assert.ok(webIntentFileProblems({ ...base, status: 'pending', ticket: 'X-1' }).length > 0,
+    'pending なのに欄が埋まった形を通した');
+  /* 正しく確認を記録した形は通る */
+  const done = { ...base, ...goodWebIntent(cand) };
+  assert.deepEqual(webIntentFileProblems(done), [],
+    `GXS_MARK.X08 正しく記録した形を拒んだ: ${webIntentFileProblems(done).join(' / ')}`);
+  /* 確認済みと書いて証跡が欠けた形は拒む */
+  assert.ok(webIntentFileProblems({ ...done, ticket: null }).length > 0, '証跡の欠けを通した');
+  assert.ok(webIntentFileProblems({ ...done, responseCoversBoth: false }).length > 0,
+    '片方の論点だけの回答を通した');
 });
 
 test('strict: 確認済みと書いても、証跡が欠けていれば通らない（R18-003）', () => {
@@ -943,11 +1007,7 @@ test('リポジトリの正本が、聞くべき2つの論点を宣言してい�
    */
   const wi = JSON.parse(
     readFileSync(join(ROOT, 'store/WEB_INTENT_POLICY_DECISION.json'), 'utf8'));
-  assert.equal(wi.status, 'pending', '正本の状態を勝手に変えている');
   assert.deepEqual(wi.questionScope, ['secure_query_transport', 'redirection_policy'],
     '聞くべき論点が正本に宣言されていない');
-  assert.equal(wi.responseCoversBoth, null, '回答をこちらで作っている');
-  for (const k of ['askedOn', 'question', 'responseOn', 'response', 'ticket', 'decision', 'decidedBy']) {
-    assert.equal(wi[k], null, `${k} に値が入っている（本人が入れる欄）`);
-  }
+  /* 本人の欄が状態に合っているかは「状態に合った欄を持つ（R27-007）」が見る */
 });

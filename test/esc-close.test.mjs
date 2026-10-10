@@ -110,6 +110,21 @@ test('IME変換中のEscは照会すらしない', () => {
   }
 });
 
+test('ページのスクリプトが作った Escape では照会すらしない（R27-013）', () => {
+  /*
+   * 第27回監査 R27-013。isTrusted が false の合成イベントでも所有権の照会と
+   * 閉じる処理へ進んでいた（実 Chromium で再現）。
+   */
+  const { state, press } = mount({ answer: { isShareWindow: true } });
+  press({ isTrusted: false });
+  assert.equal(state.sent.length, 0, 'GXS_MARK.X05 合成の Escape で照会が飛んだ');
+  assert.equal(state.closed, false, '合成の Escape で閉じた');
+  /* 対照: 利用者が押した Escape では閉じる */
+  const real = mount({ answer: { isShareWindow: true } });
+  real.press({ isTrusted: true });
+  assert.equal(real.state.closed, true, '利用者が押した Escape で閉じない');
+});
+
 test('Esc以外のキーには反応しない', () => {
   const { state, press } = mount({ answer: { isShareWindow: true } });
   press({ key: 'Enter' });

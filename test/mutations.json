@@ -2324,6 +2324,54 @@
         "testName": "ページ側に同じ ID の要素があっても、それを書き換えも削除もしない（R27-004）",
         "diagnosticMarker": "GXS_MARK.X04"
       }
+    },
+    {
+      "id": "X05",
+      "file": "src/esc-close.js",
+      "test": "test/esc-close.test.mjs",
+      "desc": "合成の Escape を拒む行を外す",
+      "find": "    if (event && event.isTrusted === false) return;\n    if (event.key !== 'Escape') return;",
+      "replace": "    if (event.key !== 'Escape') return;",
+      "expectedFailure": {
+        "testName": "ページのスクリプトが作った Escape では照会すらしない（R27-013）",
+        "diagnosticMarker": "GXS_MARK.X05"
+      }
+    },
+    {
+      "id": "X06",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "正本の状態を見ず、pending_main_ci 以外を全部確定した候補として扱う",
+      "find": "    candidate.status === 'ready' || pending,",
+      "replace": "    true,",
+      "expectedFailure": {
+        "testName": "正本の状態が ready でなければ、他がそろっていても strict で落ちる（R27-006）",
+        "diagnosticMarker": "GXS_MARK.X06"
+      }
+    },
+    {
+      "id": "X07",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "本人が正しく確認を記録した欄も、確認待ちとして止める",
+      "find": "    if (c.confirmationStatus !== 'confirmed') {",
+      "replace": "    if (c.confirmationStatus !== 'confirmed' || c.answer !== null) {",
+      "expectedFailure": {
+        "testName": "申告の欄を本人が確認済みにしても、preflight は確認待ちで止めない（R27-007 の状態遷移）",
+        "diagnosticMarker": "GXS_MARK.X07"
+      }
+    },
+    {
+      "id": "X08",
+      "file": "test/store-readiness.test.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "Web Intent の正本の検査を、状態を見ずに常に pending の形を求める形へ戻す",
+      "find": "  if (wi.status === 'pending') {\n    for (const k of",
+      "replace": "  if (true) {\n    for (const k of",
+      "expectedFailure": {
+        "testName": "Web Intent の正本の状態ごとの検査が、正しい遷移を通し、欠けを拒む（R27-007）",
+        "diagnosticMarker": "GXS_MARK.X08"
+      }
     }
   ]
 }

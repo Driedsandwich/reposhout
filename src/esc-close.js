@@ -66,6 +66,12 @@
   }
 
   function onKeyDown(event) {
+    /*
+     * 利用者が実際に押したキーだけを拾う（第27回監査 R27-013）。ページ側のスクリプトが
+     * 作った Escape（isTrusted が false）でも閉じる処理へ進んでいた。画面内ボタンの
+     * click と同じ扱いにする。isTrusted が読めない環境では従来どおり動かす。
+     */
+    if (event && event.isTrusted === false) return;
     if (event.key !== 'Escape') return;
     // 修飾キー付きの Esc は別操作なので拾わない
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;

@@ -213,6 +213,14 @@ export function validateStoreReadiness(input) {
     '掲載中の古い申告（すべてNo）を直す指示が無い');
 
   /* ---- 7. 出す成果物の正本 -------------------------------------------- */
+  /*
+   * 状態は2つだけを認める（第27回監査 R27-006）。以前は `pending_main_ci` かどうかしか
+   * 見ず、それ以外（未知の値・空・却下の語）を成功側の検査へ流していたので、
+   * status が `rejected_by_R27` でも strict を通った。
+   */
+  check('正本の状態が ready か pending_main_ci',
+    candidate.status === 'ready' || pending,
+    `status が決まった語でない: ${JSON.stringify(candidate.status)}`);
   if (pending) {
     /*
      * まだ main の CI が作っていない。ここで名前やハッシュを推測で埋めない
