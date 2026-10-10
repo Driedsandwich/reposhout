@@ -94,9 +94,17 @@ function parseArgs() {
      * 「`--allow-dirty` という名前の証跡ファイル」として通り、しかも
      * **汚れた木を許す指定は効かないまま**走っていた（4通りとも実測）。
      */
-    if (v === undefined || KNOWN_FLAGS.includes(v) || KNOWN_SWITCHES.includes(v)) {
-      return { error: `${a} に値が無い` };
+    /*
+     * ⚠️ **知っているかどうかに関わらず、`--` で始まる語は値にしない。**（第27回監査 R27-110）
+     * R26-004 は知っている名前だけを外していたので、`--receipt --bogus` が `--bogus` という
+     * 名前の証跡ファイルを作って exit 0 だった。そういう名前のファイルは `./--name` と書かせる。
+     * **空の値も受け取らない。** `--id ""` は全件、`--receipt ""` は証跡なし、`--spec ""` は
+     * 既定の正本へ黙って戻っていた（空の環境変数が展開されたとき、測る範囲が意図と変わる）。
+     */
+    if (v === undefined || v.startsWith('--')) {
+      return { error: `${a} に値が無い（「--」で始まる名前のファイルなら ./--name のように書く）` };
     }
+    if (v === '') return { error: `${a} の値が空` };
     out[a] = v;
     i++;
   }

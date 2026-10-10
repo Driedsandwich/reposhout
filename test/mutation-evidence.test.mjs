@@ -534,3 +534,35 @@ test('別の引数の名前を、値として受け取らない（R26-004）', (
     '--receipt', join(dir, 'ok.json')]);
   assert.equal(ok.code, 0, `対照が成立していない＝この検査は何でも拒む: ${ok.out.slice(0, 200)}`);
 });
+
+test('知らない引数の名前も空の値も、値として受け取らない（R27-110）', () => {
+  /*
+   * 第27回監査 R27-110。R26-004 は「知っている引数の名前」だけを値から外していたので、
+   * `--receipt --bogus` は `--bogus` という名前の証跡ファイルを作って exit 0 だった。
+   * `--id ""` は全件、`--receipt ""` は証跡なし、`--spec ""` は既定の正本へ黙って戻っていた
+   * （空の環境変数が展開されたときに、測る範囲や証跡の有無が意図と変わる）。
+   */
+  const dir = makeFixture([mut('Z7')]).dir;
+  const runner = join(dir, 'scripts/run-mutations.mjs');
+  const run = (args) => {
+    try {
+      execFileSync(process.execPath, [runner, ...args],
+        { cwd: dir, encoding: 'utf8', stdio: 'pipe', timeout: 60000 });
+      return { code: 0, out: '' };
+    } catch (e) {
+      return { code: typeof e.status === 'number' ? e.status : -1,
+        out: `${String(e.stdout || '')}${String(e.stderr || '')}` };
+    }
+  };
+  for (const args of [['--receipt', '--bogus'], ['--id', ''], ['--receipt', ''], ['--spec', ''],
+    ['--timeout', ''], ['--shard', ''], ['--id', '--zzz', '--allow-dirty']]) {
+    const r = run(args);
+    assert.equal(r.code, 2, `GXS_MARK.X12 ${JSON.stringify(args)} を受け取って走った（exit ${r.code}）`);
+    assert.match(r.out, /値が無い|値が空/, `${JSON.stringify(args)}: 止まった理由が違う: ${r.out.slice(0, 120)}`);
+  }
+  assert.ok(!existsSync(join(dir, '--bogus')), '意図しない名前のファイルを作っている');
+  /* 対照: 「--」で始まる名前のファイルは ./ を付ければ使える */
+  const ok = run(['--allow-dirty', '--receipt', './--named.json']);
+  assert.equal(ok.code, 0, `対照が成立していない: ${ok.out.slice(0, 200)}`);
+  assert.ok(existsSync(join(dir, '--named.json')), '明示したパスに証跡を書いていない');
+});

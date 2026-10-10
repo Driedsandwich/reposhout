@@ -2112,7 +2112,7 @@
     {
       "id": "Z06",
       "file": "scripts/run-mutations.mjs",
-      "find": "    if (v === undefined || KNOWN_FLAGS.includes(v) || KNOWN_SWITCHES.includes(v)) {",
+      "find": "    if (v === undefined || v.startsWith('--')) {",
       "replace": "    if (v === undefined || KNOWN_FLAGS.includes(v)) {",
       "test": "test/mutation-evidence.test.mjs",
       "desc": "別の引数の名前を、値として受け取る",
@@ -2407,6 +2407,90 @@
       "expectedFailure": {
         "testName": "却下の記録の理由文が、指摘IDを1つずつ説明している（R27-011）",
         "diagnosticMarker": "GXS_MARK.X11"
+      }
+    },
+    {
+      "id": "X12",
+      "file": "scripts/run-mutations.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "値から外す語を、知っている引数の名前だけに戻す",
+      "find": "    if (v === undefined || v.startsWith('--')) {",
+      "replace": "    if (v === undefined || KNOWN_FLAGS.includes(v) || KNOWN_SWITCHES.includes(v)) {",
+      "expectedFailure": {
+        "testName": "知らない引数の名前も空の値も、値として受け取らない（R27-110）",
+        "diagnosticMarker": "GXS_MARK.X12"
+      }
+    },
+    {
+      "id": "X13",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "検知の数が結果の数と同じかを見ない（内訳さえ合えば素通りを通す）",
+      "find": "need(killed === results.length, `検知していない結果がある: ${results.length - killed} 件`);",
+      "replace": "",
+      "expectedFailure": {
+        "testName": "改竄した証跡を、項目ごとに拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.VR02"
+      }
+    },
+    {
+      "id": "X14",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "非検知の件数の欄が欠けていても整数かを見ない",
+      "find": "  need(Number.isInteger(r[k]) && r[k] >= 0, `${k} が 0 以上の整数でない: ${JSON.stringify(r[k])}`);\n",
+      "replace": "",
+      "expectedFailure": {
+        "testName": "改竄した証跡を、項目ごとに拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.VR02"
+      }
+    },
+    {
+      "id": "X15",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "照合先の正本を、証跡が名乗る spec に任せる形へ戻す",
+      "find": "const specPath = parsed.out['--spec'] || 'test/mutations.json';",
+      "replace": "const specPath = parsed.out['--spec'] || r.spec || 'test/mutations.json';",
+      "expectedFailure": {
+        "testName": "証跡に正本を選ばせない・正本の形が壊れていれば照合を飛ばさずに落とす（R27-102）",
+        "diagnosticMarker": "GXS_MARK.VR08"
+      }
+    },
+    {
+      "id": "X16",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "変異前のハッシュを、測ったコミットの中身と比べない",
+      "find": "      w(x.beforeSha256 === sha256(raw), '変異前のハッシュが、測ったコミットの中身と違う');\n",
+      "replace": "",
+      "expectedFailure": {
+        "testName": "改竄した証跡を、項目ごとに拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.VR02"
+      }
+    },
+    {
+      "id": "X17",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "追跡しているファイルの変更を見ない",
+      "find": "need(trackedChanges === null || trackedChanges === '',",
+      "replace": "need(true,",
+      "expectedFailure": {
+        "testName": "証跡を作ったあとで追跡中のファイルを変えたら通さない（R27-103）",
+        "diagnosticMarker": "GXS_MARK.VR09"
+      }
+    },
+    {
+      "id": "X18",
+      "file": "scripts/verify-mutation-receipt.mjs",
+      "test": "test/verify-receipt.test.mjs",
+      "desc": "変異前の対照の終了コードを見ない",
+      "find": "  if (b.exitCode !== 0) problems.push(",
+      "replace": "  if (false) problems.push(",
+      "expectedFailure": {
+        "testName": "改竄した証跡を、項目ごとに拒む（R26-002）",
+        "diagnosticMarker": "GXS_MARK.VR02"
       }
     }
   ]
