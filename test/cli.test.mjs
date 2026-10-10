@@ -142,6 +142,11 @@ function cliFixture() {
     let t = readFileSync(join(repo, f), 'utf8');
     if (oldName) t = t.split(oldName).join(artifactName);
     if (oldSha) t = t.split(oldSha).join(sha(inner));
+    /* 実物が「まだ無い」の形（pending_main_ci）なら、題材の値を差し込む */
+    t = t.split('status : pending_main_ci\n').join('')
+      .split('成果物 : まだ無い').join(`成果物 : ${artifactName}`)
+      .split('SHA-256 : 未確定').join(`SHA-256 : ${sha(inner)}`)
+      .split('大きさ : 未確定').join(`大きさ : ${inner.length} B / 11ファイル`);
     writeFileSync(join(repo, f), t);
   }
   const discPath = join(repo, 'store/DATA_DISCLOSURE.json');
