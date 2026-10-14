@@ -519,7 +519,11 @@ function failureDetails(output) {
         if (ind < keyIndent || t === '...' || t === '---') break;
         let g;
         if (/^error:\s*[|>][-+]?\s*$/.test(t)) { inError = true; continue; }
-        if (/^(?:actual|expected):\s*[|>][-+]?\s*$/.test(t)) { inValue = true; continue; }
+        /*
+         * 値が次の行から始まる形も比べた値として読む（第28回監査 R28-002）。Node はオブジェクト・配列・
+         * 入れ子を `actual:` の後ろを空にして、字下げした行で出す（配列は添字のキーになる・実測）。
+         */
+        if (/^(?:actual|expected):\s*(?:[|>][-+]?)?\s*$/.test(t)) { inValue = true; continue; }
         if ((g = /^(?:actual|expected):\s*(.+)$/.exec(t))) { values.push(g[1]); continue; }
         if ((g = /^error:\s*(.+)$/.exec(t))) body.push(g[1].replace(/^'|'$/g, ''));
         else if ((g = /^failureType:\s*'?([^']+)'?/.exec(t))) rec.failureType = g[1];

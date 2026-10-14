@@ -216,6 +216,48 @@ test('比べる値に目印が出る', () => {
   assert.equal(kindOf(r, 'U7'), 'marker_in_compared_value', `止まった理由が違う: ${kindOf(r, 'U7')}`);
 });
 
+test('目印が入れ子の比べた値（オブジェクト・配列）に出ているだけでも、検知にしない（R28-002）', () => {
+  /*
+   * 第28回監査 R28-002。Node は入れ子の値を `actual:` の後ろを空にして次の行から出すので、
+   * 第27回の読み方では比べた値に入らず、目印の照合が通っていた。オブジェクトと配列の両方を見る。
+   */
+  const files = {
+    'test/nested.test.mjs': `
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { value } from '../mod.mjs';
+test('入れ子の比べる値に目印が出る（オブジェクト）', () => {
+  const mark = 'GXS_MARK.NESTED_OBJ';
+  assert.ok(true, mark);
+  assert.deepEqual({ value: value === 1 ? 'ok' : mark }, { value: 'ok' });
+});
+test('入れ子の比べる値に目印が出る（配列）', () => {
+  const mark = 'GXS_MARK.NESTED_ARR';
+  assert.ok(true, mark);
+  assert.deepEqual([value === 1 ? 'ok' : mark, 1], ['ok', 1]);
+});
+test('目印のある assertion そのものが落ちる', () => {
+  assert.equal(value, 1, 'GXS_MARK.NESTED_SELF');
+});
+`
+  };
+  const dir = makeFixture([
+    mut('U9', { test: 'test/nested.test.mjs',
+      expectedFailure: { testName: '入れ子の比べる値に目印が出る（オブジェクト）', diagnosticMarker: 'GXS_MARK.NESTED_OBJ' } }),
+    mut('U10', { test: 'test/nested.test.mjs',
+      expectedFailure: { testName: '入れ子の比べる値に目印が出る（配列）', diagnosticMarker: 'GXS_MARK.NESTED_ARR' } }),
+    mut('U11', { test: 'test/nested.test.mjs',
+      expectedFailure: { testName: '目印のある assertion そのものが落ちる', diagnosticMarker: 'GXS_MARK.NESTED_SELF' } })
+  ], files).dir;
+  const r = runRunner(dir);
+  assert.equal(kindOf(r, 'U9'), 'marker_in_compared_value',
+    `GXS_MARK.X48 オブジェクトの比べた値に出た目印で検知にしている: ${outcomeOf(r, 'U9')} / ${kindOf(r, 'U9')}`);
+  assert.equal(kindOf(r, 'U10'), 'marker_in_compared_value',
+    `配列の比べた値に出た目印で検知にしている: ${outcomeOf(r, 'U10')} / ${kindOf(r, 'U10')}`);
+  /* 対照: 目印を持つ assertion 自身が落ちたなら検知する（何でも断る読み手になっていない） */
+  assert.equal(outcomeOf(r, 'U11'), 'applied_and_killed', `目印のある assertion が落ちたのに検知にしない: ${kindOf(r, 'U11')}`);
+});
+
 test('目印がテストの呼び出しの外にあれば、測る前に断る（R27-104 の外側の題材）', () => {
   /*
    * 第27回監査 R27-104。範囲を「次の宣言の手前まで」にしていたので、テストの閉じ括弧の
