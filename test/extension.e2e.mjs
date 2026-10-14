@@ -84,6 +84,8 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
         if (!r || !r.result) throw new Error(`SW評価の応答が無い: ${JSON.stringify(r)}`);
         if (r.exceptionDetails) throw new Error(`SW評価で例外: ${JSON.stringify(r.exceptionDetails.exception)}`);
         if (r.result.value === true) return true;
+        /* ⚠️ 正常な false だけを「まだ」に数える（第28回監査 R28-008）。undefined などは評価の異常 */
+        if (r.result.value !== false) throw new Error(`SW評価の応答が真偽値でない: ${JSON.stringify(r.result)}`);
         observedFalse++;
         return false;
       }, opts);
@@ -132,6 +134,26 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
       sessions.delete(targetId);         // 押している最中に閉じた
       return false;
     }
+  }
+
+  /*
+   * 閉じないことを確かめる側の Esc（第28回監査 R28-008）。前は pressEscape の戻り値を見ず、
+   * attach や入力の送信に失敗しても、窓が残っていれば「閉じなかった」で合格にしていた。
+   * 対象に attach できたこと・入力を送れたこと・ページに Esc が届いたことを確かめてから、閉じないことを見る。
+   * 拡張の Esc の部品は document_start で入るので、読み込みが終わっていれば準備はできている。
+   */
+  async function pressEscapeObserved(targetId, modifiers = 0) {
+    const sessionId = await attach(targetId);
+    assert.ok(sessionId, '対象のページに attach できない（Esc を押せていない）');
+    await cdp.send('Runtime.enable', {}, sessionId);
+    const armed = await cdp.send('Runtime.evaluate', { returnByValue: true, expression:
+      "window.__gxsEscSeen = 0; window.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.__gxsEscSeen++; }, true); true" },
+    sessionId);
+    assert.equal(armed.result && armed.result.value, true, 'ページで Esc の到着を数える準備ができない');
+    const sent = await pressEscape(targetId, modifiers);
+    assert.equal(sent, true, 'GXS_MARK.X62 Esc の入力を送れなかった（閉じなかったことの証拠にならない）');
+    const seen = await cdp.send('Runtime.evaluate', { expression: 'window.__gxsEscSeen', returnByValue: true }, sessionId);
+    assert.equal(seen.result && seen.result.value, 1, 'ページに Esc が届いていない（閉じなかったことの証拠にならない）');
   }
 
   const stillOpen = async (targetId) => !!(await findTarget((t) => t.targetId === targetId));
@@ -211,6 +233,33 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
       'GXS_MARK.X30 評価の例外を、陰性の時間切れと同じ形で扱っている');
   });
 
+  it('閉じないことを確かめる Esc は、入力を送れなかったら失敗する（R28-008 の対照）', async () => {
+    /* 入力の送信に障害を差し込む。送れなかったのに「閉じなかった」を合格にしないこと */
+    const { targetId } = await cdp.send('Target.createTarget', { url: 'https://x.com/home' });
+    await waitLoaded(targetId);
+    const realSend = cdp.send.bind(cdp);
+    cdp.send = async (method, params, sessionId) => {
+      if (method === 'Input.dispatchKeyEvent') throw new Error('わざと送れない');
+      return realSend(method, params, sessionId);
+    };
+    try {
+      await assert.rejects(() => pressEscapeObserved(targetId), /Esc の入力を送れなかった/,
+        '入力を送れなかったのに、閉じないことの確認を通した');
+    } finally {
+      cdp.send = realSend;
+    }
+    /* attach できない対象（既に閉じた）でも失敗する */
+    await cdp.send('Target.closeTarget', { targetId });
+    sessions.delete(targetId);
+    await waitFor('タブが閉じる', async () => !(await stillOpen(targetId)));
+    await assert.rejects(() => pressEscapeObserved(targetId), /attach できない|送れなかった/,
+      '閉じた対象に押せたことにした');
+    /* 待ちの側: 真偽値でない応答を false の回数へ入れない */
+    const s = await swSession();
+    await assert.rejects(() => waitInSw(s, 'void 0', { timeout: 1500, interval: 100 }), /真偽値でない/,
+      'GXS_MARK.X63 undefined の応答を、正常な false として数えた');
+  });
+
   it('swSession は、実装の読み終わりの印が立つまで待つ（R27-204）', async () => {
     /*
      * ⚠️ 上の対照は waitInSw だけを叩くので、swSession から待ちを外しても捕まらなかった。
@@ -270,8 +319,8 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
 
   it('利用者が自分で開いた x.com のタブは Esc で閉じない', async () => {
     const { targetId } = await cdp.send('Target.createTarget', { url: 'https://x.com/home' });
-    await sleep(800);
-    await pressEscape(targetId);
+    await waitLoaded(targetId);
+    await pressEscapeObserved(targetId);
     await sleep(1500);
     assert.equal(await stillOpen(targetId), true, '利用者のタブが閉じてしまった');
     await cdp.send('Target.closeTarget', { targetId });
@@ -295,7 +344,8 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
     const nameRes = await cdp.send('Runtime.evaluate', { expression: 'window.name', returnByValue: true }, fs);
     assert.equal(nameRes.result.value, 'gxs-share-window', '偽装できておらず、テストが意味をなさない');
 
-    await pressEscape(forged.targetId);
+    await waitLoaded(forged.targetId);
+    await pressEscapeObserved(forged.targetId);
     await sleep(1500);
     assert.equal(await stillOpen(forged.targetId), true, '偽装した名前で閉じてしまった');
 
@@ -306,7 +356,7 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
   it('修飾キーつきの Esc では閉じない', async () => {
     const { targetId } = await openShareWindowFromSw();
     await waitLoaded(targetId);
-    await pressEscape(targetId, 8); // Shift
+    await pressEscapeObserved(targetId, 8); // Shift
     await sleep(1200);
     assert.equal(await stillOpen(targetId), true, 'Shift+Esc で閉じてしまった');
     assert.ok(await escapeUntilClosed(targetId), '修飾なしのEscでも閉じない');
