@@ -3104,6 +3104,18 @@
         "testName": "目印が入れ子の比べた値（オブジェクト・配列・Map・Set）に出ているだけでも、検知にしない（R28-002・R28-106）",
         "diagnosticMarker": "GXS_MARK.X69"
       }
+    },
+    {
+      "id": "X70",
+      "file": "scripts/lib/test-decls.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "範囲が1つの呼び出しの式として読めるかを確かめない",
+      "find": "  return parsesAsOneCall(span) ? span : null;",
+      "replace": "  return span;",
+      "expectedFailure": {
+        "testName": "後ろにテストの宣言が無くても、範囲を外の文まで延ばさない（R28-107）",
+        "diagnosticMarker": "GXS_MARK.X70"
+      }
     }
   ]
 }

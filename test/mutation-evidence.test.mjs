@@ -355,6 +355,28 @@ test('正規表現の中の括弧で、テストの範囲が次のテストま�
   assert.equal(testSpanText(div, 'd'), div.split('\n')[0].replace(/;$/, ''), '割り算を正規表現と読んだ');
 });
 
+test('後ろにテストの宣言が無くても、範囲を外の文まで延ばさない（R28-107）', () => {
+  /*
+   * 第28回監査 R28-107。「次の宣言を越えたら止める」は、後ろに宣言が無い最後のテストでは働かず、
+   * 読み違えた範囲がモジュール直下の目印と後ろの文まで延びた（監査で実測）。
+   */
+  const src = [
+    "test('guard', () => {",
+    "  if (false) /\\(/.test('');",
+    '  assert.equal(value, 1, mark);',
+    '});',
+    "const mark = 'GXS_MARK.OUTSIDE';",
+    "if (false) /\\)/.test('');",
+    ''
+  ].join('\n');
+  const span = testSpanText(src, 'guard');
+  assert.ok(span === null || (!span.includes('OUTSIDE') && span.endsWith('})')),
+    `GXS_MARK.X70 最後のテストの範囲を外の文まで延ばした: ${JSON.stringify(span)}`);
+  /* 対照: import.meta や入れ子の t.test を含む正しい試験は、範囲を取れる（何でも断る読み手でない） */
+  const ok = "test('a', async (t) => { const u = new URL('x', import.meta.url); await t.test('b', () => {}); });\nconst z = 1;";
+  assert.equal(testSpanText(ok, 'a'), ok.split('\n')[0].replace(/;$/, ''), '正しい試験の範囲を取れない');
+});
+
 test('正規表現の中の括弧があっても、テストの外の目印を中と見なさない（R28-003・ランナーを通す）', () => {
   const files = {
     'test/regex.test.mjs': `
