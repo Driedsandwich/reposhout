@@ -10,10 +10,12 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, readFileSync, existsSync, readdirSync, mkdirSync, rmSync, chmodSync, mkdtempSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync, readdirSync, mkdirSync, rmSync, chmodSync, mkdtempSync,
+  symlinkSync, linkSync, lstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { ROOT } from './helpers/load.mjs';
 import { GUARD, WANT, makeFixture, mut, runRunner, of, outcomeOf, kindOf }
   from './helpers/mutation-fixture.mjs';
@@ -775,6 +777,72 @@ test('証跡の出力先が入力を指していたら、1バイトも書かず�
   const ok = runRunner(fx.dir, { receipt: 'out-receipt.json' });
   assert.equal(ok.exitCode, 0, `対照が成立していない:\n${ok.stdout.slice(-300)}`);
   assert.equal(ok.receipt.workspaceUnchanged, true, '証跡そのものを「作業ツリーの変化」に数えている');
+});
+
+test('証跡の出力先が git の管理先なら、1バイトも書かずに止まる（R28-001）', () => {
+  /*
+   * 第28回監査 R28-001。追跡中のファイルは拒んでいたが、`.git` の中は事前検査を通り、
+   * `--receipt .git/config` で git の設定を証跡の JSON に書き換えた。
+   */
+  const fx = makeFixture([mut('Q12')]);
+  const run = (receipt) => {
+    try {
+      execFileSync(process.execPath, [join(fx.dir, 'scripts/run-mutations.mjs'),
+        '--spec', join(fx.dir, 'test/mutations.json'), '--allow-dirty', '--receipt', join(fx.dir, receipt)],
+      { cwd: fx.dir, encoding: 'utf8', stdio: 'pipe', timeout: 120000 });
+      return 0;
+    } catch (e) { return typeof e.status === 'number' ? e.status : -1; }
+  };
+  for (const receipt of ['.git/config', '.git/description', 'sub/../.git/info/exclude']) {
+    const abs = join(fx.dir, receipt);
+    const before = existsSync(abs) ? readFileSync(abs, 'utf8') : null;
+    const code = run(receipt);
+    assert.equal(code, 2, `GXS_MARK.X51 出力先が git の管理先（${receipt}）なのに走った（exit ${code}）`);
+    assert.equal(existsSync(abs) ? readFileSync(abs, 'utf8') : null, before, `${receipt} を書き換えた`);
+  }
+  /* 対照: ふつうの出力先なら走る */
+  const ok = runRunner(fx.dir, { receipt: 'out-receipt.json' });
+  assert.equal(ok.exitCode, 0, `対照が成立していない:\n${ok.stdout.slice(-300)}`);
+});
+
+const FAULT = pathToFileURL(join(ROOT, 'test/helpers/receipt-fault.mjs')).href;
+const canLink = (kind) => {
+  const d = mkdtempSync(join(tmpdir(), 'reposhout-link-'));
+  try {
+    writeFileSync(join(d, 'a'), 'a');
+    if (kind === 'symlink') symlinkSync(join(d, 'a'), join(d, 'b')); else linkSync(join(d, 'a'), join(d, 'b'));
+    return false;
+  } catch (e) {
+    return `${kind} を作れない環境（${e && e.code}）。この題材は作れないので測らない`;
+  } finally { rmSync(d, { recursive: true, force: true }); }
+};
+/*
+ * 第28回監査 R28-001。一時ファイル（<証跡>.tmp-<pid>）へ普通に書いていたので、その名前に
+ * リンクを置かれると、リンク先（追跡中の文書）を書き換えた。書き込みの直前にリンクを置く
+ * 前置き（test/helpers/receipt-fault.mjs）で、外から置かれた状況を作る。
+ * ⚠️ 試験名はテンプレートで組み立てない（変異のランナーが宣言を見つけられなくなる）。
+ */
+function plantedLinkCase(kind, marker) {
+  const fx = makeFixture([mut('Q13')], { 'notes.md': '# 大事なメモ\n' });
+  const notes = join(fx.dir, 'notes.md');
+  const before = readFileSync(notes, 'utf8');
+  const log = join(fx.outer, 'fault.log');
+  const r = runRunner(fx.dir, { receipt: 'out-receipt.json', nodeArgs: ['--import', FAULT],
+    env: { RS_FAULT: `plant-${kind}:${notes}`, RS_FAULT_LOG: log } });
+  /* 細工が本当に起きたか（起きていないのに通った、を合格にしない） */
+  assert.match(existsSync(log) ? readFileSync(log, 'utf8') : '', new RegExp(`planted ${kind}`),
+    `題材が成立していない（リンクを置けていない）:\n${r.stdout.slice(-300)}`);
+  return { changed: readFileSync(notes, 'utf8') !== before, exitCode: r.exitCode, marker };
+}
+test('証跡の一時ファイルの名前に置かれた symlink を辿らない（R28-001）', { skip: canLink('symlink') }, () => {
+  const c = plantedLinkCase('symlink');
+  assert.equal(c.changed, false, 'GXS_MARK.X52 一時ファイルの名前の symlink を辿って、追跡中の文書を書き換えた');
+  assert.notEqual(c.exitCode, 0, '一時ファイルを作れなかったのに成功で終わった');
+});
+test('証跡の一時ファイルの名前に置かれた hardlink を辿らない（R28-001）', { skip: canLink('hardlink') }, () => {
+  const c = plantedLinkCase('hardlink');
+  assert.equal(c.changed, false, 'GXS_MARK.X53 一時ファイルの名前の hardlink を通して、追跡中の文書を書き換えた');
+  assert.notEqual(c.exitCode, 0, '一時ファイルを作れなかったのに成功で終わった');
 });
 
 /* ============================================================
