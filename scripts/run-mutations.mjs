@@ -511,10 +511,14 @@ const NOT_OK = /^(\s*)not ok \d+ - (.+?)\s*$/gm;
  */
 const GENERATED_HEADS = [/^Expected values to be /, /^Expected "actual" /, /^The expression evaluated to a falsy value/,
   /^Values have same structure but are not reference-equal/, /^Values identical but not reference-equal/,
-  /^The input did not match the regular expression/, /^The input was expected to not match/,
-  /^Missing expected (?:exception|rejection)/, /^Got unwanted (?:exception|rejection)/];
+  /^The input did not match the regular expression/, /^The input was expected to not match/];
 function explicitMessage(body) {
   const text = String(body || '');
+  /*
+   * `Missing expected rejection: <メッセージ>`・`Got unwanted exception: <メッセージ>` は、明示のメッセージを
+   * 見出しの後ろに付ける（Node 22 で実測）。後者は投げた側の文（`Actual message:` 以下）を明示の部分に入れない。
+   */
+  if (/^Got unwanted (?:exception|rejection)/.test(text)) return text.split('\nActual message:')[0];
   if (GENERATED_HEADS.some((re) => re.test(text.split('\n')[0]))) return '';
   const legend = text.indexOf('\n+ actual - expected');
   return legend >= 0 ? text.slice(0, legend) : text;

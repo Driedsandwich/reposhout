@@ -258,6 +258,9 @@ test('Set の比べる値に目印が出る', () => {
 test('メッセージつきの Map の比較で、目印を持つ assertion そのものが落ちる', () => {
   assert.deepEqual(new Map([['v', value]]), new Map([['v', 1]]), 'GXS_MARK.MAPMSG_OWN');
 });
+test('期待した拒否が無いとき、明示のメッセージの目印で検知する', async () => {
+  await assert.rejects(async () => { if (value !== 1) return 'ok'; throw new Error('拒否'); }, /拒否/, 'GXS_MARK.REJMSG_OWN 期待した拒否が無い');
+});
 `
   };
   const dir = makeFixture([
@@ -272,7 +275,9 @@ test('メッセージつきの Map の比較で、目印を持つ assertion そ�
     mut('U14', { test: 'test/nested.test.mjs',
       expectedFailure: { testName: 'Set の比べる値に目印が出る', diagnosticMarker: 'GXS_MARK.NESTED_SET' } }),
     mut('U15', { test: 'test/nested.test.mjs',
-      expectedFailure: { testName: 'メッセージつきの Map の比較で、目印を持つ assertion そのものが落ちる', diagnosticMarker: 'GXS_MARK.MAPMSG_OWN' } })
+      expectedFailure: { testName: 'メッセージつきの Map の比較で、目印を持つ assertion そのものが落ちる', diagnosticMarker: 'GXS_MARK.MAPMSG_OWN' } }),
+    mut('U16', { test: 'test/nested.test.mjs',
+      expectedFailure: { testName: '期待した拒否が無いとき、明示のメッセージの目印で検知する', diagnosticMarker: 'GXS_MARK.REJMSG_OWN' } })
   ], files).dir;
   const r = runRunner(dir);
   assert.equal(kindOf(r, 'U9'), 'marker_in_compared_value',
@@ -288,6 +293,8 @@ test('メッセージつきの Map の比較で、目印を持つ assertion そ�
     `Set の比べた値の差分に出た目印で検知にしている: ${outcomeOf(r, 'U14')} / ${kindOf(r, 'U14')}`);
   /* 対照: メッセージに目印があれば、後ろに差分が付いていても検知する */
   assert.equal(outcomeOf(r, 'U15'), 'applied_and_killed', `メッセージつきの assertion が落ちたのに検知にしない: ${kindOf(r, 'U15')}`);
+  /* 対照: 「Missing expected rejection: <メッセージ>」の形でも、明示のメッセージの目印は数える */
+  assert.equal(outcomeOf(r, 'U16'), 'applied_and_killed', `期待した拒否が無いときの明示のメッセージで検知にしない: ${kindOf(r, 'U16')}`);
 });
 
 test('目印がテストの呼び出しの外にあれば、測る前に断る（R27-104 の外側の題材）', () => {
@@ -339,10 +346,14 @@ test('正規表現の中の括弧で、テストの範囲が次のテストま�
    * 読み手が見分けられない形（`)` の後の正規表現）では、範囲が次の宣言を越える。
    * そのときは推測した範囲を使わず、決められない（null）で止める。
    */
+  /*
+   * ⚠️ 延びた範囲が**式としては読める**形（カンマでつないだ2つの呼び出し）にする。文の並びになる形だと、
+   * R28-107 の構文の確認が先に止め、この検査を外しても落ちない（X50 が CI で素通りした）。
+   */
   const misread = [
     "test('a', () => {",
     '  if (s) /\\(/.test(s);',
-    '});',
+    '}),',
     "test('b', () => {",
     '  if (s) /\\)/.test(s);',
     '});',
