@@ -143,8 +143,8 @@
       "file": "store/DATA_FLOW_CLAIMS.json",
       "test": "test/docs.test.mjs",
       "desc": "正本だけ保留状態を食い違わせる",
-      "find": "\"webIntentStatus\": \"pending\"",
-      "replace": "\"webIntentStatus\": \"confirmed_allowed\"",
+      "find": "\"webIntentStatus\": \"owner_accepted_risk\"",
+      "replace": "\"webIntentStatus\": \"pending\"",
       "expectedFailure": {
         "testName": "正本の主張が、実際のコードと一致している（R19-001）",
         "diagnosticMarker": "GXS_MARK.M12"
@@ -372,9 +372,9 @@
       "id": "M31",
       "file": "scripts/store-readiness.mjs",
       "test": "test/store-readiness.test.mjs",
-      "desc": "pending でも strict を通す",
-      "find": "        wi.status === 'confirmed_allowed',\n        `ストアの回答が未確認",
-      "replace": "        true,\n        `ストアの回答が未確認",
+      "desc": "決まっていない（pending など）状態でも strict を通す",
+      "find": "        WEB_INTENT_DECIDED_STATUSES.includes(wi.status),\n",
+      "replace": "        true,\n",
       "expectedFailure": {
         "testName": "strict: Web Intent の判断が未確認なら通らない（R16-005）",
         "diagnosticMarker": "GXS_MARK.M31"
@@ -2707,6 +2707,138 @@
       "expectedFailure": {
         "testName": "資格情報の判定は、ほどける段数に上限がある（止まらなくならない）",
         "diagnosticMarker": "GXS_MARK.X36"
+      }
+    },
+    {
+      "id": "X37",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "本人の引き受けで照らす公式の原文の定数を言い換える（本物の原文の記録が通らなくなる＝陽性の対照が落ちる）",
+      "find": "secure_query_transport: \"Don't encode data in request headers or query parameters, even over HTTPS.\",",
+      "replace": "secure_query_transport: \"Don't encode data in request headers or query parameters.\",",
+      "expectedFailure": {
+        "testName": "strict: 本人の引き受けがそろっていれば Web Intent は止めない（本人の答えの対照）",
+        "diagnosticMarker": "GXS_MARK.X37"
+      }
+    },
+    {
+      "id": "X38",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "本人の引き受けに外部の回答の欄が混ざっても通す",
+      "find": "filled.length === 0 && ra.externallyConfirmed === false,",
+      "replace": "true,",
+      "expectedFailure": {
+        "testName": "strict: 本人の引き受けに外部の回答の欄が混ざれば通らない（第27回監査 A §5.4）",
+        "diagnosticMarker": "GXS_MARK.X38"
+      }
+    },
+    {
+      "id": "X39",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "本人の引き受けの記録の原文を、定数と照らさない",
+      "find": "s.officialText === WEB_INTENT_OFFICIAL_TEXT[need] && !blank(s.officialSource),",
+      "replace": "!blank(s.officialSource),",
+      "expectedFailure": {
+        "testName": "strict: 本人の引き受けで、原文・論点・決めた人と日・手順・版が欠ければ通らない",
+        "diagnosticMarker": "GXS_MARK.X39"
+      }
+    },
+    {
+      "id": "X40",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "論点を「解決した」と書いた記録も、未解決の引き受けとして通す",
+      "find": "            s.resolution === 'unresolved_risk_accepted' &&\n            s.officialText",
+      "replace": "            s.officialText",
+      "expectedFailure": {
+        "testName": "strict: 本人の引き受けで、原文・論点・決めた人と日・手順・版が欠ければ通らない",
+        "diagnosticMarker": "GXS_MARK.X40"
+      }
+    },
+    {
+      "id": "X41",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "本人が決めた日が未来でも通す",
+      "find": "ra.decidedOn <= today,",
+      "replace": "true,",
+      "expectedFailure": {
+        "testName": "strict: 本人の引き受けで、原文・論点・決めた人と日・手順・版が欠ければ通らない",
+        "diagnosticMarker": "GXS_MARK.X41"
+      }
+    },
+    {
+      "id": "X42",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "本人でない者の引き受けを通す",
+      "find": "wi.decision === 'proceed' && wi.decidedBy === 'owner' &&",
+      "replace": "wi.decision === 'proceed' &&",
+      "expectedFailure": {
+        "testName": "strict: 本人の引き受けで、原文・論点・決めた人と日・手順・版が欠ければ通らない",
+        "diagnosticMarker": "GXS_MARK.X42"
+      }
+    },
+    {
+      "id": "X43",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "差し戻されたときの手順を指さない引き受けを通す",
+      "find": "!blank(ra.fallbackPlan), '空欄'",
+      "replace": "true, '空欄'",
+      "expectedFailure": {
+        "testName": "strict: 本人の引き受けで、原文・論点・決めた人と日・手順・版が欠ければ通らない",
+        "diagnosticMarker": "GXS_MARK.X43"
+      }
+    },
+    {
+      "id": "X44",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "別の版の引き受けを通す",
+      "find": "'Web Intent: 本人の引き受けが、この版のものである',\n          wi.appliesToVersion === candidate.version,",
+      "replace": "'Web Intent: 本人の引き受けが、この版のものである',\n          true,",
+      "expectedFailure": {
+        "testName": "strict: 本人の引き受けで、原文・論点・決めた人と日・手順・版が欠ければ通らない",
+        "diagnosticMarker": "GXS_MARK.X44"
+      }
+    },
+    {
+      "id": "X45",
+      "file": "store/DATA_DISCLOSURE.json",
+      "test": "test/docs.test.mjs",
+      "desc": "本人の答えを Yes / No 以外にする",
+      "find": "\"chosen\": \"No\",\n        \"reason\": \"本人は推奨（No）とその根拠・反対の材料を読んで No を選んだ。根拠＝公式 FAQ",
+      "replace": "\"chosen\": \"N/A\",\n        \"reason\": \"本人は推奨（No）とその根拠・反対の材料を読んで No を選んだ。根拠＝公式 FAQ",
+      "expectedFailure": {
+        "testName": "本人の答えだけ先に記録した欄は、設問文の写真待ちと分かる形で確認待ちのまま持つ",
+        "diagnosticMarker": "GXS_MARK.X45"
+      }
+    },
+    {
+      "id": "X46",
+      "file": "store/DATA_DISCLOSURE.json",
+      "test": "test/docs.test.mjs",
+      "desc": "確認待ちのまま設問文をこちらで埋める",
+      "find": "\"dashboardQuestionText\": null,\n        \"confirmedOn\": null,\n        \"chosen\": \"No\",\n        \"reason\": \"本人は推奨（No）とその根拠・反対の材料を読んで No を選んだ。根拠＝ダッシュボード",
+      "replace": "\"dashboardQuestionText\": \"（作り物）設問文\",\n        \"confirmedOn\": null,\n        \"chosen\": \"No\",\n        \"reason\": \"本人は推奨（No）とその根拠・反対の材料を読んで No を選んだ。根拠＝ダッシュボード",
+      "expectedFailure": {
+        "testName": "本人の答えだけ先に記録した欄は、設問文の写真待ちと分かる形で確認待ちのまま持つ",
+        "diagnosticMarker": "GXS_MARK.X46"
+      }
+    },
+    {
+      "id": "X47",
+      "file": "store/WEB_INTENT_POLICY_DECISION.json",
+      "test": "test/docs.test.mjs",
+      "desc": "判断の正本が無い手順の文書を指す",
+      "find": "\"fallbackPlan\": \"store/WEB_INTENT_FALLBACK_PLAN.md\"",
+      "replace": "\"fallbackPlan\": \"store/NO_SUCH_PLAN.md\"",
+      "expectedFailure": {
+        "testName": "Web Intent を本人の引き受けで決めたなら、差し戻されたときの作り替えの手順が実在する",
+        "diagnosticMarker": "GXS_MARK.X47"
       }
     }
   ]

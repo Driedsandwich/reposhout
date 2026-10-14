@@ -11,6 +11,26 @@
 第15回の5件への対応を含む。版は 1.1.8 のまま。直前の成果物
 （`reposhout-package-ee4ca3d7…` / `0c16c326…`）は**提出しない**（`rejected_by_R22`）。
 
+### 本人の答えの記録と、Web Intent のゲートの直し（第28回監査の前・2026-10-14）
+
+出荷物（ZIP の中身）は変えていない。提出候補はそのまま。
+
+- **データ申告の2欄（Authentication information・User activity）** — 本人の答え（No・2026-10-14）を
+  `store/DATA_DISCLOSURE.json` の `ownerConfirmation` に記録した。ダッシュボードの設問文はまだ記録できないので、
+  状態は確認待ち（`pending`・`answer` は null）のまま、`dashboardQuestionTextStatus: awaiting_owner_screenshot` で
+  写真待ちと分かる形にした（設問文と確認日はこちらで作らない）。提出ゲートはこの2欄でまだ止まる。
+  掲載原稿とダッシュボード差分の表は「要確認（本人の答え: No・設問文の記録待ち）」へ
+- **Web Intent（R26-006）** — 本人は「問い合わせずに今の形で出す」を選んだ。`store/WEB_INTENT_POLICY_DECISION.json` に
+  新しい状態 `owner_accepted_risk` を足し、2つの論点を未解決のまま引き受けたこと・読んだ公式の原文・
+  差し戻されたときの手順を論点ごとに記録した。外部の回答の欄（問い合わせ・回答・ticket）は空のまま
+  （`confirmed_allowed` へ書き換えない・第27回監査 A §5.4）
+- **提出ゲート** — strict は `confirmed_allowed` と `owner_accepted_risk` の2つだけを通す。本人の引き受けでは、
+  外部の回答の欄が混ざっていないこと・決めたのが本人で日付が未来でないこと・論点ごとに未解決のまま引き受けて
+  公式の原文を1字違わず記録していること・差し戻されたときの手順を指すこと・版が合うことを見る。
+  `confirmed_allowed` の検査は変えていない。本人の引き受けは外部監査の READY の代わりにならない
+- **差し戻されたときの手順** — `store/WEB_INTENT_FALLBACK_PLAN.md`（クエリを使わない形へ移る手順の下書き。作り替えはしていない）
+- 変異は 225 → 236 件（X37〜X47）。当て先が変わった M12・M31 を直した
+
 ### 第27回監査で直したもの
 
 **3便に分けて出た技術の指摘29件（R27-001〜007・011〜013／R27-101〜112／R27-201〜207）は、

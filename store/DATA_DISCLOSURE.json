@@ -18,7 +18,12 @@
     "確認した記録が残らなかった（第9回監査 R9-002）。",
     "confirmed にするときは answer と ownerConfirmation.chosen を一致させ、",
     "ownerConfirmation の4欄（読んだ設問文・確認日・選んだ答え・理由）をすべて埋める。",
-    "提出前に npm run verify:store-preflight と verify:submission-ready で確かめる。"
+    "提出前に npm run verify:store-preflight と verify:submission-ready で確かめる。",
+    "",
+    "本人の答えが先に届き、ダッシュボードの設問文がまだ記録できないときは、confirmationStatus を",
+    "pending・answer を null のまま、ownerConfirmation の chosen・reason・answeredOn・answerSource を埋め、",
+    "dashboardQuestionTextStatus を awaiting_owner_screenshot にする（設問文と確認日は空のまま。",
+    "設問文はこちらで作らない）。この間、提出ゲートは確認待ちとして止まる。"
   ],
   "version": "1.1.8",
   "dashboardSection": "Privacy practices › Data usage",
@@ -82,8 +87,11 @@
       "ownerConfirmation": {
         "dashboardQuestionText": null,
         "confirmedOn": null,
-        "chosen": null,
-        "reason": null
+        "chosen": "No",
+        "reason": "本人は推奨（No）とその根拠・反対の材料を読んで No を選んだ。根拠＝公式 FAQ の定義（Authentication information (such as logins, password, and authentication cookies)）と、この欄の codeFact（cookie・パスワード・フォームの入力値を読まない。操作されたときに現在のタブのURL全体をいったん受け取り、資格情報の形の値があればURLごと共有を拒む。保存も送信もしない）。反対の材料＝handle には端末内で使うことも含まれ、URL全体を一度は受け取っている",
+        "answeredOn": "2026-10-14",
+        "answerSource": "本人の答え（質問票・2026-10-14）。推奨・公式の定義・反対の材料を載せた1枚から選んだ。ダッシュボードの設問文は、本人が撮る画面の写真から起こして dashboardQuestionText と confirmedOn を埋め、そのときに confirmed へ移す",
+        "dashboardQuestionTextStatus": "awaiting_owner_screenshot"
       },
       "requiresOwnerConfirmation": true,
       "confirmationStatus": "pending"
@@ -129,8 +137,11 @@
       "ownerConfirmation": {
         "dashboardQuestionText": null,
         "confirmedOn": null,
-        "chosen": null,
-        "reason": null
+        "chosen": "No",
+        "reason": "本人は推奨（No）とその根拠・反対の材料を読んで No を選んだ。根拠＝ダッシュボードの説明の控え（操作の監視＝クリック・マウスの位置・スクロール・キーロギングなど。公式 FAQ にはこの欄の定義が無い）と、この欄の codeFact（x.com で keydown を1つ聞き、未修飾の Escape かどうかだけを使う。保存・集計・送信しない。クリック・スクロール・マウスの位置・入力の中身は読まない）。反対の材料＝聞いている部品はすべての keydown の key を受け取ってから Escape 以外を捨てている",
+        "answeredOn": "2026-10-14",
+        "answerSource": "本人の答え（質問票・2026-10-14）。推奨・公式の定義・反対の材料を載せた1枚から選んだ。ダッシュボードの設問文は、本人が撮る画面の写真から起こして dashboardQuestionText と confirmedOn を埋め、そのときに confirmed へ移す",
+        "dashboardQuestionTextStatus": "awaiting_owner_screenshot"
       },
       "requiresOwnerConfirmation": true,
       "confirmationStatus": "pending"
