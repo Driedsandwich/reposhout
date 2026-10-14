@@ -203,11 +203,13 @@ function cliFixture() {
   }
   const discPath = join(repo, 'store/DATA_DISCLOSURE.json');
   const disc = JSON.parse(readFileSync(discPath, 'utf8'));
+  /* 実ファイルの状態に依らず、本人の確認が要る欄は全部この題材の値にそろえる（第28回の検収・確認日が基準日より後にならない） */
   for (const c of disc.categories) {
-    if (c.confirmationStatus !== 'pending') continue;
-    c.confirmationStatus = 'confirmed'; c.answer = c.proposedAnswer;
+    if (!c.requiresOwnerConfirmation) continue;
+    const a = c.proposedAnswer || c.answer;
+    c.confirmationStatus = 'confirmed'; c.answer = a;
     c.ownerConfirmation = { dashboardQuestionText: '（題材）設問文', confirmedOn: '2026-10-09',
-      chosen: c.proposedAnswer, reason: '（題材）CLI の成功の対照のための作り物' };
+      chosen: a, reason: '（題材）CLI の成功の対照のための作り物' };
   }
   writeFileSync(discPath, JSON.stringify(disc, null, 2) + '\n');
   const wiPath = join(repo, 'store/WEB_INTENT_POLICY_DECISION.json');

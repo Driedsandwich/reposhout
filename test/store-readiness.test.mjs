@@ -65,17 +65,22 @@ function readyCandidate() {
   };
 }
 
-/* 本人の確認が済んだ状態（実ファイルは pending のまま。ここだけの仮定） */
+/*
+ * 本人の確認が済んだ状態（ここだけの仮定）。
+ * ⚠️ 実ファイルの状態に依らず、本人の確認が要る欄は**全部この題材の値にそろえる**（第28回の検収）。
+ * 前は確認待ちの欄だけを置き換えていたので、本人が正しく確認を記録すると実ファイルの確認日
+ *（2026-10-14 以降）がそのまま残り、基準日 2026-08-07 の試験 8 件が「確認日が未来」で落ちた。
+ */
 function confirmedDisclosure() {
   const d = clone(DISCLOSURE);
   for (const c of d.categories) {
-    if (c.confirmationStatus !== 'pending') continue;
+    if (!c.requiresOwnerConfirmation) continue;
     c.confirmationStatus = 'confirmed';
-    c.answer = c.proposedAnswer;
+    c.answer = c.proposedAnswer || c.answer;
     c.ownerConfirmation = {
       dashboardQuestionText: 'Does your extension handle authentication information?',
       confirmedOn: '2026-08-07',
-      chosen: c.proposedAnswer,
+      chosen: c.proposedAnswer || c.answer,
       reason: 'ダッシュボードの現行の設問文を読んで判断した（テスト用の仮の値）'
     };
   }

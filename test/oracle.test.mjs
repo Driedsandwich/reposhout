@@ -217,6 +217,31 @@ test('ドットの多い名前を多く数えて断るときは、資格情報�
   assert.ok(GXS.weightedLength(text) >= official(text), '公式より少なく数えている');
 });
 
+test('ドットの多い名前の境界（11・12・25 回）で、公式の数え方と共有の可否を並べて記録する（R27-202）', () => {
+  /*
+   * 第27回監査 R27-202 の受入条件（第28回監査で「記録が無い」とされた）。公式の数え方（twitter-text 3.1.0）は
+   * 投稿全体（本文＋空白＋URL）で 3 つとも 280 を大きく下回って有効。実装は本文を URL 寄りに多く数えるので、
+   * 12 回から `overlong_text` で断る——**公式より厳しい側の差（保守的に断る）**で、少なく数えて X に弾かれる
+   * 文面は作らない。この表が変わったら（twitter-text の版や数え方が変わったら）記録を見直す。
+   */
+  const rows = [11, 12, 25].map((k) => {
+    const name = 'a.co'.repeat(k);
+    const url = `https://github.com/o/${name}`;
+    const text = `o/${name}`;
+    const whole = `${text} ${url}`;
+    const r = GXS.buildShareResult(url);
+    return { k, ownText: GXS.weightedLength(text), officialText: official(text), officialWhole: official(whole),
+      officialValid: twitterText.parseTweet(whole).valid, shared: r.ok === true, reason: r.ok ? null : r.reason };
+  });
+  assert.deepEqual(rows, [
+    { k: 11, ownText: 255, officialText: 46, officialWhole: 70, officialValid: true, shared: true, reason: null },
+    { k: 12, ownText: 278, officialText: 50, officialWhole: 74, officialValid: true, shared: false, reason: 'overlong_text' },
+    { k: 25, ownText: 577, officialText: 102, officialWhole: 126, officialValid: true, shared: false, reason: 'overlong_text' }
+  ], `GXS_MARK.X67 境界の記録が実測と違う:\n${JSON.stringify(rows, null, 1)}`);
+  /* 差は必ず「多く数える」側（少なく数える側の差は、X に弾かれる文面を作る） */
+  for (const r of rows) assert.ok(r.ownText >= r.officialText, `${r.k} 回: 公式より少なく数えている`);
+});
+
 test('ドットの多い名前でも、作る本文は公式より少なく数えない（R27-002）', () => {
   /* 多く数える誤差は残るが、少なく数える誤差（Xに弾かれる文面）は作らない */
   const parts = ['a.co', 'x.y', 'foo.co.jp', 'a1.io', 'ex-ample.dev', 'b.c.d'];

@@ -591,51 +591,86 @@ test('データ申告の欄が9つそろっている', () => {
     '正本のバージョンが manifest とずれている');
 });
 
-test('本人の答えだけ先に記録した欄は、設問文の写真待ちと分かる形で確認待ちのまま持つ', () => {
-  /*
-   * 本人の答え（2026-10-14）は届いたが、ダッシュボードの設問文はまだ記録できない。
-   * そのあいだは pending のまま答えだけを持ち、設問文と確認日をこちらで埋めない。
-   * 設問文の写真待ちのまま confirmed にもしない。
-   */
+/*
+ * 本人の答えだけ先に記録した欄の形（本人の答え・2026-10-14）。問題を文で返す（空なら合格）。
+ * 本人の答えは届いたが、ダッシュボードの設問文はまだ記録できない。そのあいだは pending のまま
+ * 答えだけを持ち、設問文と確認日をこちらで埋めない。設問文の写真待ちのまま confirmed にもしない。
+ * ⚠️ 検査はこの関数に置き、実ファイルと合成の反例の両方へ当てる（第28回の検収: 変異を実ファイルの
+ * 「確認待ち」の文面へ当てると、本人の確認を正しく記録したときに当て先が消えて CI が赤になる）。
+ */
+function ownerAnswerProblems(c) {
   const realDay = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) &&
     new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
+  const oc = c.ownerConfirmation || {};
+  const awaiting = oc.dashboardQuestionTextStatus === 'awaiting_owner_screenshot';
+  const out = [];
+  if (c.confirmationStatus === 'confirmed') {
+    if (awaiting) out.push('設問文の写真待ちのまま confirmed になっている');
+    return out;
+  }
+  if (oc.chosen === null || oc.chosen === undefined) {
+    for (const k of ['answeredOn', 'answerSource', 'dashboardQuestionTextStatus']) {
+      if (oc[k] !== null && oc[k] !== undefined) out.push(`答えが無いのに ${k} が埋まっている`);
+    }
+    return out;
+  }
+  if (!['Yes', 'No'].includes(oc.chosen)) out.push(`本人の答えが Yes / No でない: ${oc.chosen}`);
+  if (!(awaiting && oc.dashboardQuestionText === null && oc.confirmedOn === null)) {
+    out.push('確認待ちなのに設問文か確認日が埋まっている（設問文は本人の画面の写真から起こす）');
+  }
+  if (!realDay(oc.answeredOn)) out.push(`本人が答えた日が実在する日でない: ${oc.answeredOn}`);
+  if (!(typeof oc.answerSource === 'string' && oc.answerSource.trim() && typeof oc.reason === 'string' && oc.reason.trim())) {
+    out.push('答えの出所か理由が空');
+  }
+  return out;
+}
+
+test('本人の答えだけ先に記録した欄は、設問文の写真待ちと分かる形で確認待ちのまま持つ', () => {
   for (const c of DISCLOSURE.categories.filter((x) => x.requiresOwnerConfirmation)) {
-    const oc = c.ownerConfirmation || {};
-    const awaiting = oc.dashboardQuestionTextStatus === 'awaiting_owner_screenshot';
-    if (c.confirmationStatus === 'confirmed') {
-      assert.ok(!awaiting, `${c.label}: 設問文の写真待ちのまま confirmed になっている`);
-      continue;
-    }
-    if (oc.chosen === null || oc.chosen === undefined) {
-      for (const k of ['answeredOn', 'answerSource', 'dashboardQuestionTextStatus']) {
-        assert.ok(oc[k] === null || oc[k] === undefined, `${c.label}: 答えが無いのに ${k} が埋まっている`);
-      }
-      continue;
-    }
-    assert.ok(['Yes', 'No'].includes(oc.chosen), `GXS_MARK.X45 ${c.label}: 本人の答えが Yes / No でない: ${oc.chosen}`);
-    assert.ok(awaiting && oc.dashboardQuestionText === null && oc.confirmedOn === null,
-      `GXS_MARK.X46 ${c.label}: 確認待ちなのに設問文か確認日が埋まっている（設問文は本人の画面の写真から起こす）`);
-    assert.ok(realDay(oc.answeredOn), `${c.label}: 本人が答えた日が実在する日でない: ${oc.answeredOn}`);
-    assert.ok(typeof oc.answerSource === 'string' && oc.answerSource.trim() !== '' &&
-      typeof oc.reason === 'string' && oc.reason.trim() !== '', `${c.label}: 答えの出所か理由が空`);
+    assert.deepEqual(ownerAnswerProblems(c), [], `${c.label}: ${ownerAnswerProblems(c).join(' / ')}`);
   }
 });
 
-test('Web Intent を本人の引き受けで決めたなら、差し戻されたときの作り替えの手順が実在する', () => {
-  /*
-   * 本人の答え（2026-10-14）は「問い合わせずに今の形で出す」。審査で差し戻されたときに
-   * クエリを使わない形へ移る手順を、判断の正本から辿れるようにしておく（作り替えはまだしない）。
-   */
-  const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
-  if (wi.status !== 'owner_accepted_risk') return;
+test('本人の答えだけの欄の検査が、欠けた・作った形を拒む（合成の反例）', () => {
+  const waiting = {
+    requiresOwnerConfirmation: true, confirmationStatus: 'pending', answer: null, proposedAnswer: 'No',
+    ownerConfirmation: { dashboardQuestionText: null, confirmedOn: null, chosen: 'No', reason: '（題材）理由',
+      answeredOn: '2026-10-14', answerSource: '（題材）出所', dashboardQuestionTextStatus: 'awaiting_owner_screenshot' }
+  };
+  const with_ = (oc, top = {}) => ({ ...waiting, ...top, ownerConfirmation: { ...waiting.ownerConfirmation, ...oc } });
+  assert.deepEqual(ownerAnswerProblems(waiting), [], `正しい形を拒んだ: ${ownerAnswerProblems(waiting).join(' / ')}`);
+  assert.ok(ownerAnswerProblems(with_({ chosen: 'N/A' })).length > 0, 'GXS_MARK.X45 本人の答えが Yes / No でない形を通した');
+  assert.ok(ownerAnswerProblems(with_({ dashboardQuestionText: '（作り物）設問文' })).length > 0,
+    'GXS_MARK.X46 確認待ちのまま設問文をこちらで埋めた形を通した');
+  assert.ok(ownerAnswerProblems(with_({ confirmedOn: '2026-10-14' })).length > 0, '確認待ちのまま確認日を埋めた形を通した');
+  assert.ok(ownerAnswerProblems(with_({}, { confirmationStatus: 'confirmed', answer: 'No' })).length > 0,
+    '設問文の写真待ちのまま confirmed にした形を通した');
+  assert.ok(ownerAnswerProblems(with_({ answeredOn: '2026-02-30' })).length > 0, '実在しない答えた日を通した');
+  assert.ok(ownerAnswerProblems({ ...waiting, ownerConfirmation: { chosen: null, answeredOn: '2026-10-14' } }).length > 0,
+    '答えが無いのに答えた日だけある形を通した');
+});
+
+/*
+ * Web Intent を本人の引き受けで決めたなら、差し戻されたときの作り替えの手順が実在するか（本人の答え・2026-10-14）。
+ * 問題を文で返す。実ファイルと合成の反例の両方へ当てる。
+ */
+function fallbackPlanProblems(wi) {
+  if (wi.status !== 'owner_accepted_risk') return [];
   const plan = wi.ownerRiskAcceptance && wi.ownerRiskAcceptance.fallbackPlan;
   let body = null;
-  try { body = read(plan); } catch (e) { /* 次の assertion で落とす */ }
-  assert.ok(body !== null, `GXS_MARK.X47 判断の正本が指す手順の文書が無い: ${plan}`);
-  for (const must of ['x.com/intent/post', 'secure_query_transport', 'redirection_policy',
-    'WEB_INTENT_POLICY_DECISION.json', 'DATA_DISCLOSURE.json', 'SUBMISSION_CANDIDATE.json']) {
-    assert.ok(body.includes(must), `${plan} に「${must}」が無い（作り替えで触る所を言っていない）`);
-  }
+  try { body = read(plan); } catch (e) { /* 下で問題にする */ }
+  if (body === null) return [`判断の正本が指す手順の文書が無い: ${plan}`];
+  return ['x.com/intent/post', 'secure_query_transport', 'redirection_policy',
+    'WEB_INTENT_POLICY_DECISION.json', 'DATA_DISCLOSURE.json', 'SUBMISSION_CANDIDATE.json']
+    .filter((must) => !body.includes(must)).map((must) => `${plan} に「${must}」が無い（作り替えで触る所を言っていない）`);
+}
+
+test('Web Intent を本人の引き受けで決めたなら、差し戻されたときの作り替えの手順が実在する', () => {
+  const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
+  assert.deepEqual(fallbackPlanProblems(wi), [], fallbackPlanProblems(wi).join(' / '));
+  /* 合成の反例: 無い文書を指す引き受けは拒む（実ファイルの状態に依らずに確かめる） */
+  const fake = { status: 'owner_accepted_risk', ownerRiskAcceptance: { fallbackPlan: 'store/NO_SUCH_PLAN.md' } };
+  assert.ok(fallbackPlanProblems(fake).length > 0, 'GXS_MARK.X47 無い手順の文書を指す引き受けを通した');
 });
 
 test('申告の検査が効いているかの対照', () => {

@@ -142,9 +142,9 @@
       "id": "M12",
       "file": "store/DATA_FLOW_CLAIMS.json",
       "test": "test/docs.test.mjs",
-      "desc": "正本だけ保留状態を食い違わせる",
-      "find": "\"webIntentStatus\": \"owner_accepted_risk\"",
-      "replace": "\"webIntentStatus\": \"pending\"",
+      "desc": "正本だけ保留状態を食い違わせる（値の頭に文字を足す＝どの状態でも当たる）",
+      "find": "\"webIntentStatus\": \"",
+      "replace": "\"webIntentStatus\": \"x_",
       "expectedFailure": {
         "testName": "正本の主張が、実際のコードと一致している（R19-001）",
         "diagnosticMarker": "GXS_MARK.M12"
@@ -2807,35 +2807,35 @@
     },
     {
       "id": "X45",
-      "file": "store/DATA_DISCLOSURE.json",
+      "file": "test/docs.test.mjs",
       "test": "test/docs.test.mjs",
-      "desc": "本人の答えを Yes / No 以外にする",
-      "find": "\"chosen\": \"No\",\n        \"reason\": \"本人は推奨（No）とその根拠・反対の材料を読んで No を選んだ。根拠＝公式 FAQ",
-      "replace": "\"chosen\": \"N/A\",\n        \"reason\": \"本人は推奨（No）とその根拠・反対の材料を読んで No を選んだ。根拠＝公式 FAQ",
+      "desc": "本人の答えが Yes / No かを見ない",
+      "find": "  if (!['Yes', 'No'].includes(oc.chosen)) out.push(`本人の答えが Yes / No でない: ${oc.chosen}`);",
+      "replace": "  /* 答えの形を見ない */",
       "expectedFailure": {
-        "testName": "本人の答えだけ先に記録した欄は、設問文の写真待ちと分かる形で確認待ちのまま持つ",
+        "testName": "本人の答えだけの欄の検査が、欠けた・作った形を拒む（合成の反例）",
         "diagnosticMarker": "GXS_MARK.X45"
       }
     },
     {
       "id": "X46",
-      "file": "store/DATA_DISCLOSURE.json",
+      "file": "test/docs.test.mjs",
       "test": "test/docs.test.mjs",
-      "desc": "確認待ちのまま設問文をこちらで埋める",
-      "find": "\"dashboardQuestionText\": null,\n        \"confirmedOn\": null,\n        \"chosen\": \"No\",\n        \"reason\": \"本人は推奨（No）とその根拠・反対の材料を読んで No を選んだ。根拠＝ダッシュボード",
-      "replace": "\"dashboardQuestionText\": \"（作り物）設問文\",\n        \"confirmedOn\": null,\n        \"chosen\": \"No\",\n        \"reason\": \"本人は推奨（No）とその根拠・反対の材料を読んで No を選んだ。根拠＝ダッシュボード",
+      "desc": "確認待ちのまま設問文・確認日が埋まっていても通す",
+      "find": "  if (!(awaiting && oc.dashboardQuestionText === null && oc.confirmedOn === null)) {",
+      "replace": "  if (!awaiting) {",
       "expectedFailure": {
-        "testName": "本人の答えだけ先に記録した欄は、設問文の写真待ちと分かる形で確認待ちのまま持つ",
+        "testName": "本人の答えだけの欄の検査が、欠けた・作った形を拒む（合成の反例）",
         "diagnosticMarker": "GXS_MARK.X46"
       }
     },
     {
       "id": "X47",
-      "file": "store/WEB_INTENT_POLICY_DECISION.json",
+      "file": "test/docs.test.mjs",
       "test": "test/docs.test.mjs",
-      "desc": "判断の正本が無い手順の文書を指す",
-      "find": "\"fallbackPlan\": \"store/WEB_INTENT_FALLBACK_PLAN.md\"",
-      "replace": "\"fallbackPlan\": \"store/NO_SUCH_PLAN.md\"",
+      "desc": "判断の正本が無い手順の文書を指しても通す",
+      "find": "  if (body === null) return [`判断の正本が指す手順の文書が無い: ${plan}`];",
+      "replace": "  if (body === null) return [];",
       "expectedFailure": {
         "testName": "Web Intent を本人の引き受けで決めたなら、差し戻されたときの作り替えの手順が実在する",
         "diagnosticMarker": "GXS_MARK.X47"
@@ -3067,6 +3067,18 @@
       "expectedFailure": {
         "testName": "画面へ案内を届けられないときはバッジで補い、バッジも出せないときは画面の部品が補う（R28-007）",
         "diagnosticMarker": "GXS_MARK.X66"
+      }
+    },
+    {
+      "id": "X67",
+      "file": "src/share.js",
+      "test": "test/oracle.test.mjs",
+      "desc": "本文の上限の判定を緩める（12 回の名前も共有する＝境界の記録と合わなくなる）",
+      "find": "    if (weightedLength(text) + 1 + URL_WEIGHT > MAX_WEIGHTED_TWEET) return { ok: false, reason: 'overlong_text' };",
+      "replace": "    if (weightedLength(text) + 1 + URL_WEIGHT > MAX_WEIGHTED_TWEET + 100) return { ok: false, reason: 'overlong_text' };",
+      "expectedFailure": {
+        "testName": "ドットの多い名前の境界（11・12・25 回）で、公式の数え方と共有の可否を並べて記録する（R27-202）",
+        "diagnosticMarker": "GXS_MARK.X67"
       }
     }
   ]
