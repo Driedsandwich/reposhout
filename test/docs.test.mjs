@@ -2382,5 +2382,39 @@ test('却下の記録の理由文が、指摘IDを1つずつ説明している�
     const extra = [...said].filter((id) => !h.findingIds.includes(id));
     assert.deepEqual(missing, [], `GXS_MARK.X11 ${h.status}: 理由文に無い指摘ID`);
     assert.deepEqual(extra, [], `${h.status}: findingIds に無いIDが理由文にある`);
+    assert.deepEqual(reasonGaps(h), [], `${h.status}: 説明の無い指摘ID`);
   }
+});
+
+/*
+ * 指摘IDごとに、理由文に**説明の中身**があるか（第28回監査 R28-010）。IDの有無だけを見ると、
+ * 「R20-001 R20-002」のように説明を消してIDだけ残しても通った。その ID が最初に出た所から、
+ * 次の ID が最初に出る所までを、その ID の説明とする（ほかの ID への言及は説明の一部）。
+ * ID・句読点・空白を除いて 8 文字に満たなければ、説明が無い（参照だけ・空）とみなす。
+ * 文の真偽までは機械で証明しない。
+ */
+function reasonGaps(h) {
+  const reason = String(h.reason || '');
+  const firsts = h.findingIds.map((id) => [id, reason.indexOf(id)]).filter(([, at]) => at >= 0)
+    .sort((a, b) => a[1] - b[1]);
+  const gaps = [];
+  firsts.forEach(([id, at], i) => {
+    const end = i + 1 < firsts.length ? firsts[i + 1][1] : reason.length;
+    const body = reason.slice(at + id.length, end).replace(/R\d+-\d{3}/g, '').replace(/[\s:：。、・,.()（）/／*]/g, '');
+    if (body.length < 8) gaps.push(`${id}（説明 ${body.length} 文字）`);
+  });
+  return gaps;
+}
+
+test('却下の記録の検査が、説明を消した・参照だけにした記録を拒む（R28-010 の対照）', () => {
+  const base = { status: 'rejected_by_R20', auditRound: 20, findingIds: ['R20-001', 'R20-002'],
+    reason: 'R20-001: 画面側が読む DOM の範囲が説明より広かった。R20-002: 12時間を物理的な上限のように書いていた' };
+  assert.deepEqual(reasonGaps(base), [], `正しい記録を拒んだ: ${reasonGaps(base).join(' / ')}`);
+  assert.ok(reasonGaps({ ...base, reason: 'R20-001 R20-002' }).length > 0,
+    'GXS_MARK.X61 説明を消して ID だけ残した記録を通した');
+  assert.ok(reasonGaps({ ...base, reason: 'R20-001: 画面側が読む DOM の範囲が説明より広かった。R20-002: R20-001' }).length > 0,
+    '説明が別の ID への参照だけの記録を通した');
+  /* 対照: 別の ID と同じ根だと書き、その中身も書いてある記録は通す（第27回の R27-201 の形） */
+  const ref = { ...base, reason: 'R20-001: 画面側が読む DOM の範囲が説明より広かった。R20-002: R20-001 と同じ根（読む範囲の説明）' };
+  assert.deepEqual(reasonGaps(ref), [], `参照の形の正しい記録を拒んだ: ${reasonGaps(ref).join(' / ')}`);
 });
