@@ -2954,8 +2954,8 @@
       "file": "test/manifest.test.mjs",
       "test": "test/manifest.test.mjs",
       "desc": "検証器を run の中でなくステップ全体から探す（name にだけ残っても通す）",
-      "find": "    const step = jobs[j] && jobs[j].steps.find((st) => (st.keys.run || '').includes(needle));",
-      "replace": "    const step = jobs[j] && jobs[j].steps.find((st) => JSON.stringify(st.keys).includes(needle));",
+      "find": "    const step = steps.find((st) => runLines(st.keys.run).some((l) => l === cmd || l.startsWith(`${cmd} `)));",
+      "replace": "    const step = steps.find((st) => JSON.stringify(st.keys).includes(cmd));",
       "expectedFailure": {
         "testName": "CI の構造の読み手が、キーの順・名前だけの検証器・束の重なりを見逃さない（R28-005）",
         "diagnosticMarker": "GXS_MARK.X57"
@@ -3187,6 +3187,54 @@
       "expectedFailure": {
         "testName": "確認待ちの行の「本人の答え」の照合が、逆の写し・答えの無い写しを拒む（R28-104 の対照）",
         "diagnosticMarker": "GXS_MARK.X75"
+      }
+    },
+    {
+      "id": "X77",
+      "file": "test/manifest.test.mjs",
+      "test": "test/manifest.test.mjs",
+      "desc": "run の行のどこかにコマンドの名前があれば実行と見なす（行頭で見ない）",
+      "find": "    const step = steps.find((st) => runLines(st.keys.run).some((l) => l === cmd || l.startsWith(`${cmd} `)));",
+      "replace": "    const step = steps.find((st) => runLines(st.keys.run).some((l) => l.includes(cmd)));",
+      "expectedFailure": {
+        "testName": "CI の構造の読み手が、実行しない文字列・握りつぶし・引用符つきのキー・必須の試験の飛ばしを見逃さない（R28-108）",
+        "diagnosticMarker": "GXS_MARK.X77"
+      }
+    },
+    {
+      "id": "X78",
+      "file": "test/manifest.test.mjs",
+      "test": "test/manifest.test.mjs",
+      "desc": "必須の手順の run のシェルの制御・握りつぶしを見ない",
+      "find": "    if (ctl.length) out.push(`${cmd} のステップの run にシェルの制御か失敗の握りつぶしがある: ${ctl[0]}`);",
+      "replace": "    /* 制御を見ない */",
+      "expectedFailure": {
+        "testName": "CI の構造の読み手が、実行しない文字列・握りつぶし・引用符つきのキー・必須の試験の飛ばしを見逃さない（R28-108）",
+        "diagnosticMarker": "GXS_MARK.X78"
+      }
+    },
+    {
+      "id": "X79",
+      "file": "test/manifest.test.mjs",
+      "test": "test/manifest.test.mjs",
+      "desc": "ジョブの段の引用符つきのキーを見ない",
+      "find": "    if (odd.length) out.push(`ジョブ ${j} に引用符つきのキーがある（読めない形）: ${odd[0].trim()}`);",
+      "replace": "    /* 引用符つきのキーを見ない */",
+      "expectedFailure": {
+        "testName": "CI の構造の読み手が、実行しない文字列・握りつぶし・引用符つきのキー・必須の試験の飛ばしを見逃さない（R28-108）",
+        "diagnosticMarker": "GXS_MARK.X79"
+      }
+    },
+    {
+      "id": "X80",
+      "file": "test/manifest.test.mjs",
+      "test": "test/manifest.test.mjs",
+      "desc": "Linux の単体試験を必須の手順から外す",
+      "find": "  const MUST_RUN = [['test', 'npm run test:unit'], ['test', 'npm run test:e2e'], ['windows', 'npm run test:unit'],",
+      "replace": "  const MUST_RUN = [['test', 'npm run test:e2e'], ['windows', 'npm run test:unit'],",
+      "expectedFailure": {
+        "testName": "CI の構造の読み手が、実行しない文字列・握りつぶし・引用符つきのキー・必須の試験の飛ばしを見逃さない（R28-108）",
+        "diagnosticMarker": "GXS_MARK.X80"
       }
     }
   ]
