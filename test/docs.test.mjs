@@ -678,8 +678,9 @@ function fallbackPlanProblems(wi) {
   let body = null;
   try { body = read(plan); } catch (e) { /* 下で問題にする */ }
   if (body === null) return [`判断の正本が指す手順の文書が無い: ${plan}`];
+  /* 新しいページを収録一覧へ足すこと（第28回監査 R28-109。収録は明示した一覧だけ） */
   return ['x.com/intent/post', 'secure_query_transport', 'redirection_policy',
-    'WEB_INTENT_POLICY_DECISION.json', 'DATA_DISCLOSURE.json', 'SUBMISSION_CANDIDATE.json']
+    'WEB_INTENT_POLICY_DECISION.json', 'DATA_DISCLOSURE.json', 'SUBMISSION_CANDIDATE.json', 'scripts/package-files.mjs']
     .filter((must) => !body.includes(must)).map((must) => `${plan} に「${must}」が無い（作り替えで触る所を言っていない）`);
 }
 
