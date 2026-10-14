@@ -22,6 +22,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { crc32 as zlibCrc32 } from 'node:zlib';
 import { validateStoreReadiness, dateIn, pickPushRun } from '../scripts/store-readiness.mjs';
 import { readZip } from '../scripts/zip-read.mjs';
 import { makeInnerZip, makeStoredZip } from './helpers/zip-write.mjs';
@@ -64,17 +65,22 @@ function readyCandidate() {
   };
 }
 
-/* 本人の確認が済んだ状態（実ファイルは pending のまま。ここだけの仮定） */
+/*
+ * 本人の確認が済んだ状態（ここだけの仮定）。
+ * ⚠️ 実ファイルの状態に依らず、本人の確認が要る欄は**全部この題材の値にそろえる**（第28回の検収）。
+ * 前は確認待ちの欄だけを置き換えていたので、本人が正しく確認を記録すると実ファイルの確認日
+ *（2026-10-14 以降）がそのまま残り、基準日 2026-08-07 の試験 8 件が「確認日が未来」で落ちた。
+ */
 function confirmedDisclosure() {
   const d = clone(DISCLOSURE);
   for (const c of d.categories) {
-    if (c.confirmationStatus !== 'pending') continue;
+    if (!c.requiresOwnerConfirmation) continue;
     c.confirmationStatus = 'confirmed';
-    c.answer = c.proposedAnswer;
+    c.answer = c.proposedAnswer || c.answer;
     c.ownerConfirmation = {
       dashboardQuestionText: 'Does your extension handle authentication information?',
       confirmedOn: '2026-08-07',
-      chosen: c.proposedAnswer,
+      chosen: c.proposedAnswer || c.answer,
       reason: 'ダッシュボードの現行の設問文を読んで判断した（テスト用の仮の値）'
     };
   }
@@ -414,10 +420,22 @@ test('成功の対照は本物の ZIP を実際の読み手に通し、壊れた
   assert.ok(ok.ok.includes('中身のZIPの収録数') && ok.ok.includes('中身のZIPの直下に manifest.json'),
     '収録数と manifest の検査まで進んでいない');
   /* 1つずつ壊す。正本の大きさ・ハッシュは壊した中身に合わせ、読み手だけが気づく形にする */
-  const crcBroken = Buffer.from(INNER); crcBroken[40] ^= 0xff;
+  /*
+   * ⚠️ CRC だけを壊す（第28回監査 R28-009）。前は 40 バイト目を壊していたが、そこは先頭の項目の
+   * ファイル名の中（ローカルヘッダ 30 B＋名前 13 B）で、名前の食い違いで落ちていた——CRC の検査を
+   * 外しても落ちる題材だった。ヘッダからデータの位置を計算し、名前・大きさ・ヘッダは保つ。
+   */
+  const crcBroken = Buffer.from(INNER);
+  const dataAt = 30 + crcBroken.readUInt16LE(26) + crcBroken.readUInt16LE(28);
+  const dataLen = crcBroken.readUInt32LE(18);
+  crcBroken[dataAt] ^= 0xff;
+  assert.notEqual(zlibCrc32(crcBroken.subarray(dataAt, dataAt + dataLen)) >>> 0, crcBroken.readUInt32LE(14),
+    '題材が成立していない（データを壊しても CRC が合っている）');
+  assert.equal(crcBroken.subarray(30, 30 + crcBroken.readUInt16LE(26)).toString('utf8'),
+    Buffer.from(INNER).subarray(30, 30 + crcBroken.readUInt16LE(26)).toString('utf8'), '題材が名前まで壊している');
   const cases = [
     ['ZIP でない中身', Buffer.from('ZIP ではない', 'utf8'), /中身のZIPが厳しい読み手で開ける/],
-    ['CRC が合わない中身', crcBroken, /中身のZIPが厳しい読み手で開ける/],
+    ['CRC が合わない中身', crcBroken, /中身のZIPが厳しい読み手で開ける — CRCが合わない/],
     ['収録数が違う中身', makeInnerZip({ files: 10 }), /中身のZIPの収録数/],
     ['直下に manifest.json が無い中身', makeInnerZip({ withManifest: false }), /直下に manifest.json/]
   ];
@@ -430,6 +448,8 @@ test('成功の対照は本物の ZIP を実際の読み手に通し、壊れた
     }));
     if (!r.problems.some((p) => want.test(p))) passed.push(`${name}: ${r.problems.join(' / ') || '通った'}`);
   }
+  assert.ok(!passed.some((x) => x.startsWith('CRC が合わない中身')),
+    `GXS_MARK.X60 データの CRC だけが合わない中身を、CRC の理由で拒めていない:\n${passed.join('\n')}`);
   assert.deepEqual(passed, [], `壊れた中身を、その理由で拒めていない:\n${passed.join('\n')}`);
 });
 
@@ -448,8 +468,9 @@ test('いまの実ファイルは、preflight では本人の確認待ちの欄�
    * 件数は実ファイルの状態から数える（0件になれば問題も0件）。
    */
   const want = DISCLOSURE.categories.filter((c) => c.confirmationStatus === 'pending').length;
+  /* 実ファイルの確認日は、題材の基準日ではなく**いまの JST の日付**で見る（第28回の検収: 正しく記録した確認日が「未来」に見えた） */
   const r = validateStoreReadiness({
-    ...preflightInputs(),
+    ...preflightInputs({ today: dateIn('Asia/Tokyo') }),
     disclosure: clone(DISCLOSURE),
     candidate: clone(CANDIDATE),
     listing: read('store/LISTING.md'),

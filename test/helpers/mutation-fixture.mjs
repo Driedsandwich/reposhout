@@ -269,9 +269,10 @@ function mut(id, over = {}) {
  * 汚れた木を拒む挙動そのものは、専用の検査が `allowDirty: false` で見る。
  */
 function runRunner(dir, { receipt = 'receipt.json', timeout = 8000, extra = [],
-                          env = null, allowDirty = true } = {}) {
+                          env = null, allowDirty = true, nodeArgs = [] } = {}) {
   const receiptPath = receipt === null ? null : join(dir, receipt);
-  const args = [join(dir, 'scripts/run-mutations.mjs'),
+  /* nodeArgs＝ランナーの前に置く node の指定（障害の差し込み `--import …` など・第28回 R28-001 / R28-004） */
+  const args = [...nodeArgs, join(dir, 'scripts/run-mutations.mjs'),
     '--spec', join(dir, 'test/mutations.json'), '--timeout', String(timeout),
     ...(allowDirty ? ['--allow-dirty'] : []), ...extra];
   if (receiptPath) args.push('--receipt', receiptPath);

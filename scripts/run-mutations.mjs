@@ -51,10 +51,10 @@
  *   npm run test:mutations -- --timeout 5000        1件あたりの上限（既定 300000ms）
  */
 import { readFileSync, writeFileSync, renameSync, unlinkSync, lstatSync, realpathSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, isAbsolute, resolve, relative, basename } from 'node:path';
+import { dirname, join, isAbsolute, resolve, relative, basename, sep } from 'node:path';
 import { countTestName as countDeclaredTestName, testSpanText } from './lib/test-decls.mjs';
 import { MARKER_PREFIX, MARKER_RE } from './lib/marker-format.mjs';
 import { parseShard, shardOf } from './lib/shard.mjs';
@@ -171,7 +171,15 @@ if (receiptPath) {
   const forbidden = [specAbsForReceipt, real(resolve(ROOT, 'scripts/run-mutations.mjs'))];
   const tracked = insideRepo
     && gitOut(['ls-files', '--error-unmatch', '--', rel.split('\\').join('/')]) !== null;
-  if (tracked || forbidden.includes(abs)) {
+  /*
+   * ⚠️ git の管理先（`.git` の中・worktree の実際の管理先・共有の管理先）も出力先にさせない
+   *（第28回監査 R28-001。`--receipt .git/config` が事前検査を通り、設定を証跡の JSON で上書きした）。
+   */
+  const gitDirs = [gitOut(['rev-parse', '--absolute-git-dir']), gitOut(['rev-parse', '--git-common-dir'])]
+    .filter(Boolean).map((d) => { try { return realpathSync(resolve(rootReal, d)); } catch (e) { return resolve(rootReal, d); } });
+  const insideGitDir = gitDirs.some((d) => abs === d || !relative(d, abs).startsWith('..') && !isAbsolute(relative(d, abs)))
+    || rel === '.git' || rel.startsWith(`.git${sep}`) || rel.startsWith('.git/');
+  if (tracked || insideGitDir || forbidden.includes(abs)) {
     console.error(`★ 証跡の出力先が入力を指している（${receiptPath}）。何も書かずに止まる`);
     receiptPhase = 'unwritable';
     process.exit(2);
@@ -182,15 +190,23 @@ if (receiptPath) {
  * 一時ファイルへ書いてから rename する。rename は同じファイルシステム上で
  * 不可分なので、読み手が半分だけ書かれた JSON を読むことがない。
  */
+/*
+ * ⚠️ 一時ファイルは**新しく作れたときだけ**使う（第28回監査 R28-001）。
+ * 前は `${証跡}.tmp-<pid>` へ普通に書いていたので、その名前に symlink を置かれると
+ * リンク先（追跡中の文書など）を書き換えた。名前に乱数を足し、`wx`（無ければ作る・あれば失敗。
+ * symlink も辿らない）で作る。失敗しても**自分が作っていない物は消さない**。
+ */
 function saveReceipt(obj) {
   if (!receiptPath) return true;
-  const tmp = `${receiptPath}.tmp-${process.pid}`;
+  const tmp = `${receiptPath}.tmp-${process.pid}-${randomBytes(6).toString('hex')}`;
+  let created = false;
   try {
-    writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n');
+    writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n', { flag: 'wx' });
+    created = true;
     renameSync(tmp, receiptPath);
     return true;
   } catch (e) {
-    try { unlinkSync(tmp); } catch (e2) { /* 消せなくても本題ではない */ }
+    if (created) { try { unlinkSync(tmp); } catch (e2) { /* 消せなくても本題ではない */ } }
     console.error(`★ 証跡を書けなかった: ${receiptPath}\n  ${e && e.message}`);
     return false;
   }
@@ -519,7 +535,11 @@ function failureDetails(output) {
         if (ind < keyIndent || t === '...' || t === '---') break;
         let g;
         if (/^error:\s*[|>][-+]?\s*$/.test(t)) { inError = true; continue; }
-        if (/^(?:actual|expected):\s*[|>][-+]?\s*$/.test(t)) { inValue = true; continue; }
+        /*
+         * 値が次の行から始まる形も比べた値として読む（第28回監査 R28-002）。Node はオブジェクト・配列・
+         * 入れ子を `actual:` の後ろを空にして、字下げした行で出す（配列は添字のキーになる・実測）。
+         */
+        if (/^(?:actual|expected):\s*(?:[|>][-+]?)?\s*$/.test(t)) { inValue = true; continue; }
         if ((g = /^(?:actual|expected):\s*(.+)$/.exec(t))) { values.push(g[1]); continue; }
         if ((g = /^error:\s*(.+)$/.exec(t))) body.push(g[1].replace(/^'|'$/g, ''));
         else if ((g = /^failureType:\s*'?([^']+)'?/.exec(t))) rec.failureType = g[1];
@@ -1158,7 +1178,11 @@ for (const m of mutations) {
 if (currentMutationId !== null && !fatal) {
   lastCompletedMutationId = currentMutationId;
   currentMutationId = null;
-  saveRunning();
+  /*
+   * ⚠️ 終わりの進み具合を書けなかったら、後の1枚が書けても成功にしない（第28回監査 R28-004）。
+   * 前は戻り値を見ていなかったので、ここで失敗しても最後の1枚が書ければ complete・証拠に使える、になった。
+   */
+  if (!saveRunning()) fatal = 'progress_save_failed';
 }
 
 /* 作業ツリーが元に戻っているか（第23回監査 R23-002 §6.6） */
