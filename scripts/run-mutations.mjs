@@ -144,6 +144,14 @@ const receiptPath = parsed.out['--receipt'] || null;
  * 強制終了された証跡を見ても、どの変異の途中でどのファイルが変異したままか
  * 分からない（第26回監査 R26-003）。変異ごとに atomic に書き直す。
  */
+/*
+ * 相対パスが基準の**外**を指すか（第28回監査 R28-105）。前は `startsWith('..')` で見ていたので、
+ * 同じディレクトリの `..notes.md` のような通常の名前まで「外」と読み、出力先の保護を抜けられた。
+ * セグメントの境目で見る（`..` そのもの、または `..` の直後が区切り文字のときだけ外）。
+ */
+function isOutsideRel(rel) {
+  return rel === '..' || rel.startsWith(`..${sep}`) || rel.startsWith('../') || isAbsolute(rel);
+}
 let receiptPhase = 'none';
 let currentMutationId = null;
 let lastCompletedMutationId = null;
@@ -165,7 +173,7 @@ if (receiptPath) {
   const rootReal = (() => { try { return realpathSync(ROOT); } catch (e) { return ROOT; } })();
   const abs = real(resolve(receiptPath));
   const rel = relative(rootReal, abs);
-  const insideRepo = rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+  const insideRepo = rel !== '' && !isOutsideRel(rel);
   if (insideRepo) receiptRelInRepo = rel.split('\\').join('/');
   const specAbsForReceipt = real(resolve(ROOT, parsed.out['--spec'] || 'test/mutations.json'));
   const forbidden = [specAbsForReceipt, real(resolve(ROOT, 'scripts/run-mutations.mjs'))];
@@ -177,7 +185,7 @@ if (receiptPath) {
    */
   const gitDirs = [gitOut(['rev-parse', '--absolute-git-dir']), gitOut(['rev-parse', '--git-common-dir'])]
     .filter(Boolean).map((d) => { try { return realpathSync(resolve(rootReal, d)); } catch (e) { return resolve(rootReal, d); } });
-  const insideGitDir = gitDirs.some((d) => abs === d || !relative(d, abs).startsWith('..') && !isAbsolute(relative(d, abs)))
+  const insideGitDir = gitDirs.some((d) => abs === d || !isOutsideRel(relative(d, abs)))
     || rel === '.git' || rel.startsWith(`.git${sep}`) || rel.startsWith('.git/');
   if (tracked || insideGitDir || forbidden.includes(abs)) {
     console.error(`★ 証跡の出力先が入力を指している（${receiptPath}）。何も書かずに止まる`);
@@ -400,7 +408,7 @@ function validatePath(rel, label) {
     return `${label} の実体を解決できない: ${rel}`;
   }
   const inside = relative(REAL_ROOT, real);
-  if (inside === '' || inside.startsWith('..') || isAbsolute(inside)) {
+  if (inside === '' || isOutsideRel(inside)) {
     return `${label} がリポジトリの外を指している: ${rel}`;
   }
   return null;

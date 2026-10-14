@@ -863,7 +863,7 @@
     {
       "id": "N23",
       "file": "scripts/run-mutations.mjs",
-      "find": "  if (inside === '' || inside.startsWith('..') || isAbsolute(inside)) {\n",
+      "find": "  if (inside === '' || isOutsideRel(inside)) {\n",
       "replace": "  if (false) {\n",
       "test": "test/mutation-runner.test.mjs",
       "desc": "リポジトリの外を指す対象を許す",
@@ -3079,6 +3079,18 @@
       "expectedFailure": {
         "testName": "ドットの多い名前の境界（11・12・25 回）で、公式の数え方と共有の可否を並べて記録する（R27-202）",
         "diagnosticMarker": "GXS_MARK.X67"
+      }
+    },
+    {
+      "id": "X68",
+      "file": "scripts/run-mutations.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "パスの内外を名前の頭の .. で判定する（..notes.md を外と読む）",
+      "find": "  return rel === '..' || rel.startsWith(`..${sep}`) || rel.startsWith('../') || isAbsolute(rel);",
+      "replace": "  return rel.startsWith('..') || isAbsolute(rel);",
+      "expectedFailure": {
+        "testName": "証跡の出力先の内外を、名前の頭の .. で取り違えない（R28-105）",
+        "diagnosticMarker": "GXS_MARK.X68"
       }
     }
   ]

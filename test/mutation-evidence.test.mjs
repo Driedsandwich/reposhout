@@ -802,6 +802,31 @@ test('証跡の出力先が git の管理先なら、1バイトも書かずに�
   assert.equal(ok.exitCode, 0, `対照が成立していない:\n${ok.stdout.slice(-300)}`);
 });
 
+test('証跡の出力先の内外を、名前の頭の .. で取り違えない（R28-105）', () => {
+  /*
+   * 第28回監査 R28-105。内外を `startsWith('..')` で見ていたので、同じディレクトリの `..notes.md`
+   *（追跡中の文書）や git の管理先の中の `..audit-state` を「外」と読み、保護を抜けて書き換えた。
+   */
+  const fx = makeFixture([mut('Q16')], { '..notes.md': '# 頭に .. の付いた大事なメモ\n' });
+  writeFileSync(join(fx.dir, '.git', '..audit-state'), 'GIT-ADMIN-STATE\n');
+  const run = (receipt) => {
+    try {
+      execFileSync(process.execPath, [join(fx.dir, 'scripts/run-mutations.mjs'),
+        '--spec', join(fx.dir, 'test/mutations.json'), '--allow-dirty', '--receipt', join(fx.dir, receipt)],
+      { cwd: fx.dir, encoding: 'utf8', stdio: 'pipe', timeout: 120000 });
+      return 0;
+    } catch (e) { return typeof e.status === 'number' ? e.status : -1; }
+  };
+  const notes = readFileSync(join(fx.dir, '..notes.md'), 'utf8');
+  assert.equal(run('..notes.md'), 2, 'GXS_MARK.X68 追跡中の ..notes.md を出力先にできた');
+  assert.equal(readFileSync(join(fx.dir, '..notes.md'), 'utf8'), notes, '..notes.md を書き換えた');
+  assert.equal(run('.git/..audit-state'), 2, 'git の管理先の中の ..audit-state を出力先にできた');
+  assert.equal(readFileSync(join(fx.dir, '.git', '..audit-state'), 'utf8'), 'GIT-ADMIN-STATE\n', '管理先の中を書き換えた');
+  /* 対照: 本当に外（親）を指す出力先は、外として扱われ書ける（この判定が何でも拒むわけではない） */
+  const ok = runRunner(fx.dir, { receipt: join('..', 'outside-receipt.json') });
+  assert.equal(ok.exitCode, 0, `外の出力先で走れない:\n${ok.stdout.slice(-300)}`);
+});
+
 const canLink = (kind) => {
   const d = mkdtempSync(join(tmpdir(), 'reposhout-link-'));
   try {
