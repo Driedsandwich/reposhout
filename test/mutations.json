@@ -3176,6 +3176,18 @@
         "testName": "strict: 本人の確認の記録の整合を、提出ゲートが見る（R28-101 の配線）",
         "diagnosticMarker": "GXS_MARK.X76"
       }
+    },
+    {
+      "id": "X75",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "確認待ちの行の本人の答えを正本と照らさない",
+      "find": "  return said[0] === chosen ? [] : [`行は「本人の答え: ${said[0]}」・正本は ${chosen}`];",
+      "replace": "  return [];",
+      "expectedFailure": {
+        "testName": "確認待ちの行の「本人の答え」の照合が、逆の写し・答えの無い写しを拒む（R28-104 の対照）",
+        "diagnosticMarker": "GXS_MARK.X75"
+      }
     }
   ]
 }

@@ -532,6 +532,34 @@ const DISCLOSURE_TABLES = [
   { file: 'store/STORE_DASHBOARD_CHANGES.md', answerColumn: 3 }
 ];
 
+/*
+ * 確認待ちの欄の行に書いた「本人の答え」が、正本の ownerConfirmation.chosen と一致するか（第28回監査 R28-104）。
+ * 前は「要確認」の印と確定値でないことだけを見ていたので、「本人の答え: Yes」と逆に写しても通った。
+ * 本人の答えが無いのに「本人の答え」と書いた形も拒む。問題を文で返す。
+ */
+function pendingRowProblems(row, cat) {
+  const chosen = cat.ownerConfirmation && cat.ownerConfirmation.chosen;
+  const said = [...String(row).matchAll(/本人の答え[:：]\s*(Yes|No)/g)].map((m) => m[1]);
+  if (chosen === null || chosen === undefined) {
+    return /本人の答え/.test(row) ? ['本人の答えが無いのに、行に「本人の答え」と書いてある'] : [];
+  }
+  if (said.length !== 1) return [`行の「本人の答え」が1つでない（${said.join(' / ') || '無い'}）`];
+  return said[0] === chosen ? [] : [`行は「本人の答え: ${said[0]}」・正本は ${chosen}`];
+}
+
+test('確認待ちの行の「本人の答え」の照合が、逆の写し・答えの無い写しを拒む（R28-104 の対照）', () => {
+  const no = { ownerConfirmation: { chosen: 'No' } };
+  const yes = { ownerConfirmation: { chosen: 'Yes' } };
+  const none = { ownerConfirmation: { chosen: null } };
+  assert.deepEqual(pendingRowProblems(' **要確認**（本人の答え: No・設問文の記録待ち） | 理由 ', no), [], 'No の一致を拒んだ');
+  assert.deepEqual(pendingRowProblems(' **要確認**（本人の答え: Yes・設問文の記録待ち） | 理由 ', yes), [], 'Yes の一致を拒んだ');
+  assert.ok(pendingRowProblems(' **要確認**（本人の答え: Yes・設問文の記録待ち） | 理由 ', no).length > 0,
+    'GXS_MARK.X75 本人の答えを逆に写した行を通した');
+  assert.ok(pendingRowProblems(' **要確認**（本人の答え: No） | 理由 ', none).length > 0, '本人の答えが無いのに答えを書いた行を通した');
+  assert.deepEqual(pendingRowProblems(' **要確認**（案: No） | 理由 ', none), [], '答えの無い確認待ちの行を拒んだ');
+  assert.ok(pendingRowProblems(' **要確認**（案: No） | 理由 ', no).length > 0, '本人の答えがあるのに行に書いていない形を通した');
+});
+
 test('ストア文書のデータ申告が、正本と1つ残らず一致する', () => {
   for (const { file, answerColumn } of DISCLOSURE_TABLES) {
     const got = answersFrom(file, answerColumn);
@@ -548,6 +576,8 @@ test('ストア文書のデータ申告が、正本と1つ残らず一致する'
           `${file}: 確認待ちの「${cat.label}」が確定値として書かれている`);
         assert.ok(new RegExp(`\\| ${cat.label} \\|[^\\n]*要確認`).test(read(file)),
           `${file}: 「${cat.label}」に要確認の印が無い`);
+        const row = (new RegExp(`\\| ${cat.label} \\|([^\\n]*)`).exec(read(file)) || [])[1] || '';
+        assert.deepEqual(pendingRowProblems(row, cat), [], `${file}: 「${cat.label}」の本人の答えの写しが正本と違う`);
         continue;
       }
       assert.ok(got.has(cat.label), `${file} に「${cat.label}」の行が無い`);
