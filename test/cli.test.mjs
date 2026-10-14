@@ -214,6 +214,8 @@ function cliFixture() {
   writeFileSync(discPath, JSON.stringify(disc, null, 2) + '\n');
   const wiPath = join(repo, 'store/WEB_INTENT_POLICY_DECISION.json');
   const wi = JSON.parse(readFileSync(wiPath, 'utf8'));
+  /* 外部の確認へ移るときは、過去の本人の引き受けを history へ移す（第28回監査 R28-102） */
+  if (wi.ownerRiskAcceptance) { wi.history = [{ ...wi.ownerRiskAcceptance, supersededBy: 'confirmed_allowed' }]; wi.ownerRiskAcceptance = null; }
   Object.assign(wi, { status: 'confirmed_allowed', askedOn: '2026-10-01', question: '（題材）',
     responseOn: '2026-10-05', response: '（題材）', ticket: 'FIXTURE-0000', decision: 'proceed',
     decidedBy: 'owner', appliesToVersion: version,

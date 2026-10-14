@@ -15,6 +15,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { ROOT, loadShare, stripComments } from './helpers/load.mjs';
+import { ownerRecordProblems, dateIn } from '../scripts/store-readiness.mjs';
 
 const sha256 = (t) => createHash('sha256').update(t).digest('hex');
 
@@ -592,38 +593,10 @@ test('データ申告の欄が9つそろっている', () => {
 });
 
 /*
- * 本人の答えだけ先に記録した欄の形（本人の答え・2026-10-14）。問題を文で返す（空なら合格）。
- * 本人の答えは届いたが、ダッシュボードの設問文はまだ記録できない。そのあいだは pending のまま
- * 答えだけを持ち、設問文と確認日をこちらで埋めない。設問文の写真待ちのまま confirmed にもしない。
- * ⚠️ 検査はこの関数に置き、実ファイルと合成の反例の両方へ当てる（第28回の検収: 変異を実ファイルの
- * 「確認待ち」の文面へ当てると、本人の確認を正しく記録したときに当て先が消えて CI が赤になる）。
+ * 本人の確認の記録の整合は、提出ゲートと同じ関数で見る（第28回監査 R28-101。前はこの試験だけの関数で、
+ * 確認済みの側の整合を見ていなかった）。実ファイルの日付はいまの JST の日付で見る。
  */
-function ownerAnswerProblems(c) {
-  const realDay = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) &&
-    new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
-  const oc = c.ownerConfirmation || {};
-  const awaiting = oc.dashboardQuestionTextStatus === 'awaiting_owner_screenshot';
-  const out = [];
-  if (c.confirmationStatus === 'confirmed') {
-    if (awaiting) out.push('設問文の写真待ちのまま confirmed になっている');
-    return out;
-  }
-  if (oc.chosen === null || oc.chosen === undefined) {
-    for (const k of ['answeredOn', 'answerSource', 'dashboardQuestionTextStatus']) {
-      if (oc[k] !== null && oc[k] !== undefined) out.push(`答えが無いのに ${k} が埋まっている`);
-    }
-    return out;
-  }
-  if (!['Yes', 'No'].includes(oc.chosen)) out.push(`本人の答えが Yes / No でない: ${oc.chosen}`);
-  if (!(awaiting && oc.dashboardQuestionText === null && oc.confirmedOn === null)) {
-    out.push('確認待ちなのに設問文か確認日が埋まっている（設問文は本人の画面の写真から起こす）');
-  }
-  if (!realDay(oc.answeredOn)) out.push(`本人が答えた日が実在する日でない: ${oc.answeredOn}`);
-  if (!(typeof oc.answerSource === 'string' && oc.answerSource.trim() && typeof oc.reason === 'string' && oc.reason.trim())) {
-    out.push('答えの出所か理由が空');
-  }
-  return out;
-}
+const ownerAnswerProblems = (c) => ownerRecordProblems(c, dateIn('Asia/Tokyo'));
 
 test('本人の答えだけ先に記録した欄は、設問文の写真待ちと分かる形で確認待ちのまま持つ', () => {
   for (const c of DISCLOSURE.categories.filter((x) => x.requiresOwnerConfirmation)) {
@@ -648,6 +621,21 @@ test('本人の答えだけの欄の検査が、欠けた・作った形を拒�
   assert.ok(ownerAnswerProblems(with_({ answeredOn: '2026-02-30' })).length > 0, '実在しない答えた日を通した');
   assert.ok(ownerAnswerProblems({ ...waiting, ownerConfirmation: { chosen: null, answeredOn: '2026-10-14' } }).length > 0,
     '答えが無いのに答えた日だけある形を通した');
+  /* 確認済みの側（第28回監査 R28-101）: 答えの記録を持つなら、状態の値・日付の前後・出所を見る */
+  const done = with_({ dashboardQuestionText: '（題材）写真から起こした設問文', confirmedOn: '2026-10-14',
+    dashboardQuestionTextStatus: 'transcribed_from_owner_screenshot' }, { confirmationStatus: 'confirmed', answer: 'No' });
+  assert.deepEqual(ownerAnswerProblems(done), [], `正しく確認した形を拒んだ: ${ownerAnswerProblems(done).join(' / ')}`);
+  const doneWith = (oc) => ({ ...done, ownerConfirmation: { ...done.ownerConfirmation, ...oc } });
+  assert.ok(ownerAnswerProblems(doneWith({ dashboardQuestionTextStatus: 'nonsense' })).length > 0,
+    'GXS_MARK.X71 確認済みで設問文の状態が知らない値の形を通した');
+  assert.ok(ownerAnswerProblems(doneWith({ answeredOn: '2026-10-15' })).length > 0,
+    'GXS_MARK.X72 本人が答えた日が確認日より後の形を通した');
+  assert.ok(ownerAnswerProblems(doneWith({ answeredOn: '2099-01-01', confirmedOn: '2099-01-02' })).length > 0,
+    '本人が答えた日が未来の形を通した');
+  assert.ok(ownerAnswerProblems(doneWith({ answerSource: '' })).length > 0, '確認済みで答えの出所が空の形を通した');
+  /* 対照: 答えの記録を持たない確認済み（第27回までの形）は通す */
+  const plain = { ...done, ownerConfirmation: { dashboardQuestionText: '（題材）', confirmedOn: '2026-10-14', chosen: 'No', reason: '（題材）' } };
+  assert.deepEqual(ownerAnswerProblems(plain), [], `答えの記録の無い確認済みを拒んだ: ${ownerAnswerProblems(plain).join(' / ')}`);
 });
 
 /*

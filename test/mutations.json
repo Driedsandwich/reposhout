@@ -2738,8 +2738,8 @@
       "file": "scripts/store-readiness.mjs",
       "test": "test/store-readiness.test.mjs",
       "desc": "本人の引き受けの記録の原文を、定数と照らさない",
-      "find": "s.officialText === WEB_INTENT_OFFICIAL_TEXT[need] && !blank(s.officialSource),",
-      "replace": "!blank(s.officialSource),",
+      "find": "            s.officialText === WEB_INTENT_OFFICIAL_TEXT[need] &&\n            sourceMatches(s.officialSource, WEB_INTENT_OFFICIAL_SOURCE[need]),",
+      "replace": "            sourceMatches(s.officialSource, WEB_INTENT_OFFICIAL_SOURCE[need]),",
       "expectedFailure": {
         "testName": "strict: 本人の引き受けで、原文・論点・決めた人と日・手順・版が欠ければ通らない",
         "diagnosticMarker": "GXS_MARK.X39"
@@ -2807,7 +2807,7 @@
     },
     {
       "id": "X45",
-      "file": "test/docs.test.mjs",
+      "file": "scripts/store-readiness.mjs",
       "test": "test/docs.test.mjs",
       "desc": "本人の答えが Yes / No かを見ない",
       "find": "  if (!['Yes', 'No'].includes(oc.chosen)) out.push(`本人の答えが Yes / No でない: ${oc.chosen}`);",
@@ -2819,11 +2819,11 @@
     },
     {
       "id": "X46",
-      "file": "test/docs.test.mjs",
+      "file": "scripts/store-readiness.mjs",
       "test": "test/docs.test.mjs",
       "desc": "確認待ちのまま設問文・確認日が埋まっていても通す",
-      "find": "  if (!(awaiting && oc.dashboardQuestionText === null && oc.confirmedOn === null)) {",
-      "replace": "  if (!awaiting) {",
+      "find": "  if (!(st === QUESTION_TEXT_STATUS.awaiting && oc.dashboardQuestionText === null && oc.confirmedOn === null)) {",
+      "replace": "  if (!(st === QUESTION_TEXT_STATUS.awaiting)) {",
       "expectedFailure": {
         "testName": "本人の答えだけの欄の検査が、欠けた・作った形を拒む（合成の反例）",
         "diagnosticMarker": "GXS_MARK.X46"
@@ -3115,6 +3115,66 @@
       "expectedFailure": {
         "testName": "後ろにテストの宣言が無くても、範囲を外の文まで延ばさない（R28-107）",
         "diagnosticMarker": "GXS_MARK.X70"
+      }
+    },
+    {
+      "id": "X71",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "確認済みで設問文の状態が知らない値でも通す",
+      "find": "    if (st !== QUESTION_TEXT_STATUS.transcribed) out.push(`確認済みなのに設問文の状態が ${JSON.stringify(st)}（${QUESTION_TEXT_STATUS.transcribed} でない）`);",
+      "replace": "    /* 状態の値を見ない */",
+      "expectedFailure": {
+        "testName": "本人の答えだけの欄の検査が、欠けた・作った形を拒む（合成の反例）",
+        "diagnosticMarker": "GXS_MARK.X71"
+      }
+    },
+    {
+      "id": "X72",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "本人が答えた日が確認日より後でも通す",
+      "find": "    if (dayOk('本人が答えた日', oc.answeredOn) && isRealDate(oc.confirmedOn || '') && oc.answeredOn > oc.confirmedOn) {",
+      "replace": "    if (dayOk('本人が答えた日', oc.answeredOn) && false) {",
+      "expectedFailure": {
+        "testName": "本人の答えだけの欄の検査が、欠けた・作った形を拒む（合成の反例）",
+        "diagnosticMarker": "GXS_MARK.X72"
+      }
+    },
+    {
+      "id": "X73",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "外部の確認に現在の本人の引き受けが残っても通す",
+      "find": "          wi.ownerRiskAcceptance === null || wi.ownerRiskAcceptance === undefined,",
+      "replace": "          true,",
+      "expectedFailure": {
+        "testName": "strict: 外部の確認に、現在の本人の引き受けが混ざれば通らない（R28-102）",
+        "diagnosticMarker": "GXS_MARK.X73"
+      }
+    },
+    {
+      "id": "X74",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "出典が論点ごとの公式のページかを見ない（空でなければ通す）",
+      "find": "  (got === url || (got.startsWith(url) && /^[（(#\\s]/.test(got.slice(url.length))));",
+      "replace": "  got.trim() !== '';",
+      "expectedFailure": {
+        "testName": "strict: 本人の引き受けの出典は、論点ごとの公式のページでなければ通らない（R28-103）",
+        "diagnosticMarker": "GXS_MARK.X74"
+      }
+    },
+    {
+      "id": "X76",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "本人の確認の記録の整合をゲートで見ない",
+      "find": "    if (mustConfirm) {\n      for (const p of ownerRecordProblems(c, today))",
+      "replace": "    if (false) {\n      for (const p of ownerRecordProblems(c, today))",
+      "expectedFailure": {
+        "testName": "strict: 本人の確認の記録の整合を、提出ゲートが見る（R28-101 の配線）",
+        "diagnosticMarker": "GXS_MARK.X76"
       }
     }
   ]

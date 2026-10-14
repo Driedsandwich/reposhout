@@ -246,13 +246,13 @@ function goodOwnerRisk(cand, over = {}, ra = {}) {
         secure_query_transport: {
           resolution: 'unresolved_risk_accepted',
           officialText: "Don't encode data in request headers or query parameters, even over HTTPS.",
-          officialSource: '（題材）troubleshooting'
+          officialSource: 'https://developer.chrome.com/docs/webstore/troubleshooting（題材）'
         },
         redirection_policy: {
           resolution: 'unresolved_risk_accepted',
           officialText: 'Do not post an extension with a single purpose of installing or launching ' +
             'another app, theme, webpage, or extension.',
-          officialSource: '（題材）minimum-functionality'
+          officialSource: 'https://developer.chrome.com/docs/webstore/program-policies/minimum-functionality'
         }
       },
       fallbackPlan: 'store/WEB_INTENT_FALLBACK_PLAN.md',
@@ -1109,7 +1109,9 @@ test('Web Intent の正本の状態ごとの検査が、正しい遷移を通し
   assert.ok(webIntentFileProblems({ ...base, status: 'pending', ticket: 'X-1' }).length > 0,
     'pending なのに欄が埋まった形を通した');
   /* 正しく確認を記録した形は通る */
-  const done = { ...base, ...goodWebIntent(cand) };
+  /* 外部の確認へ移るとき、過去の本人の引き受けは history へ移す（第28回監査 R28-102） */
+  const done = { ...base, ...goodWebIntent(cand), ownerRiskAcceptance: null,
+    history: base.ownerRiskAcceptance ? [{ ...base.ownerRiskAcceptance, supersededBy: 'confirmed_allowed' }] : [] };
   assert.deepEqual(webIntentFileProblems(done), [],
     `GXS_MARK.X08 正しく記録した形を拒んだ: ${webIntentFileProblems(done).join(' / ')}`);
   /* 確認済みと書いて証跡が欠けた形は拒む */
@@ -1202,6 +1204,43 @@ test('strict: 本人の引き受けで、原文・論点・決めた人と日・
   /* 差し戻されたときの手順・この版 */
   assert.ok(fails({}, { fallbackPlan: '  ' }), 'GXS_MARK.X43 差し戻されたときの手順を指さない引き受けを通した');
   assert.ok(fails({ appliesToVersion: '9.9.9' }, {}), 'GXS_MARK.X44 別の版の引き受けを通した');
+});
+
+test('strict: 外部の確認に、現在の本人の引き受けが混ざれば通らない（R28-102）', () => {
+  /* 逆向きの混ざり。過去の引き受けを history へ移した形は通す */
+  const cand = readyCandidate();
+  const ra = goodOwnerRisk(cand).ownerRiskAcceptance;
+  const mixed = validateStoreReadiness(strictInputs({ webIntentDecision: goodWebIntent(cand, { ownerRiskAcceptance: ra }) }));
+  assert.ok(webIntentProblems(mixed).some((p) => p.includes('現在の本人の引き受けが混ざっていない')),
+    `GXS_MARK.X73 外部の確認に現在の本人の引き受けが残った形を通した: ${webIntentProblems(mixed).join(' / ')}`);
+  const moved = validateStoreReadiness(strictInputs({ webIntentDecision:
+    goodWebIntent(cand, { ownerRiskAcceptance: null, history: [{ ...ra, supersededBy: 'confirmed_allowed' }] }) }));
+  assert.deepEqual(webIntentProblems(moved), [], `過去の引き受けを history へ移した形を拒んだ: ${webIntentProblems(moved).join(' / ')}`);
+});
+
+test('strict: 本人の引き受けの出典は、論点ごとの公式のページでなければ通らない（R28-103）', () => {
+  const cand = readyCandidate();
+  const sc = goodOwnerRisk(cand).ownerRiskAcceptance.scopes;
+  const fails = (scopes) => webIntentProblems(validateStoreReadiness(strictInputs({
+    webIntentDecision: goodOwnerRisk(cand, {}, { scopes }) }))).length > 0;
+  assert.ok(fails({ ...sc, secure_query_transport: { ...sc.secure_query_transport, officialSource: 'https://example.invalid/no-such-source' } }),
+    'GXS_MARK.X74 無関係な URL の出典を通した');
+  assert.ok(fails({ secure_query_transport: { ...sc.secure_query_transport, officialSource: sc.redirection_policy.officialSource },
+    redirection_policy: { ...sc.redirection_policy, officialSource: sc.secure_query_transport.officialSource } }),
+    '論点の間で出典を取り違えた記録を通した');
+  assert.ok(fails({ ...sc, redirection_policy: { ...sc.redirection_policy, officialSource: '' } }), '空の出典を通した');
+  assert.ok(fails({ ...sc, secure_query_transport: { ...sc.secure_query_transport,
+    officialSource: 'https://developer.chrome.com/docs/webstore/troubleshooting-evil' } }), '公式の URL に続けた別のページを通した');
+});
+
+test('strict: 本人の確認の記録の整合を、提出ゲートが見る（R28-101 の配線）', () => {
+  /* 同じ関数を文書の試験も使う。ここではゲートが呼んでいることを見る */
+  const d = confirmedDisclosure();
+  const c = d.categories.find((x) => x.id === 'user_activity');
+  Object.assign(c.ownerConfirmation, { dashboardQuestionTextStatus: 'nonsense', answeredOn: '2026-08-07', answerSource: '（題材）' });
+  const r = validateStoreReadiness(strictInputs({ disclosure: d }));
+  assert.ok(r.problems.some((p) => p.includes('User activity の本人の記録')),
+    `GXS_MARK.X76 確認済みの記録の整合をゲートが見ていない: ${r.problems.join(' / ')}`);
 });
 
 /* ============================================================

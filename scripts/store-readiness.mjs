@@ -68,6 +68,13 @@ const REQUIRED_WEB_INTENT_SCOPES = ['secure_query_transport', 'redirection_polic
 const WEB_INTENT_DECIDED_STATUSES = ['confirmed_allowed', 'owner_accepted_risk'];
 const WEB_INTENT_EXTERNAL_FIELDS = ['askedOn', 'question', 'responseOn', 'response', 'ticket',
   'responseCoversBoth'];
+/* 論点ごとの公式の出典（第28回監査 R28-103。空でないことだけでなく、どのページかを照らす） */
+const WEB_INTENT_OFFICIAL_SOURCE = {
+  secure_query_transport: 'https://developer.chrome.com/docs/webstore/troubleshooting',
+  redirection_policy: 'https://developer.chrome.com/docs/webstore/program-policies/minimum-functionality'
+};
+const sourceMatches = (got, url) => typeof got === 'string' &&
+  (got === url || (got.startsWith(url) && /^[（(#\s]/.test(got.slice(url.length))));
 const WEB_INTENT_OFFICIAL_TEXT = {
   secure_query_transport: "Don't encode data in request headers or query parameters, even over HTTPS.",
   redirection_policy: 'Do not post an extension with a single purpose of installing or launching ' +
@@ -89,6 +96,46 @@ function isRealDate(s) {
   if (!ISO_DATE.test(s)) return false;
   const d = new Date(`${s}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
+/*
+ * 本人の確認が要る欄の、記録どうしの整合（第28回監査 R28-101）。**提出ゲートと文書の試験で同じ物を使う。**
+ * 状態は3つだけ: 答えが無い（pending）・答えだけ先に届いた（pending＋chosen・設問文は写真待ち）・
+ * 確認済み（confirmed）。答えの記録（answeredOn・answerSource・dashboardQuestionTextStatus）を持つなら、
+ * 状態に合った値か・日付の前後（答えた日 ≦ 確認日 ≦ 今日）・出所が空でないかを見る。問題を文で返す。
+ */
+export const QUESTION_TEXT_STATUS = { awaiting: 'awaiting_owner_screenshot', transcribed: 'transcribed_from_owner_screenshot' };
+export function ownerRecordProblems(c, today) {
+  const oc = (c && c.ownerConfirmation) || {};
+  const out = [];
+  const st = oc.dashboardQuestionTextStatus;
+  const has = (k) => oc[k] !== null && oc[k] !== undefined;
+  const hasAnswerRecord = ['answeredOn', 'answerSource', 'dashboardQuestionTextStatus'].some(has);
+  const dayOk = (label, d) => {
+    if (!isRealDate(d || '')) { out.push(`${label}が YYYY-MM-DD の実在する日でない: ${d}`); return false; }
+    if (isRealDate(today || '') && d > today) { out.push(`${label} ${d} が今日 ${today} より後`); return false; }
+    return true;
+  };
+  if (c.confirmationStatus === 'confirmed') {
+    if (!hasAnswerRecord) return out;
+    if (st !== QUESTION_TEXT_STATUS.transcribed) out.push(`確認済みなのに設問文の状態が ${JSON.stringify(st)}（${QUESTION_TEXT_STATUS.transcribed} でない）`);
+    if (dayOk('本人が答えた日', oc.answeredOn) && isRealDate(oc.confirmedOn || '') && oc.answeredOn > oc.confirmedOn) {
+      out.push(`本人が答えた日 ${oc.answeredOn} が確認日 ${oc.confirmedOn} より後`);
+    }
+    if (blank(oc.answerSource)) out.push('答えの出所が空');
+    return out;
+  }
+  if (!has('chosen')) {
+    if (hasAnswerRecord) out.push('本人の答えが無いのに、答えの記録が埋まっている');
+    return out;
+  }
+  if (!['Yes', 'No'].includes(oc.chosen)) out.push(`本人の答えが Yes / No でない: ${oc.chosen}`);
+  if (!(st === QUESTION_TEXT_STATUS.awaiting && oc.dashboardQuestionText === null && oc.confirmedOn === null)) {
+    out.push('確認待ちなのに設問文か確認日が埋まっている、または設問文の状態が写真待ちでない（設問文は本人の画面の写真から起こす）');
+  }
+  dayOk('本人が答えた日', oc.answeredOn);
+  if (blank(oc.answerSource) || blank(oc.reason)) out.push('答えの出所か理由が空');
+  return out;
 }
 
 /**
@@ -180,6 +227,10 @@ export function validateStoreReadiness(input) {
   for (const c of disclosure.categories) {
     const at = `申告 ${c.label}`;
     const mustConfirm = OWNER_CONFIRMATION_IDS.includes(c.id);
+    /* 本人の記録どうしの整合（第28回監査 R28-101）。状態の判定より先に、どの状態でも見る */
+    if (mustConfirm) {
+      for (const p of ownerRecordProblems(c, today)) problems.push(`${at} の本人の記録 — ${p}`);
+    }
     check(`${at} の確認の要否が正本の定数と一致`, (c.requiresOwnerConfirmation === true) === mustConfirm,
       `requiresOwnerConfirmation=${JSON.stringify(c.requiresOwnerConfirmation)}（本人の確認が要る欄: ${mustConfirm}）`);
     if (c.confirmationStatus === 'not_required' && mustConfirm) {
@@ -620,9 +671,10 @@ export function validateStoreReadiness(input) {
           const s = scopes[need] || {};
           check(`Web Intent: ${need} を未解決のまま引き受け、公式の原文を記録している`,
             s.resolution === 'unresolved_risk_accepted' &&
-            s.officialText === WEB_INTENT_OFFICIAL_TEXT[need] && !blank(s.officialSource),
+            s.officialText === WEB_INTENT_OFFICIAL_TEXT[need] &&
+            sourceMatches(s.officialSource, WEB_INTENT_OFFICIAL_SOURCE[need]),
             `resolution=${s.resolution} / 原文が定数と${s.officialText === WEB_INTENT_OFFICIAL_TEXT[need] ? '一致' : '違う'}` +
-            ` / 出典=${blank(s.officialSource) ? '空欄' : 'あり'}`);
+            ` / 出典が${sourceMatches(s.officialSource, WEB_INTENT_OFFICIAL_SOURCE[need]) ? '公式のページ' : `違う（${s.officialSource}）`}`);
         }
         check('Web Intent: 差し戻されたときの作り替えの手順を指している',
           !blank(ra.fallbackPlan), '空欄');
@@ -632,6 +684,14 @@ export function validateStoreReadiness(input) {
       }
       /* 回答があると言うなら、いつ・何を聞いて・何と返ってきたかが要る */
       if (wi.status === 'confirmed_allowed') {
+        /*
+         * 逆向きの混ざりも拒む（第28回監査 R28-102）。外部の確認に移ったのに、本人の引き受け
+         *（「外部の確認は無い」）が**現在の判断**として残ると、1つの判断に2つの事実が同居する。
+         * 過去の引き受けを残すなら history へ移す（消して事実を失わない）。
+         */
+        check('Web Intent: 外部の確認に、現在の本人の引き受けが混ざっていない',
+          wi.ownerRiskAcceptance === null || wi.ownerRiskAcceptance === undefined,
+          '本人の引き受け（ownerRiskAcceptance）が現在の判断として残っている。過去の記録は history へ移す');
         check('Web Intent の判断に、聞いた日と設問がある',
           isRealDate(wi.askedOn || '') && !blank(wi.question),
           `askedOn=${wi.askedOn} / question=${blank(wi.question) ? '空欄' : 'あり'}`);
