@@ -394,10 +394,35 @@ function ciJobs(wf) {
   for (const m of body.slice(start).matchAll(re)) {
     const block = m[2];
     const head = block.split('\n    steps:\n')[0];
-    const steps = (block.split('\n    steps:\n')[1] || '').split(/\n {6}- /).slice(1);
-    jobs[m[1]] = { head, steps };
+    const items = (block.split('\n    steps:\n')[1] || '').split(/\n(?= {6}- )/).filter((x) => /^ {6}- /.test(x));
+    jobs[m[1]] = { head, steps: items.map(stepKeys) };
   }
   return jobs;
+}
+
+/*
+ * ステップ1つをキーの表に読む（第28回監査 R28-005）。第27回はステップを文字列のまま扱い、
+ * `if` と `continue-on-error` を「改行＋8字下げ」の形でしか探さなかったので、**ステップの先頭のキー**
+ *（`- if: false`）を見落とした。検証器の名前もステップ全体から探していたので、`name` にだけ
+ * 残して `run` を差し替えても通った。先頭のキーも含めて読み、値が次の行へ続くもの（`run: |` など）は
+ * 深い字下げの行を値に入れる。**読めない形（流れ形式・字下げの崩れ）は unreadable に入れて拒む。**
+ */
+function stepKeys(item) {
+  const lines = item.split('\n');
+  const keys = {};
+  const unreadable = [];
+  let last = null;
+  const first = /^ {6}- (.*)$/.exec(lines[0]);
+  const rows = [`        ${first ? first[1] : ''}`, ...lines.slice(1)];
+  for (const l of rows) {
+    if (!l.trim()) continue;
+    const ind = l.length - l.trimStart().length;
+    const kv = /^([A-Za-z][A-Za-z0-9_-]*):(?:\s+(.*))?$/.exec(l.trim());
+    if (ind === 8 && kv) { last = kv[1]; keys[last] = (kv[2] || '').trim(); continue; }
+    if (ind > 8 && last) { keys[last] += `\n${l.trim()}`; continue; }
+    unreadable.push(l.trim());
+  }
+  return { keys, unreadable };
 }
 
 /* 必須の検証が「実行される構造」になっているか。問題を文で返す（空なら合格） */
@@ -410,18 +435,28 @@ function ciStructureProblems(wf) {
     if (!jobs[j]) { out.push(`ジョブ ${j} が無い`); continue; }
     if (/\n {4}if:/.test(`\n${jobs[j].head}`)) out.push(`ジョブ ${j} に if: がある（飛ばせる）`);
     if (/\n {4}continue-on-error:/.test(`\n${jobs[j].head}`)) out.push(`ジョブ ${j} に continue-on-error がある`);
+    for (const st of jobs[j].steps) {
+      if (st.unreadable.length) out.push(`ジョブ ${j} に読めない形のステップがある: ${st.unreadable[0]}`);
+    }
   }
   const pc = needs('package-candidate');
   if (!pc || ['test', 'windows', 'mutation-coverage'].some((x) => !pc.includes(x))) out.push(`package-candidate の needs が足りない: ${JSON.stringify(pc)}`);
   const mc = needs('mutation-coverage');
   if (!mc || !mc.includes('mutations')) out.push(`mutation-coverage の needs が足りない: ${JSON.stringify(mc)}`);
+  /* 束はちょうど 1〜6 を1回ずつ（重なり・抜け・余分を拒む） */
+  const shardList = /\n {8}shard:\s*\[([^\]]*)\]/.exec(`\n${(jobs.mutations || {}).head || ''}`);
+  const shards = shardList ? shardList[1].split(',').map((x) => x.trim()) : [];
+  if (JSON.stringify([...shards].sort()) !== JSON.stringify(['1', '2', '3', '4', '5', '6'])) {
+    out.push(`変異の束が 1〜6 を1回ずつになっていない: ${JSON.stringify(shards)}`);
+  }
   const mustRun = [['mutations', 'verify-mutation-receipt.mjs'], ['mutations', 'test:mutations'],
     ['mutation-coverage', 'verify-mutation-coverage.mjs']];
   for (const [j, needle] of mustRun) {
-    const step = jobs[j] && jobs[j].steps.find((st) => st.includes(needle));
+    /* 検証器は **run の中**にあること（name にだけ残っていても走らない） */
+    const step = jobs[j] && jobs[j].steps.find((st) => (st.keys.run || '').includes(needle));
     if (!step) { out.push(`${j} に ${needle} を走らせるステップが無い`); continue; }
-    if (/\n {8}if:/.test(`\n${step}`)) out.push(`${needle} のステップに if: がある（飛ばせる）`);
-    if (/\n {8}continue-on-error:/.test(`\n${step}`)) out.push(`${needle} のステップに continue-on-error がある`);
+    if ('if' in step.keys) out.push(`${needle} のステップに if: がある（飛ばせる）`);
+    if ('continue-on-error' in step.keys) out.push(`${needle} のステップに continue-on-error がある`);
   }
   return out;
 }
@@ -445,6 +480,31 @@ test('CI の構造が、必須の検証を飛ばせない形になっている�
     assert.notEqual(w, wf, `題材が当たっていない（ci.yml の書き方が変わった？）: ${name}`);
     assert.ok(ciStructureProblems(w).length > 0, `読み手が壊れた構造を見逃した: ${name}`);
   }
+});
+
+test('CI の構造の読み手が、キーの順・名前だけの検証器・束の重なりを見逃さない（R28-005）', () => {
+  /*
+   * 第28回監査 R28-005。`if` と `continue-on-error` をステップの先頭のキーに置く、検証器の名前を
+   * name にだけ残して run を差し替える、の3つで、第27回の読み手は問題 0 件を返した（監査で実測）。
+   */
+  const wf = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8').replace(/\r\n/g, '\n');
+  const STEP = '      - name: 全部を1回ずつ覆えているか数え直す\n';
+  const bad = (w, name) => {
+    assert.notEqual(w, wf, `題材が当たっていない（ci.yml の書き方が変わった？）: ${name}`);
+    return ciStructureProblems(w);
+  };
+  assert.ok(bad(wf.replace(STEP, '      - if: false\n        name: 全部を1回ずつ覆えているか数え直す\n'), '先頭の if').length > 0,
+    'GXS_MARK.X56 ステップの先頭のキーの if: false を見逃した');
+  assert.ok(bad(wf.replace(STEP, '      - continue-on-error: true\n        name: 全部を1回ずつ覆えているか数え直す\n'), '先頭の continue-on-error').length > 0,
+    'ステップの先頭のキーの continue-on-error を見逃した');
+  const onlyName = wf.replace(/(\n {6}- name: 全部を1回ずつ覆えているか数え直す\n {8}run: )[^\n]*(\n {10}[^\n]*)*/,
+    '$1echo no-verification # verify-mutation-coverage.mjs は名前だけ');
+  assert.ok(bad(onlyName.replace('全部を1回ずつ覆えているか数え直す', '全部を1回ずつ覆えているか数え直す（verify-mutation-coverage.mjs）'), '名前だけ').length > 0,
+    'GXS_MARK.X57 検証器が name にだけ残り run が別の命令でも見逃した');
+  assert.ok(bad(wf.replace('shard: [1, 2, 3, 4, 5, 6]', 'shard: [1, 2, 3, 4, 5, 5]'), '束の重なり').length > 0,
+    'GXS_MARK.X58 変異の束の重なり（6 が抜けて 5 が2回）を見逃した');
+  assert.ok(bad(wf.replace('      - name: 全部を1回ずつ覆えているか数え直す\n', '      - {name: 流れ形式}\n      - name: 全部を1回ずつ覆えているか数え直す\n'), '流れ形式').length > 0,
+    '読めない形（流れ形式のステップ）を読み落としたまま合格にした');
 });
 
 test('CIが、変異の証跡を外から検証している（R25-003）', () => {
