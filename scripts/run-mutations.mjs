@@ -1178,7 +1178,11 @@ for (const m of mutations) {
 if (currentMutationId !== null && !fatal) {
   lastCompletedMutationId = currentMutationId;
   currentMutationId = null;
-  saveRunning();
+  /*
+   * ⚠️ 終わりの進み具合を書けなかったら、後の1枚が書けても成功にしない（第28回監査 R28-004）。
+   * 前は戻り値を見ていなかったので、ここで失敗しても最後の1枚が書ければ complete・証拠に使える、になった。
+   */
+  if (!saveRunning()) fatal = 'progress_save_failed';
 }
 
 /* 作業ツリーが元に戻っているか（第23回監査 R23-002 §6.6） */

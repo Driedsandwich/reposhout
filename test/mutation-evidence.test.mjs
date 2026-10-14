@@ -10,7 +10,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, readFileSync, existsSync, readdirSync, mkdirSync, rmSync, chmodSync, mkdtempSync,
+import { writeFileSync, readFileSync, existsSync, readdirSync, mkdirSync, rmSync, mkdtempSync,
   symlinkSync, linkSync, lstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
@@ -20,6 +20,8 @@ import { ROOT } from './helpers/load.mjs';
 import { GUARD, WANT, makeFixture, mut, runRunner, of, outcomeOf, kindOf }
   from './helpers/mutation-fixture.mjs';
 import { testSpanText } from '../scripts/lib/test-decls.mjs';
+/* 証跡の書き込みに障害を差し込む前置き（第28回監査 R28-001 / R28-004 / R28-011） */
+const FAULT = pathToFileURL(join(ROOT, 'test/helpers/receipt-fault.mjs')).href;
 
 /* ============================================================
  * ⑤ 証拠として使える形か（第25回監査 R25-002 / R25-003）
@@ -658,64 +660,59 @@ test('途中で証跡を書けなくなったら、次の変異を当てずに�
   /*
    * 第27回監査 R27-105。2件目からは進み具合の書き込みの成否を見ていなかったので、
    * 置き場が一時的に書けなくなっても次の変異を当て、置き場が戻ると complete・証拠に使える、で終わった。
-   * 題材: 1件目の試験が（変異したときだけ）置き場を読み取り専用にし、2件目の試験が戻す。
-   * 直っていれば2件目は当たらないので、置き場は戻らず、成功の証跡は1枚も残らない。
+   * ⚠️ 第28回監査 R28-011: 前は読み取り専用のディレクトリで置き場を塞いでいたので、それを作れない環境
+   *（Windows・管理者権限）では何も測らずに通っていた（ログに SKIP と書くだけで pass に数えた）。
+   * 書き込みに障害を差し込む前置きで、変異の途中の書き込みだけを失敗させる（どの環境でも測る）。
    */
-  const probe = mkdtempSync(join(tmpdir(), 'reposhout-ro-'));
-  chmodSync(probe, 0o555);
-  let canBlock = true;
-  try { writeFileSync(join(probe, 'x'), 'x'); canBlock = false; } catch (e) { /* 書けない＝題材を作れる */ }
-  chmodSync(probe, 0o755);
-  if (!canBlock) {
-    /* Windows や管理者権限では読み取り専用にしても書ける。作れなかったことを合格に数えない */
-    console.log('# SKIP 読み取り専用のディレクトリを作れない環境（書き込みが通った）');
-    return;
-  }
-  const out = 'out';
   const fx = makeFixture([
-    mut('Q7', { test: 'test/block.test.mjs',
-      expectedFailure: { testName: '変異したときだけ置き場を塞ぐ', diagnosticMarker: 'GXS_MARK.BLOCK' } }),
-    mut('Q8', { find: 'export const other = 2;', replace: 'export const other = 98;', test: 'test/unblock.test.mjs',
-      expectedFailure: { testName: '変異したときだけ置き場を戻す', diagnosticMarker: 'GXS_MARK.UNBLOCK' } })
-  ], {
-    'test/block.test.mjs': `
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { chmodSync, readFileSync } from 'node:fs';
-const mutated = readFileSync(new URL('../mod.mjs', import.meta.url), 'utf8').includes('value = 99');
-test('変異したときだけ置き場を塞ぐ', () => {
-  if (!mutated) return;
-  chmodSync(new URL('../${out}', import.meta.url), 0o555);
-  assert.ok(false, 'GXS_MARK.BLOCK: わざと落とす');
-});
-`,
-    'test/unblock.test.mjs': `
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { chmodSync, readFileSync } from 'node:fs';
-const mutated = readFileSync(new URL('../mod.mjs', import.meta.url), 'utf8').includes('other = 98');
-test('変異したときだけ置き場を戻す', () => {
-  if (!mutated) return;
-  chmodSync(new URL('../${out}', import.meta.url), 0o755);
-  assert.ok(false, 'GXS_MARK.UNBLOCK: わざと落とす');
-});
-`
-  });
-  mkdirSync(join(fx.dir, out));
-  let r;
-  try {
-    /* 汚れていない木で走らせる（--allow-dirty だと、直す前でも「証拠に使える」にならず差が出ない） */
-    r = runRunner(fx.dir, { receipt: `${out}/receipt.json`, allowDirty: false });
-  } finally {
-    chmodSync(join(fx.dir, out), 0o755);
-  }
+    mut('Q7'),
+    mut('Q8', { find: 'export const other = 2;', replace: 'export const other = 98;',
+      expectedFailure: { testName: '別の検査: other は 2' } })
+  ]);
+  const log = join(fx.outer, 'fault-between.log');
+  const r = runRunner(fx.dir, { receipt: 'out-receipt.json', allowDirty: false, nodeArgs: ['--import', FAULT],
+    env: { RS_FAULT: 'fail:between', RS_FAULT_LOG: log } });
+  assert.match(existsSync(log) ? readFileSync(log, 'utf8') : '', /failed between/,
+    `題材が成立していない（変異の途中の書き込みを失敗させられていない）:\n${r.stdout.slice(-300)}`);
   const mod = readFileSync(join(fx.dir, 'mod.mjs'), 'utf8');
-  assert.ok(mod.includes('export const other = 2;'), '2件目の変異が戻っていない');
+  assert.ok(mod.includes('export const value = 1;') && mod.includes('export const other = 2;'), '変異が戻っていない');
   assert.notEqual(r.exitCode, 0, `GXS_MARK.X23 途中で書けなかったのに exit 0:\n${r.stdout.slice(-300)}`);
   assert.ok(!(r.receipt && r.receipt.state === 'complete' && r.receipt.evidenceEligible === true),
     '途中で書けなかったのに、証拠に使える complete の証跡に化けた');
-  assert.match(r.stdout + '', /Q8 以降は当てずに止まる|途中で止まった|証跡を書けなかった/,
-    `止まった理由を言っていない:\n${r.stdout.slice(-400)}`);
+  assert.deepEqual((r.receipt && r.receipt.results || []).map((x) => x.id), [],
+    '進み具合を書けなかったのに、変異を当てた');
+});
+
+test('証跡の保存の失敗は、置き場が戻っても成功の証跡に化けない（初回・終端・最後）（R28-004）', () => {
+  /*
+   * 第28回監査 R28-004。変異の途中の書き込み（上の R27-105）は直したが、終わりの「走っている」の
+   * 書き込みは戻り値を見ていなかった。失敗しても最後の1枚が書ければ complete・証拠に使える、になった。
+   * 書き込みの種類ごとに1回ずつ失敗させ、ほかの書き込みは通す（＝置き場が戻った状態）。
+   */
+  const runWith = (kind) => {
+    const fx = makeFixture([mut('Q14')]);
+    const log = join(fx.outer, `fault-${kind}.log`);
+    const r = runRunner(fx.dir, { receipt: 'out-receipt.json', allowDirty: false, nodeArgs: ['--import', FAULT],
+      env: { RS_FAULT: `fail:${kind}`, RS_FAULT_LOG: log } });
+    assert.match(existsSync(log) ? readFileSync(log, 'utf8') : '', new RegExp(`failed ${kind}`),
+      `題材が成立していない（${kind} の書き込みを失敗させられていない）:\n${r.stdout.slice(-300)}`);
+    return { ...r, eligible: Boolean(r.receipt && r.receipt.state === 'complete' && r.receipt.evidenceEligible === true) };
+  };
+  const initial = runWith('initial');
+  assert.ok(initial.exitCode !== 0 && !initial.eligible, '初回の書き込みに失敗したのに成功の証跡になった');
+  const terminal = runWith('terminal');
+  assert.ok(!terminal.eligible,
+    `GXS_MARK.X54 終わりの進み具合を書けなかったのに、証拠に使える complete の証跡に化けた（state=${terminal.receipt && terminal.receipt.state}）`);
+  assert.notEqual(terminal.exitCode, 0, '終わりの進み具合を書けなかったのに exit 0');
+  const final = runWith('final');
+  assert.notEqual(final.exitCode, 0, `GXS_MARK.X55 最後の1枚を書けなかったのに exit 0:\n${final.stdout.slice(-300)}`);
+  assert.ok(!final.eligible, '最後の1枚を書けなかったのに、成功の証跡が残った');
+  /* 対照: 何も失敗させなければ、証拠に使える complete になる（この題材は何でも落とすわけではない） */
+  const fx = makeFixture([mut('Q15')]);
+  const ok = runRunner(fx.dir, { receipt: 'out-receipt.json', allowDirty: false, nodeArgs: ['--import', FAULT],
+    env: { RS_FAULT: '' } });
+  assert.ok(ok.exitCode === 0 && ok.receipt && ok.receipt.state === 'complete' && ok.receipt.evidenceEligible === true,
+    `対照が成立していない（前置きだけで成功しなくなる）:\n${ok.stdout.slice(-300)}`);
 });
 
 test('戻せなかったら次の変異へ進まず、その変異を「終えた」と書かない（R27-105）', () => {
@@ -805,7 +802,6 @@ test('証跡の出力先が git の管理先なら、1バイトも書かずに�
   assert.equal(ok.exitCode, 0, `対照が成立していない:\n${ok.stdout.slice(-300)}`);
 });
 
-const FAULT = pathToFileURL(join(ROOT, 'test/helpers/receipt-fault.mjs')).href;
 const canLink = (kind) => {
   const d = mkdtempSync(join(tmpdir(), 'reposhout-link-'));
   try {
