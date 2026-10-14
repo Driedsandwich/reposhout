@@ -2955,7 +2955,7 @@
       "test": "test/manifest.test.mjs",
       "desc": "検証器を run の中でなくステップ全体から探す（name にだけ残っても通す）",
       "find": "    const step = steps.find((st) => runLines(st.keys.run).some((l) => l === cmd || l.startsWith(`${cmd} `)));",
-      "replace": "    const step = steps.find((st) => JSON.stringify(st.keys).includes(cmd));",
+      "replace": "    const step = steps.find((st) => JSON.stringify(st.keys).includes(cmd.split(' ').pop()));",
       "expectedFailure": {
         "testName": "CI の構造の読み手が、キーの順・名前だけの検証器・束の重なりを見逃さない（R28-005）",
         "diagnosticMarker": "GXS_MARK.X57"

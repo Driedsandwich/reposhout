@@ -535,7 +535,9 @@ test('CI の構造の読み手が、実行しない文字列・握りつぶし�
   assert.deepEqual(ciStructureProblems(wf), [], `いまの ci.yml を拒んだ: ${ciStructureProblems(wf).join(' / ')}`);
   assert.ok(bad(wf.replace(COV, '          echo node scripts/verify-mutation-coverage.mjs \\\n'), 'echo').length > 0,
     'GXS_MARK.X77 検証器を echo で表示するだけの run を、実行と見なした');
-  assert.ok(bad(wf.replace(COV, '          if false; then node scripts/verify-mutation-coverage.mjs \\\n'), 'if 包み').length > 0,
+  /* コマンドは行頭に残す（「行頭に無い」の検査が先に止めると、この検査を外しても落ちない） */
+  const ARGS = '            receipts/*/mutation-receipt.json --expected-commit "$GITHUB_SHA" --spec test/mutations.json\n';
+  assert.ok(bad(wf.replace(COV, `          if false; then\n${COV}`).replace(ARGS, `${ARGS}          fi\n`), 'if 包み').length > 0,
     'GXS_MARK.X78 シェルの if で実行しない run を見逃した');
   assert.ok(bad(wf.replace('        run: node scripts/verify-mutation-receipt.mjs mutation-receipt.json --expected-commit "$GITHUB_SHA" --spec test/mutations.json',
     '        run: node scripts/verify-mutation-receipt.mjs mutation-receipt.json --expected-commit "$GITHUB_SHA" --spec test/mutations.json || true'), '|| true').length > 0,

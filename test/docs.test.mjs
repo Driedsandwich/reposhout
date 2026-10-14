@@ -647,7 +647,7 @@ test('本人の答えだけの欄の検査が、欠けた・作った形を拒�
     'GXS_MARK.X46 確認待ちのまま設問文をこちらで埋めた形を通した');
   assert.ok(ownerAnswerProblems(with_({ confirmedOn: '2026-10-14' })).length > 0, '確認待ちのまま確認日を埋めた形を通した');
   assert.ok(ownerAnswerProblems(with_({}, { confirmationStatus: 'confirmed', answer: 'No' })).length > 0,
-    '設問文の写真待ちのまま confirmed にした形を通した');
+    'GXS_MARK.X71 設問文の写真待ちのまま confirmed にした形を通した');
   assert.ok(ownerAnswerProblems(with_({ answeredOn: '2026-02-30' })).length > 0, '実在しない答えた日を通した');
   assert.ok(ownerAnswerProblems({ ...waiting, ownerConfirmation: { chosen: null, answeredOn: '2026-10-14' } }).length > 0,
     '答えが無いのに答えた日だけある形を通した');
@@ -657,8 +657,9 @@ test('本人の答えだけの欄の検査が、欠けた・作った形を拒�
   assert.deepEqual(ownerAnswerProblems(done), [], `正しく確認した形を拒んだ: ${ownerAnswerProblems(done).join(' / ')}`);
   const doneWith = (oc) => ({ ...done, ownerConfirmation: { ...done.ownerConfirmation, ...oc } });
   assert.ok(ownerAnswerProblems(doneWith({ dashboardQuestionTextStatus: 'nonsense' })).length > 0,
-    'GXS_MARK.X71 確認済みで設問文の状態が知らない値の形を通した');
-  assert.ok(ownerAnswerProblems(doneWith({ answeredOn: '2026-10-15' })).length > 0,
+    '確認済みで設問文の状態が知らない値の形を通した');
+  /* 日付はどちらも過去にする（未来の検査が先に止めると、この検査を外しても落ちない） */
+  assert.ok(ownerAnswerProblems(doneWith({ answeredOn: '2026-10-12', confirmedOn: '2026-10-11' })).length > 0,
     'GXS_MARK.X72 本人が答えた日が確認日より後の形を通した');
   assert.ok(ownerAnswerProblems(doneWith({ answeredOn: '2099-01-01', confirmedOn: '2099-01-02' })).length > 0,
     '本人が答えた日が未来の形を通した');
