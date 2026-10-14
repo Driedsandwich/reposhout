@@ -81,13 +81,65 @@ test('読めない申告ファイルは、理由を出して止まる', () => {
   assert.match(bad.err, /申告が読めません/);
 });
 
-test('preflight は、いまの状態では本人確認待ちで1になる', () => {
+test('preflight の終了コードは、いまの実ファイルの確認待ちの数で決まる', () => {
+  /*
+   * 第28回監査 R28-006。前は「いまは本人の確認待ちなので exit 1」を決め打ちしていたので、
+   * 本人が正しく確認を記録すると、この試験が落ちて CI が赤になり、提出ゲートが通らなくなった
+   *（第27回 R27-007 と同じ形が、このファイルに残っていた）。期待は実ファイルの状態から決める。
+   */
+  const disc = JSON.parse(readFileSync(join(ROOT, 'store/DATA_DISCLOSURE.json'), 'utf8'));
+  const pending = disc.categories.filter((c) => c.confirmationStatus === 'pending').length;
   const r = run([]);
-  assert.equal(r.code, 1, r.out);
-  assert.match(r.out, /本人の確認がまだ/);
-  assert.match(r.out, /ここが埋まるまで提出しないでください/);
+  assert.equal(r.code, pending > 0 ? 1 : 0, `確認待ち ${pending} 件なのに exit ${r.code}:\n${r.out.slice(-600)}`);
+  if (pending > 0) {
+    assert.match(r.out, /本人の確認がまだ/);
+    assert.match(r.out, /ここが埋まるまで提出しないでください/);
+  }
   /* preflight を「最終関門」と読ませない文言が、成功時に出る側にあること */
   assert.match(readFileSync(CLI, 'utf8'), /これは「提出してよい」という意味ではありません（preflight）/);
+});
+
+/*
+ * 本人の欄の状態ごとに、preflight の CLI を実際に通す（第28回監査 R28-006）。
+ * いまの作業ツリーを写した使い捨ての置き場に、**題材として**欄を書く（本物の正本には書かない）。
+ */
+function preflightWith(edit) {
+  const dir = mkdtempSync(join(tmpdir(), 'reposhout-cli-pre-'));
+  const files = execFileSync('git', ['ls-files', '-co', '--exclude-standard', '-z'],
+    { cwd: ROOT, encoding: 'utf8' }).split('\0').filter(Boolean);
+  for (const f of files) {
+    mkdirSync(dirname(join(dir, f)), { recursive: true });
+    try { copyFileSync(join(ROOT, f), join(dir, f)); } catch (e) { /* 消えたファイルは写さない */ }
+  }
+  const p = join(dir, 'store/DATA_DISCLOSURE.json');
+  const d = JSON.parse(readFileSync(p, 'utf8'));
+  for (const c of d.categories.filter((x) => x.requiresOwnerConfirmation)) edit(c);
+  writeFileSync(p, JSON.stringify(d, null, 2) + '\n');
+  const r = spawnSync(process.execPath, [join(dir, 'scripts/verify-store-readiness.mjs'), '--today', '2026-10-14'],
+    { cwd: dir, encoding: 'utf8' });
+  return { code: r.status, out: r.stdout || '', err: r.stderr || '' };
+}
+const confirmAs = (c, over = {}) => {
+  c.confirmationStatus = 'confirmed';
+  c.answer = c.proposedAnswer;
+  c.ownerConfirmation = { dashboardQuestionText: '（題材）設問文', confirmedOn: '2026-10-09',
+    chosen: c.proposedAnswer, reason: '（題材）CLI の状態ごとの対照のための作り物', ...over };
+};
+
+test('preflight の CLI は、確認待ち・正しく確認済み・証跡の欠けた確認済みを見分ける（R28-006）', () => {
+  const pending = preflightWith((c) => {
+    c.confirmationStatus = 'pending'; c.answer = null;
+    c.ownerConfirmation = { dashboardQuestionText: null, confirmedOn: null, chosen: null, reason: null };
+  });
+  assert.equal(pending.code, 1, `確認待ちなのに exit ${pending.code}:\n${pending.out.slice(-400)}`);
+  assert.match(pending.out, /本人の確認がまだ/);
+  const done = preflightWith((c) => confirmAs(c));
+  assert.equal(done.code, 0,
+    `GXS_MARK.X59 正しく確認を記録したのに preflight が通らない（exit ${done.code}）:\n${done.out.slice(-600)}${done.err}`);
+  assert.match(done.out, /これは「提出してよい」という意味ではありません（preflight）/);
+  const hole = preflightWith((c) => confirmAs(c, { dashboardQuestionText: '  ' }));
+  assert.equal(hole.code, 1, `設問文が空の確認済みを通した（exit ${hole.code}）`);
+  assert.match(hole.out, /読んだ設問文/);
 });
 
 test('strict は、成果物も監査も無いので1になる', () => {
