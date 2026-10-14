@@ -468,8 +468,9 @@ test('いまの実ファイルは、preflight では本人の確認待ちの欄�
    * 件数は実ファイルの状態から数える（0件になれば問題も0件）。
    */
   const want = DISCLOSURE.categories.filter((c) => c.confirmationStatus === 'pending').length;
+  /* 実ファイルの確認日は、題材の基準日ではなく**いまの JST の日付**で見る（第28回の検収: 正しく記録した確認日が「未来」に見えた） */
   const r = validateStoreReadiness({
-    ...preflightInputs(),
+    ...preflightInputs({ today: dateIn('Asia/Tokyo') }),
     disclosure: clone(DISCLOSURE),
     candidate: clone(CANDIDATE),
     listing: read('store/LISTING.md'),
