@@ -14,9 +14,12 @@ import { writeFileSync, readFileSync, existsSync, symlinkSync, readdirSync, mkdi
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { ROOT } from './helpers/load.mjs';
 import { RUNNER, GUARD, WANT, OTHER, makeFixture, mut, runRunner, of, outcomeOf, kindOf }
   from './helpers/mutation-fixture.mjs';
+/* 証跡の書き込みに障害を差し込む前置き（第28回監査 R28-004） */
+const FAULT = pathToFileURL(join(ROOT, 'test/helpers/receipt-fault.mjs')).href;
 
 /* ============================================================
  * ① 落ち方を区別する（第23回監査 R23-001）
@@ -575,36 +578,19 @@ test('証跡には、何をどの版で測ったかが入る（R22-004）', () =
 
 test('証跡を書けなければ、成功で終わらない（R22-004）', () => {
   /*
-   * ⚠️ 置き場が**最初から**無い場合は、第26回監査 R26-003 で入れた
-   * 「走っている、を置けなければ1件も測らない」が先に止める（そちらの対照は
-   * mutation-evidence 側にある）。ここで見たいのは**最後の1枚を書けなかったとき**
-   * なので、最初は書けて、測っている途中で置き場が消える題材を使う。
-   * ⚠️ そうしないと、この検査は前段のガードに覆われて**外しても落ちない行**になる。
+   * ここで見たいのは**最後の1枚を書けなかったとき**。
+   * ⚠️ 前は「測っている途中で置き場を消す」題材だったが、第28回監査 R28-004 で終わりの進み具合の書き込みの
+   * 失敗も止まる理由にしたので、その手前で止まるようになり、この検査を外しても落ちなくなった
+   *（N28 が CI で素通りした・範囲を変える直しが既存の変異を外す型）。最初から置き場が無い場合も、
+   * 「走っている、を置けなければ1件も測らない」（R26-003）が先に止める。
+   * そこで、書き込みに障害を差し込む前置きで**最後の1枚だけ**を失敗させる（ほかの書き込みは通す）。
    */
-  const { dir } = makeFixture([mut('E2', { test: 'test/nukedir.test.mjs',
-    expectedFailure: { testName: '変異したら証跡の置き場を消す',
-      diagnosticMarker: 'GXS_MARK.NUKEDIR' } })], {
-    'test/nukedir.test.mjs': `
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { readFileSync, rmSync } from 'node:fs';
-const body = readFileSync(new URL('../mod.mjs', import.meta.url), 'utf8');
-test('変異したら証跡の置き場を消す', () => {
-  if (body.includes('99')) {
-    rmSync(new URL('../../evidence', import.meta.url), { recursive: true, force: true });
-  }
-  assert.ok(!body.includes('99'), 'GXS_MARK.NUKEDIR 変異が当たっている');
-});
-`
-  });
-  /*
-   * ⚠️ 置き場は**題材のリポジトリの外**に作る。中に作ると、消したことが
-   * `git status` の差になって「作業ツリーが変わった」で exit 1 になり、
-   * 証跡を書けたかどうかに関わらず非0で終わる——**この検査が何も測らなくなる**
-   *（実測でそうなっていた）。
-   */
-  mkdirSync(join(dir, '..', 'evidence'), { recursive: true });
-  const r = runRunner(dir, { receipt: join('..', 'evidence', 'receipt.json') });
+  const { dir, outer } = makeFixture([mut('E2')]);
+  const log = join(outer, 'fault-final.log');
+  const r = runRunner(dir, { receipt: 'receipt-final.json', nodeArgs: ['--import', FAULT],
+    env: { RS_FAULT: 'fail:final', RS_FAULT_LOG: log } });
+  assert.match(existsSync(log) ? readFileSync(log, 'utf8') : '', /failed final/,
+    `題材が成立していない（最後の1枚の書き込みを失敗させられていない）:\n${r.stdout.slice(-300)}`);
   assert.notEqual(r.exitCode, 0, 'GXS_MARK.N28 証跡を書けなかったのに成功で終わっている');
 });
 
