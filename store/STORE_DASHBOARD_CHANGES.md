@@ -82,11 +82,11 @@ viewing, together with that page's link. The page title is not read or sent.
 | Personally identifiable information | No | **Yes へ変更** | 共有できるページでは、GitHubの所有者名とリポジトリ名が**必ず**投稿本文と共有URLに入る |
 | Health information | No | No | 扱わない |
 | Financial and payment information | No | No | 扱わない |
-| Authentication information | No | **要確認**（案: No） | 資格情報そのものは扱わないが、操作時に現在のタブのURL全体をいったん受け取る |
+| Authentication information | No | **要確認**（本人の答え: No・設問文の記録待ち） | 資格情報そのものは扱わないが、操作時に現在のタブのURL全体をいったん受け取る |
 | Personal communications | No | No | 扱わない |
 | Location | No | No | 扱わない |
 | Web history | No | **Yes へ変更** | 利用者が見ているページのURLが、第三者（X）へ渡る |
-| User activity | No | **要確認**（案: No） | クリック・スクロール・マウス位置・入力内容は読まない。keydown を1つ見て Escape かだけ判定する |
+| User activity | No | **要確認**（本人の答え: No・設問文の記録待ち） | クリック・スクロール・マウス位置・入力内容は読まない。keydown を1つ見て Escape かだけ判定する |
 | Website content | No | **Yes へ変更** | ボタンの位置を探すためにDOMを端末内で読む（タイトルは読まず、Xへも送らない） |
 
 **個人を識別できる情報（PII）を Yes にする理由**（第5回監査 R5-001）: 公式の User Data FAQ は、PIIの例に **username を明記**しています。RepoShout が共有するURLは `github.com/<所有者名>/<リポジトリ名>` の形で、投稿本文（`owner/repo`・`Issue #12 · owner/repo` など）にも同じ2つが入ります。**共有できるページでは、所有者名とリポジトリ名が必ず入ります**（第15回監査 R15-001 以降、共有できるのはこの形のルートだけになったため）。**handle には transmit が含まれ**、これらはXへ渡ります。

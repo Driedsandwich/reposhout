@@ -394,11 +394,11 @@ the popup (for example to /i/flow/login when the user is signed out).
 | Personally identifiable information | **Yes** | 共有できるページでは、GitHubの所有者名とリポジトリ名が**必ず**共有URLと投稿本文に入る（公式FAQはPIIの例に username を挙げている）。ページのタイトルは読まず送らない |
 | Health information | No | 扱わない |
 | Financial and payment information | No | 扱わない |
-| Authentication information | **要確認**（案: No） | 資格情報そのものは扱わないが、操作時に現在のタブのURL全体をいったん受け取る。設問文を読んで本人が確定する |
+| Authentication information | **要確認**（本人の答え: No・設問文の記録待ち） | 資格情報そのものは扱わないが、操作時に現在のタブのURL全体をいったん受け取る。設問文を読んで本人が確定する |
 | Personal communications | No | 扱わない |
 | Location | No | 扱わない |
 | Web history | **Yes** | 利用者が見ているページのURLが、第三者であるXへ渡るため |
-| User activity | **要確認**（案: No） | クリック・スクロール・入力内容は読まない。x.com で keydown を1つ見て Escape かどうかだけ判定する（保存も送信もしない）。設問文を読んで本人が確定する |
+| User activity | **要確認**（本人の答え: No・設問文の記録待ち） | クリック・スクロール・入力内容は読まない。x.com で keydown を1つ見て Escape かどうかだけ判定する（保存も送信もしない）。設問文を読んで本人が確定する |
 | Website content | **Yes** | ボタンを差し込む位置を探すためにページのDOMを端末内で読むため（ページのタイトルは読まず、Xへも送らない） |
 
 3つの証明にすべてチェック（該当なし・遵守）:

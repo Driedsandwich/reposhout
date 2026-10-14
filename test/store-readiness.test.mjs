@@ -198,8 +198,8 @@ const GOOD_CI = {
 /*
  * X の Web Intent の判断が「確認済み」になっている状態（第16回監査 R16-005）。
  * **これはテスト用の作り物**で、リポジトリの正本
- * store/WEB_INTENT_POLICY_DECISION.json は pending のまま。
- * 回答は本人がストアへ聞いて入れる。
+ * store/WEB_INTENT_POLICY_DECISION.json は Developer Support の回答を持っていない
+ * （2026-10-14 から本人の引き受け＝owner_accepted_risk）。回答は本人がストアへ聞いて入れる。
  */
 function goodWebIntent(cand, over = {}) {
   return {
@@ -218,6 +218,45 @@ function goodWebIntent(cand, over = {}) {
     ...over
   };
 }
+
+/*
+ * 本人が危険を承知して問い合わせずに出すと決めた状態（本人の答え・2026-10-14）。
+ * **これもテスト用の作り物**。外部の回答の欄は空のまま持つ。
+ * `ra` は ownerRiskAcceptance の中だけを上書きする。
+ */
+function goodOwnerRisk(cand, over = {}, ra = {}) {
+  return {
+    status: 'owner_accepted_risk',
+    questionScope: ['secure_query_transport', 'redirection_policy'],
+    responseCoversBoth: null,
+    askedOn: null, question: null, responseOn: null, response: null, ticket: null,
+    decision: 'proceed',
+    decidedBy: 'owner',
+    ownerRiskAcceptance: {
+      decidedOn: '2026-08-06',
+      choice: 'proceed_without_inquiry',
+      externallyConfirmed: false,
+      scopes: {
+        secure_query_transport: {
+          resolution: 'unresolved_risk_accepted',
+          officialText: "Don't encode data in request headers or query parameters, even over HTTPS.",
+          officialSource: '（題材）troubleshooting'
+        },
+        redirection_policy: {
+          resolution: 'unresolved_risk_accepted',
+          officialText: 'Do not post an extension with a single purpose of installing or launching ' +
+            'another app, theme, webpage, or extension.',
+          officialSource: '（題材）minimum-functionality'
+        }
+      },
+      fallbackPlan: 'store/WEB_INTENT_FALLBACK_PLAN.md',
+      ...ra
+    },
+    appliesToVersion: cand.version,
+    ...over
+  };
+}
+const webIntentProblems = (r) => r.problems.filter((p) => p.includes('Web Intent'));
 
 function strictInputs(over = {}) {
   const cand = over.candidate || readyCandidate();
@@ -1019,6 +1058,7 @@ test('preflight では Web Intent の判断を求めない（関門は提出直�
  * 本人が正しく回答を記録すると試験が落ちた。状態ごとに見るものを変える:
  *   pending          … 本人の欄がすべて空（こちらが埋めていない＝捏造防止）
  *   それ以外          … strict の Web Intent の検査をそのまま当てて、通ること
+ * 実ファイルの日付（本人が決めた日など）は、題材の基準日ではなく**いまの JST の日付**で見る。
  */
 function webIntentFileProblems(wi) {
   const out = [];
@@ -1028,9 +1068,10 @@ function webIntentFileProblems(wi) {
       if (wi[k] !== null) out.push(`pending なのに ${k} が埋まっている`);
     }
     if (wi.responseCoversBoth !== null) out.push('pending なのに responseCoversBoth が埋まっている');
+    if (wi.ownerRiskAcceptance != null) out.push('pending なのに ownerRiskAcceptance が埋まっている');
     return out;
   }
-  const r = validateStoreReadiness(strictInputs({ webIntentDecision: wi }));
+  const r = validateStoreReadiness(strictInputs({ webIntentDecision: wi, today: dateIn('Asia/Tokyo') }));
   return out.concat(r.problems.filter((p) => p.includes('Web Intent')));
 }
 
@@ -1083,6 +1124,63 @@ test('strict: 証跡がそろっていれば Web Intent は止めない（R18-00
   const r = validateStoreReadiness(strictInputs());
   assert.ok(!r.problems.some((p) => p.includes('Web Intent')),
     `GXS_MARK.M30 そろっているのに止めている: ${r.problems.filter((p) => p.includes('Web Intent')).join(' / ')}`);
+});
+
+/* ============================================================
+ * 本人の危険の引き受け（本人の答え・2026-10-14）— 外部の確認と分けて通す
+ * ============================================================ */
+
+test('strict: 本人の引き受けがそろっていれば Web Intent は止めない（本人の答えの対照）', () => {
+  /* 下の「欠けを拒む」検査が、何を入れても落ちるものになっていないこと */
+  const cand = readyCandidate();
+  const r = validateStoreReadiness(strictInputs({ webIntentDecision: goodOwnerRisk(cand) }));
+  assert.deepEqual(webIntentProblems(r), [],
+    `GXS_MARK.X37 本人の引き受けがそろっているのに止めている: ${webIntentProblems(r).join(' / ')}`);
+  /* 通ったことを「確認できた」とは言わない（成功の印に、本人の引き受けだと書いてある） */
+  assert.ok(r.ok.some((l) => l.includes('外部の確認か本人の危険の引き受け')),
+    `成功の印が本人の引き受けと分かる形でない: ${r.ok.filter((l) => l.includes('Web Intent')).join(' / ')}`);
+});
+
+test('strict: 本人の引き受けに外部の回答の欄が混ざれば通らない（第27回監査 A §5.4）', () => {
+  /* 問い合わせていないのに、回答があるかのような欄を持たせない */
+  const cand = readyCandidate();
+  const holes = [
+    [{ ticket: 'X-1' }, {}], [{ askedOn: '2026-08-01' }, {}], [{ response: '（題材）' }, {}],
+    [{ responseCoversBoth: true }, {}], [{}, { externallyConfirmed: true }], [{}, { externallyConfirmed: null }]
+  ];
+  for (const [over, ra] of holes) {
+    const r = validateStoreReadiness(strictInputs({ webIntentDecision: goodOwnerRisk(cand, over, ra) }));
+    assert.ok(webIntentProblems(r).some((p) => p.includes('外部の回答の欄が混ざっていない')),
+      `GXS_MARK.X38 ${JSON.stringify({ over, ra })} で外部の確認と混ざった形を通した`);
+  }
+});
+
+test('strict: 本人の引き受けで、原文・論点・決めた人と日・手順・版が欠ければ通らない', () => {
+  /* 欠け方ごとに assertion を分ける（どの検査を外したかを、止まった理由で見分ける） */
+  const cand = readyCandidate();
+  const sc = goodOwnerRisk(cand).ownerRiskAcceptance.scopes;
+  const fails = (over, ra) => webIntentProblems(
+    validateStoreReadiness(strictInputs({ webIntentDecision: goodOwnerRisk(cand, over, ra) }))).length > 0;
+  /* 公式の原文を言い換えた・片方の論点の記録が無い */
+  assert.ok(fails({}, { scopes: { ...sc, secure_query_transport: { ...sc.secure_query_transport,
+    officialText: 'Avoid putting sensitive data in query parameters.' } } }),
+    'GXS_MARK.X39 公式の原文を言い換えた記録を通した');
+  assert.ok(fails({}, { scopes: { secure_query_transport: sc.secure_query_transport } }),
+    '片方の論点（redirection_policy）の記録が無いのに通した');
+  assert.ok(fails({}, { scopes: { ...sc, redirection_policy: { ...sc.redirection_policy, officialSource: ' ' } } }),
+    '公式の原文の出典が空なのに通した');
+  /* 未解決のまま引き受けた、ではなく「解決した」と書いた */
+  assert.ok(fails({}, { scopes: { ...sc, redirection_policy: { ...sc.redirection_policy, resolution: 'resolved' } } }),
+    'GXS_MARK.X40 論点を「解決した」と書いた記録を通した');
+  /* 決めた日が未来・決めた人が本人でない・選んだ道が違う・日付が無い */
+  assert.ok(fails({}, { decidedOn: '2099-01-01' }), 'GXS_MARK.X41 本人が決めた日が未来なのに通した');
+  assert.ok(fails({ decidedBy: 'claude-code' }, {}), 'GXS_MARK.X42 本人でない者の引き受けを通した');
+  assert.ok(fails({}, { choice: 'ask_support' }), '選んだ道が違うのに通した');
+  assert.ok(fails({}, { decidedOn: null }), '決めた日が無いのに通した');
+  assert.ok(fails({ decision: 'redesign' }, {}), '判断が proceed でないのに通した');
+  /* 差し戻されたときの手順・この版 */
+  assert.ok(fails({}, { fallbackPlan: '  ' }), 'GXS_MARK.X43 差し戻されたときの手順を指さない引き受けを通した');
+  assert.ok(fails({ appliesToVersion: '9.9.9' }, {}), 'GXS_MARK.X44 別の版の引き受けを通した');
 });
 
 /* ============================================================

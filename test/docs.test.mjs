@@ -591,6 +591,53 @@ test('データ申告の欄が9つそろっている', () => {
     '正本のバージョンが manifest とずれている');
 });
 
+test('本人の答えだけ先に記録した欄は、設問文の写真待ちと分かる形で確認待ちのまま持つ', () => {
+  /*
+   * 本人の答え（2026-10-14）は届いたが、ダッシュボードの設問文はまだ記録できない。
+   * そのあいだは pending のまま答えだけを持ち、設問文と確認日をこちらで埋めない。
+   * 設問文の写真待ちのまま confirmed にもしない。
+   */
+  const realDay = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) &&
+    new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
+  for (const c of DISCLOSURE.categories.filter((x) => x.requiresOwnerConfirmation)) {
+    const oc = c.ownerConfirmation || {};
+    const awaiting = oc.dashboardQuestionTextStatus === 'awaiting_owner_screenshot';
+    if (c.confirmationStatus === 'confirmed') {
+      assert.ok(!awaiting, `${c.label}: 設問文の写真待ちのまま confirmed になっている`);
+      continue;
+    }
+    if (oc.chosen === null || oc.chosen === undefined) {
+      for (const k of ['answeredOn', 'answerSource', 'dashboardQuestionTextStatus']) {
+        assert.ok(oc[k] === null || oc[k] === undefined, `${c.label}: 答えが無いのに ${k} が埋まっている`);
+      }
+      continue;
+    }
+    assert.ok(['Yes', 'No'].includes(oc.chosen), `GXS_MARK.X45 ${c.label}: 本人の答えが Yes / No でない: ${oc.chosen}`);
+    assert.ok(awaiting && oc.dashboardQuestionText === null && oc.confirmedOn === null,
+      `GXS_MARK.X46 ${c.label}: 確認待ちなのに設問文か確認日が埋まっている（設問文は本人の画面の写真から起こす）`);
+    assert.ok(realDay(oc.answeredOn), `${c.label}: 本人が答えた日が実在する日でない: ${oc.answeredOn}`);
+    assert.ok(typeof oc.answerSource === 'string' && oc.answerSource.trim() !== '' &&
+      typeof oc.reason === 'string' && oc.reason.trim() !== '', `${c.label}: 答えの出所か理由が空`);
+  }
+});
+
+test('Web Intent を本人の引き受けで決めたなら、差し戻されたときの作り替えの手順が実在する', () => {
+  /*
+   * 本人の答え（2026-10-14）は「問い合わせずに今の形で出す」。審査で差し戻されたときに
+   * クエリを使わない形へ移る手順を、判断の正本から辿れるようにしておく（作り替えはまだしない）。
+   */
+  const wi = JSON.parse(read('store/WEB_INTENT_POLICY_DECISION.json'));
+  if (wi.status !== 'owner_accepted_risk') return;
+  const plan = wi.ownerRiskAcceptance && wi.ownerRiskAcceptance.fallbackPlan;
+  let body = null;
+  try { body = read(plan); } catch (e) { /* 次の assertion で落とす */ }
+  assert.ok(body !== null, `GXS_MARK.X47 判断の正本が指す手順の文書が無い: ${plan}`);
+  for (const must of ['x.com/intent/post', 'secure_query_transport', 'redirection_policy',
+    'WEB_INTENT_POLICY_DECISION.json', 'DATA_DISCLOSURE.json', 'SUBMISSION_CANDIDATE.json']) {
+    assert.ok(body.includes(must), `${plan} に「${must}」が無い（作り替えで触る所を言っていない）`);
+  }
+});
+
 test('申告の検査が効いているかの対照', () => {
   // 正本を1か所だけ書き換えた偽物を作れば、同じ突き合わせが必ず食い違いを出す
   const flipped = DISCLOSURE.categories.map((c) =>

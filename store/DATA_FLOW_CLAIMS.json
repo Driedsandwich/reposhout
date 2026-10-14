@@ -93,7 +93,7 @@
   "recipient": "x.com（X Corp.）— 拡張の開発者のサーバーは存在しない",
   "transferTiming": "利用者が共有を操作し、Xの投稿画面が開いた時点。Postを押す前",
   "storage": "chrome.storage.session に、拡張自身が開いたウィンドウのIDと、開いた時刻だけ。URLも投稿本文もタイトルも保存しない",
-  "webIntentStatus": "pending",
+  "webIntentStatus": "owner_accepted_risk",
   "ownerConfirmationStatus": {
     "authentication_information": "pending",
     "user_activity": "pending",

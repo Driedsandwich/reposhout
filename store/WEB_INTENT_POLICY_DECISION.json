@@ -12,15 +12,22 @@
     "HTTPS で、開発者のサーバーは無く、投稿するかどうかは利用者が決める。",
     "**こちらでは「違反ではない」と断定できる材料が無い。**",
     "",
-    "だから、判断は Chrome ウェブストアの Developer Support の回答で決める。",
-    "**問い合わせと回答の記入は本人が行う。** Claude Code は回答を作らない・送らない。",
+    "だから、判断は次のどちらかで決める。どちらも本人が行う。",
+    "  ・Chrome ウェブストアの Developer Support の回答（外部の確認）",
+    "  ・本人が、未解決の審査の危険を承知して出すと決めること（本人の引き受け）",
+    "Claude Code は回答を作らない・送らない・本人に代わって引き受けない。",
     "",
     "status は次のいずれか:",
-    "  pending           … まだ聞いていない／回答待ち",
-    "  confirmed_allowed … 許容される旨の回答を得た（提出可）",
-    "  refused           … 許容されない旨の回答を得た（作り直しが要る）",
+    "  pending             … まだ決まっていない（聞いていない／回答待ち／本人がまだ選んでいない）",
+    "  confirmed_allowed   … Developer Support から、2つの論点の両方に触れて許容される旨の回答を得た（外部の確認）",
+    "  owner_accepted_risk … 本人が、2つの論点が外部の確認で解決していないまま審査で差し戻される危険を承知して、",
+    "                        問い合わせずに今の形で出すと決めた（**外部の確認ではない**。ownerRiskAcceptance に記録）",
+    "  refused             … 許容されない旨の回答、または審査での差し戻しを受けた（作り直しが要る）",
     "",
-    "npm run verify:submission-ready は confirmed_allowed 以外では落ちる。",
+    "npm run verify:submission-ready は confirmed_allowed と owner_accepted_risk 以外では落ちる。",
+    "2つは混ぜない（第27回監査 A §5.4）: owner_accepted_risk では外部の回答の欄（askedOn・question・",
+    "responseOn・response・ticket・responseCoversBoth）を空のまま持ち、confirmed_allowed へ書き換えない。",
+    "本人の引き受けは外部監査の READY の代わりにならない（提出には別に READY の申告が要る）。",
     "refused の場合は、端末内で下書きを見せてコピーさせ、データを載せずに",
     "投稿画面を開く形へ作り替える（別の作業として立てる）。",
     "",
@@ -37,9 +44,14 @@
     "",
     "**両方に触れた回答**を得るまで confirmed_allowed にしない",
     "（responseCoversBoth を true にできない）。",
-    "問い合わせ・回答・ticket番号の記入は本人が行う。Claude Code は回答を作らない・送らない。"
+    "問い合わせ・回答・ticket番号の記入は本人が行う。Claude Code は回答を作らない・送らない。",
+    "",
+    "本人の答え（2026-10-14・第27回監査の後）: 3つの道（Developer Support へ問い合わせる／問い合わせずに今の形で出す／クエリを使わない形へ作り替える）のうち、「問い合わせずに今の形で出す」を選んだ。",
+    "本人は決める前に、2つの論点の公式の原文（ownerRiskAcceptance.scopes）と、第27回の外部監査が",
+    "この道を推奨しないこと、差し戻されたときの影響（公開中の版の再審査を招きうる）を読んでいる。",
+    "差し戻されたときに c（クエリを使わない形）へ移る手順は store/WEB_INTENT_FALLBACK_PLAN.md。"
   ],
-  "status": "pending",
+  "status": "owner_accepted_risk",
   "questionScope": [
     "secure_query_transport",
     "redirection_policy"
@@ -50,8 +62,35 @@
   "responseOn": null,
   "response": null,
   "ticket": null,
-  "decision": null,
-  "decidedBy": null,
+  "decision": "proceed",
+  "decidedBy": "owner",
+  "ownerRiskAcceptance": {
+    "decidedOn": "2026-10-14",
+    "choice": "proceed_without_inquiry",
+    "externallyConfirmed": false,
+    "scopes": {
+      "secure_query_transport": {
+        "resolution": "unresolved_risk_accepted",
+        "officialText": "Don't encode data in request headers or query parameters, even over HTTPS.",
+        "officialSource": "https://developer.chrome.com/docs/webstore/troubleshooting（User data policy - secure transmission）",
+        "whyUnresolved": "RepoShout は投稿文（所有者名・リポジトリ名を含む）と github.com のURLを x.com/intent/post のクエリに載せる。利用者の操作で開く・HTTPS・開発者のサーバーが無いことは説明の材料だが、この一文との関係を解く外部の確認は無い"
+      },
+      "redirection_policy": {
+        "resolution": "unresolved_risk_accepted",
+        "officialText": "Do not post an extension with a single purpose of installing or launching another app, theme, webpage, or extension.",
+        "officialSource": "https://developer.chrome.com/docs/webstore/program-policies/minimum-functionality",
+        "whyUnresolved": "ボタンの差し込み・ルートの判定・URLの組み直し・共有できないページの拒否は単なるリンクとの違いの説明になるが、Single purpose は「Xの投稿画面を開く」であり、審査上の適合を確かめた外部の確認は無い"
+      }
+    },
+    "shownBeforeDeciding": [
+      "上の2つの公式の原文",
+      "第27回の外部監査（便A）はこの道を推奨しない（選ぶなら外部の確認と分けて記録し、ゲートの変更を再監査する）",
+      "差し戻されたときの影響: 掲載中の版はそのまま残るが、審査で違反が見つかると、同じ送り方の公開中の版の再審査を招きうる",
+      "ほかの道: b（Developer Support へ問い合わせる）と c（クエリを使わない形へ作り替える）"
+    ],
+    "fallbackPlan": "store/WEB_INTENT_FALLBACK_PLAN.md",
+    "notAnAuditVerdict": "この引き受けは外部監査の READY の代わりにならない（第27回監査 A §5.4）"
+  },
   "appliesToVersion": "1.1.8",
   "raisedBy": "第15回監査 R15-002 / 第16回監査 R16-005",
   "transport": "https://x.com/intent/post?text=<ルートから生成した1行>&url=<組み直した github.com のURL>"

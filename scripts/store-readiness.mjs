@@ -58,6 +58,23 @@ const blank = (v) => typeof v !== 'string' || v.trim() === '';
 const REQUIRED_WEB_INTENT_SCOPES = ['secure_query_transport', 'redirection_policy'];
 
 /*
+ * Web Intent を成功側へ通す決め方は2つだけ（本人の答え・2026-10-14）。
+ *   confirmed_allowed   … Developer Support の回答で、2つの論点の両方が許容と確認できた（外部の確認）
+ *   owner_accepted_risk … 本人が、2つの論点が未解決のまま審査で差し戻される危険を承知して、
+ *                         問い合わせずに今の形で出すと決めた（外部の確認ではない）
+ * 2つを混ぜない（第27回監査 A §5.4）。本人の引き受けでは外部の回答の欄を空のまま持ち、
+ * 本人が決める前に読んだ公式の原文を、論点ごとにこの定数と1字違わず照らす。
+ */
+const WEB_INTENT_DECIDED_STATUSES = ['confirmed_allowed', 'owner_accepted_risk'];
+const WEB_INTENT_EXTERNAL_FIELDS = ['askedOn', 'question', 'responseOn', 'response', 'ticket',
+  'responseCoversBoth'];
+const WEB_INTENT_OFFICIAL_TEXT = {
+  secure_query_transport: "Don't encode data in request headers or query parameters, even over HTTPS.",
+  redirection_policy: 'Do not post an extension with a single purpose of installing or launching ' +
+    'another app, theme, webpage, or extension.'
+};
+
+/*
  * その時間帯での「今日」を YYYY-MM-DD で返す（第11回監査 R11-005）。
  * UTC で見ると、JSTの 00:30 に確認した当日を「未来の日付」として弾く。
  */
@@ -567,7 +584,8 @@ export function validateStoreReadiness(input) {
    *
    * 第15回監査 R15-002 / 第16回監査 R16-005。
    * こちらでは「違反ではない」と断定できる材料が無いので、Chrome ウェブストアの
-   * Developer Support の回答で決める。**回答が無いあいだは提出可にしない。**
+   * Developer Support の回答か、本人の危険の引き受け（2026-10-14 から）で決める。
+   * **どちらも無いあいだは提出可にしない。**
    * 以前は、この件が未解決でも本人確認と外部監査さえ埋まれば strict が通った。
    */
   if (strict) {
@@ -575,9 +593,43 @@ export function validateStoreReadiness(input) {
     check('Web Intent の判断の正本がある', Boolean(wi),
       'store/WEB_INTENT_POLICY_DECISION.json を渡していない');
     if (wi) {
-      check('Web Intent をクエリで渡してよいと確認できている',
-        wi.status === 'confirmed_allowed',
-        `ストアの回答が未確認（status=${wi.status}）。本人が Developer Support へ確認する`);
+      check('Web Intent の決め方が、外部の確認か本人の危険の引き受けのどちらか',
+        WEB_INTENT_DECIDED_STATUSES.includes(wi.status),
+        `ストアの回答が未確認で、本人の引き受けも無い（status=${wi.status}）。` +
+        '本人が Developer Support へ確認するか、危険を承知して出すと決める');
+      /*
+       * 本人の引き受け（本人の答え・2026-10-14）。外部の確認とは別の検査を当てる。
+       * 「確認できた」とは書かず、何を読んで何を引き受けたかを欄で求める。
+       */
+      if (wi.status === 'owner_accepted_risk') {
+        const ra = wi.ownerRiskAcceptance || {};
+        const filled = WEB_INTENT_EXTERNAL_FIELDS.filter((k) => wi[k] !== null && wi[k] !== undefined);
+        check('Web Intent: 本人の引き受けに、外部の回答の欄が混ざっていない',
+          filled.length === 0 && ra.externallyConfirmed === false,
+          `外部の確認と混ざっている（埋まっている欄: ${filled.join(' / ') || 'なし'}・` +
+          `externallyConfirmed=${ra.externallyConfirmed}）`);
+        check('Web Intent: 本人が決めたこと・決めた日',
+          wi.decision === 'proceed' && wi.decidedBy === 'owner' &&
+          ra.choice === 'proceed_without_inquiry' && isRealDate(ra.decidedOn || ''),
+          `decision=${wi.decision} decidedBy=${wi.decidedBy} choice=${ra.choice} decidedOn=${ra.decidedOn}`);
+        check('Web Intent: 本人が決めた日が未来でない',
+          !isRealDate(today) || !isRealDate(ra.decidedOn || '') || ra.decidedOn <= today,
+          `${ra.decidedOn} が今日 ${today} より後`);
+        const scopes = ra.scopes || {};
+        for (const need of REQUIRED_WEB_INTENT_SCOPES) {
+          const s = scopes[need] || {};
+          check(`Web Intent: ${need} を未解決のまま引き受け、公式の原文を記録している`,
+            s.resolution === 'unresolved_risk_accepted' &&
+            s.officialText === WEB_INTENT_OFFICIAL_TEXT[need] && !blank(s.officialSource),
+            `resolution=${s.resolution} / 原文が定数と${s.officialText === WEB_INTENT_OFFICIAL_TEXT[need] ? '一致' : '違う'}` +
+            ` / 出典=${blank(s.officialSource) ? '空欄' : 'あり'}`);
+        }
+        check('Web Intent: 差し戻されたときの作り替えの手順を指している',
+          !blank(ra.fallbackPlan), '空欄');
+        check('Web Intent: 本人の引き受けが、この版のものである',
+          wi.appliesToVersion === candidate.version,
+          `${wi.appliesToVersion} ≠ ${candidate.version}`);
+      }
       /* 回答があると言うなら、いつ・何を聞いて・何と返ってきたかが要る */
       if (wi.status === 'confirmed_allowed') {
         check('Web Intent の判断に、聞いた日と設問がある',
