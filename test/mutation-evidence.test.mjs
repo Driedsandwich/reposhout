@@ -217,11 +217,12 @@ test('比べる値に目印が出る', () => {
   const dir = makeFixture([mut('U7', { test: 'test/inner.test.mjs',
     expectedFailure: { testName: '比べる値に目印が出る', diagnosticMarker: 'GXS_MARK.INNER' } })], files).dir;
   const r = runRunner(dir);
-  assert.equal(outcomeOf(r, 'U7'), 'runner_error', 'GXS_MARK.X27 比べた値に出た目印で検知にしている');
-  assert.equal(kindOf(r, 'U7'), 'marker_in_compared_value', `止まった理由が違う: ${kindOf(r, 'U7')}`);
+  assert.equal(outcomeOf(r, 'U7'), 'runner_error', '比べた値に出た目印で検知にしている');
+  /* ⚠️ 目印は「止まった理由」の側に置く（R28-106 の自動の差分の検査が先に止めても、この検査を外したことが分かるように） */
+  assert.equal(kindOf(r, 'U7'), 'marker_in_compared_value', `GXS_MARK.X27 止まった理由が違う（比べた値の検査が効いていない）: ${kindOf(r, 'U7')}`);
 });
 
-test('目印が入れ子の比べた値（オブジェクト・配列）に出ているだけでも、検知にしない（R28-002）', () => {
+test('目印が入れ子の比べた値（オブジェクト・配列・Map・Set）に出ているだけでも、検知にしない（R28-002・R28-106）', () => {
   /*
    * 第28回監査 R28-002。Node は入れ子の値を `actual:` の後ろを空にして次の行から出すので、
    * 第27回の読み方では比べた値に入らず、目印の照合が通っていた。オブジェクトと配列の両方を見る。
@@ -244,6 +245,19 @@ test('入れ子の比べる値に目印が出る（配列）', () => {
 test('目印のある assertion そのものが落ちる', () => {
   assert.equal(value, 1, 'GXS_MARK.NESTED_SELF');
 });
+test('Map の比べる値に目印が出る', () => {
+  const mark = 'GXS_MARK.NESTED_MAP';
+  assert.ok(true, mark);
+  assert.deepEqual(new Map([['v', value === 1 ? 'ok' : mark]]), new Map([['v', 'ok']]));
+});
+test('Set の比べる値に目印が出る', () => {
+  const mark = 'GXS_MARK.NESTED_SET';
+  assert.ok(true, mark);
+  assert.deepEqual(new Set([value === 1 ? 'ok' : mark]), new Set(['ok']));
+});
+test('メッセージつきの Map の比較で、目印を持つ assertion そのものが落ちる', () => {
+  assert.deepEqual(new Map([['v', value]]), new Map([['v', 1]]), 'GXS_MARK.MAPMSG_OWN');
+});
 `
   };
   const dir = makeFixture([
@@ -252,7 +266,13 @@ test('目印のある assertion そのものが落ちる', () => {
     mut('U10', { test: 'test/nested.test.mjs',
       expectedFailure: { testName: '入れ子の比べる値に目印が出る（配列）', diagnosticMarker: 'GXS_MARK.NESTED_ARR' } }),
     mut('U11', { test: 'test/nested.test.mjs',
-      expectedFailure: { testName: '目印のある assertion そのものが落ちる', diagnosticMarker: 'GXS_MARK.NESTED_SELF' } })
+      expectedFailure: { testName: '目印のある assertion そのものが落ちる', diagnosticMarker: 'GXS_MARK.NESTED_SELF' } }),
+    mut('U13', { test: 'test/nested.test.mjs',
+      expectedFailure: { testName: 'Map の比べる値に目印が出る', diagnosticMarker: 'GXS_MARK.NESTED_MAP' } }),
+    mut('U14', { test: 'test/nested.test.mjs',
+      expectedFailure: { testName: 'Set の比べる値に目印が出る', diagnosticMarker: 'GXS_MARK.NESTED_SET' } }),
+    mut('U15', { test: 'test/nested.test.mjs',
+      expectedFailure: { testName: 'メッセージつきの Map の比較で、目印を持つ assertion そのものが落ちる', diagnosticMarker: 'GXS_MARK.MAPMSG_OWN' } })
   ], files).dir;
   const r = runRunner(dir);
   assert.equal(kindOf(r, 'U9'), 'marker_in_compared_value',
@@ -261,6 +281,13 @@ test('目印のある assertion そのものが落ちる', () => {
     `配列の比べた値に出た目印で検知にしている: ${outcomeOf(r, 'U10')} / ${kindOf(r, 'U10')}`);
   /* 対照: 目印を持つ assertion 自身が落ちたなら検知する（何でも断る読み手になっていない） */
   assert.equal(outcomeOf(r, 'U11'), 'applied_and_killed', `目印のある assertion が落ちたのに検知にしない: ${kindOf(r, 'U11')}`);
+  /* 第28回監査 R28-106: Map・Set の要素は actual／expected の欄に出ず、自動の差分の中にだけ出る */
+  assert.equal(kindOf(r, 'U13'), 'marker_in_generated_message',
+    `GXS_MARK.X69 Map の比べた値の差分に出た目印で検知にしている: ${outcomeOf(r, 'U13')} / ${kindOf(r, 'U13')}`);
+  assert.equal(kindOf(r, 'U14'), 'marker_in_generated_message',
+    `Set の比べた値の差分に出た目印で検知にしている: ${outcomeOf(r, 'U14')} / ${kindOf(r, 'U14')}`);
+  /* 対照: メッセージに目印があれば、後ろに差分が付いていても検知する */
+  assert.equal(outcomeOf(r, 'U15'), 'applied_and_killed', `メッセージつきの assertion が落ちたのに検知にしない: ${kindOf(r, 'U15')}`);
 });
 
 test('目印がテストの呼び出しの外にあれば、測る前に断る（R27-104 の外側の題材）', () => {

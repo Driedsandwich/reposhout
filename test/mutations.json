@@ -2849,7 +2849,7 @@
       "find": "if (/^(?:actual|expected):\\s*(?:[|>][-+]?)?\\s*$/.test(t)) { inValue = true; continue; }",
       "replace": "if (/^(?:actual|expected):\\s*[|>][-+]?\\s*$/.test(t)) { inValue = true; continue; }",
       "expectedFailure": {
-        "testName": "目印が入れ子の比べた値（オブジェクト・配列）に出ているだけでも、検知にしない（R28-002）",
+        "testName": "目印が入れ子の比べた値（オブジェクト・配列・Map・Set）に出ているだけでも、検知にしない（R28-002・R28-106）",
         "diagnosticMarker": "GXS_MARK.X48"
       }
     },
@@ -3091,6 +3091,18 @@
       "expectedFailure": {
         "testName": "証跡の出力先の内外を、名前の頭の .. で取り違えない（R28-105）",
         "diagnosticMarker": "GXS_MARK.X68"
+      }
+    },
+    {
+      "id": "X69",
+      "file": "scripts/run-mutations.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "Node の自動の見出しや比べた値の差分にだけ出た目印でも検知にする",
+      "find": "  if (String(hits[0].body || '').includes(marker) && !explicitMessage(hits[0].body).includes(marker)) {",
+      "replace": "  if (false) {",
+      "expectedFailure": {
+        "testName": "目印が入れ子の比べた値（オブジェクト・配列・Map・Set）に出ているだけでも、検知にしない（R28-002・R28-106）",
+        "diagnosticMarker": "GXS_MARK.X69"
       }
     }
   ]
