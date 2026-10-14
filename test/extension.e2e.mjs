@@ -151,7 +151,7 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
     sessionId);
     assert.equal(armed.result && armed.result.value, true, 'ページで Esc の到着を数える準備ができない');
     const sent = await pressEscape(targetId, modifiers);
-    assert.equal(sent, true, 'GXS_MARK.X62 Esc の入力を送れなかった（閉じなかったことの証拠にならない）');
+    assert.equal(sent, true, 'Esc の入力を送れなかった（閉じなかったことの証拠にならない）');
     const seen = await cdp.send('Runtime.evaluate', { expression: 'window.__gxsEscSeen', returnByValue: true }, sessionId);
     assert.equal(seen.result && seen.result.value, 1, 'ページに Esc が届いていない（閉じなかったことの証拠にならない）');
   }
@@ -244,7 +244,7 @@ describe('実拡張E2E', { concurrency: 1 }, () => {
     };
     try {
       await assert.rejects(() => pressEscapeObserved(targetId), /Esc の入力を送れなかった/,
-        '入力を送れなかったのに、閉じないことの確認を通した');
+        'GXS_MARK.X62 入力を送れなかったのに、閉じないことの確認を通した（または別の理由で止まった）');
     } finally {
       cdp.send = realSend;
     }

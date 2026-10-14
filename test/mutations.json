@@ -1836,8 +1836,8 @@
     {
       "id": "W14",
       "file": "scripts/run-mutations.mjs",
-      "find": "    writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\\n');\n    renameSync(tmp, receiptPath);",
-      "replace": "    writeFileSync(receiptPath, JSON.stringify(obj, null, 2) + '\\n');",
+      "find": "    writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\\n', { flag: 'wx' });\n    created = true;\n    renameSync(tmp, receiptPath);",
+      "replace": "    writeFileSync(receiptPath, JSON.stringify(obj, null, 2) + '\\n');\n    created = true;",
       "test": "test/mutation-evidence.test.mjs",
       "desc": "証跡を直接上書きする（原子的な置換をやめる）",
       "expectedFailure": {
@@ -2100,8 +2100,8 @@
     {
       "id": "Z04",
       "file": "scripts/run-mutations.mjs",
-      "find": "  lastCompletedMutationId = currentMutationId;\n  currentMutationId = null;\n  saveRunning();",
-      "replace": "  lastCompletedMutationId = currentMutationId;\n  saveRunning();",
+      "find": "  lastCompletedMutationId = currentMutationId;\n  currentMutationId = null;\n  /*\n   * ⚠️ 終わりの進み具合",
+      "replace": "  lastCompletedMutationId = currentMutationId;\n  /*\n   * ⚠️ 終わりの進み具合",
       "test": "test/mutation-evidence.test.mjs",
       "desc": "終わっても「いま測っている」を消さない",
       "expectedFailure": {
@@ -2582,8 +2582,8 @@
       "file": "scripts/run-mutations.mjs",
       "test": "test/mutation-evidence.test.mjs",
       "desc": "証跡の出力先が入力を指していても書く",
-      "find": "  if (tracked || forbidden.includes(abs)) {",
-      "replace": "  if (false) {",
+      "find": "  if (tracked || insideGitDir || forbidden.includes(abs)) {",
+      "replace": "  if (insideGitDir) {",
       "expectedFailure": {
         "testName": "証跡の出力先が入力を指していたら、1バイトも書かずに止まる（R27-106）",
         "diagnosticMarker": "GXS_MARK.X26"
@@ -2654,8 +2654,8 @@
       "test": "test/extension.e2e.mjs",
       "file": "test/extension.e2e.mjs",
       "desc": "待ちを、評価の結果に関わらず即座に成立させる",
-      "find": "        if (r.result.value === true) return true;\n        observedFalse++;",
-      "replace": "        return true;\n        observedFalse++;",
+      "find": "        if (r.result.value === true) return true;\n        /* ⚠️ 正常な false だけを",
+      "replace": "        return true;\n        /* ⚠️ 正常な false だけを",
       "expectedFailure": {
         "testName": "実装を待つ仕掛けが、待たずに通っていない（対照）",
         "diagnosticMarker": "GXS_MARK.X32"
@@ -2839,6 +2839,234 @@
       "expectedFailure": {
         "testName": "Web Intent を本人の引き受けで決めたなら、差し戻されたときの作り替えの手順が実在する",
         "diagnosticMarker": "GXS_MARK.X47"
+      }
+    },
+    {
+      "id": "X48",
+      "file": "scripts/run-mutations.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "後ろが空の actual:／expected: を比べた値の始まりと読まない（入れ子の値の目印で検知に戻る）",
+      "find": "if (/^(?:actual|expected):\\s*(?:[|>][-+]?)?\\s*$/.test(t)) { inValue = true; continue; }",
+      "replace": "if (/^(?:actual|expected):\\s*[|>][-+]?\\s*$/.test(t)) { inValue = true; continue; }",
+      "expectedFailure": {
+        "testName": "目印が入れ子の比べた値（オブジェクト・配列）に出ているだけでも、検知にしない（R28-002）",
+        "diagnosticMarker": "GXS_MARK.X48"
+      }
+    },
+    {
+      "id": "X49",
+      "file": "scripts/lib/test-decls.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "return などの語の後の / を正規表現と読まない（範囲がずれる）",
+      "find": "  return REGEX_AFTER_WORD.has(src.slice(k + 1, j + 1));",
+      "replace": "  return false;",
+      "expectedFailure": {
+        "testName": "正規表現の中の括弧で、テストの範囲が次のテストまで延びない（R28-003）",
+        "diagnosticMarker": "GXS_MARK.X49"
+      }
+    },
+    {
+      "id": "X50",
+      "file": "scripts/lib/test-decls.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "範囲が次のテストの宣言を越えても、その範囲を使う",
+      "find": "  if (next && end > next.start) return null;",
+      "replace": "  if (false) return null;",
+      "expectedFailure": {
+        "testName": "正規表現の中の括弧で、テストの範囲が次のテストまで延びない（R28-003）",
+        "diagnosticMarker": "GXS_MARK.X50"
+      }
+    },
+    {
+      "id": "X51",
+      "file": "scripts/run-mutations.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "git の管理先を証跡の出力先として拒まない",
+      "find": "  if (tracked || insideGitDir || forbidden.includes(abs)) {",
+      "replace": "  if (tracked || forbidden.includes(abs)) {",
+      "expectedFailure": {
+        "testName": "証跡の出力先が git の管理先なら、1バイトも書かずに止まる（R28-001）",
+        "diagnosticMarker": "GXS_MARK.X51"
+      }
+    },
+    {
+      "id": "X52",
+      "file": "scripts/run-mutations.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "一時ファイルを排他的に作らない（置かれた symlink を辿る）",
+      "find": "    writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\\n', { flag: 'wx' });",
+      "replace": "    writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\\n');",
+      "expectedFailure": {
+        "testName": "証跡の一時ファイルの名前に置かれた symlink を辿らない（R28-001）",
+        "diagnosticMarker": "GXS_MARK.X52"
+      }
+    },
+    {
+      "id": "X53",
+      "file": "scripts/run-mutations.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "一時ファイルを排他的に作らない（置かれた hardlink を通して書く）",
+      "find": "    writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\\n', { flag: 'wx' });",
+      "replace": "    writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\\n');",
+      "expectedFailure": {
+        "testName": "証跡の一時ファイルの名前に置かれた hardlink を辿らない（R28-001）",
+        "diagnosticMarker": "GXS_MARK.X53"
+      }
+    },
+    {
+      "id": "X54",
+      "file": "scripts/run-mutations.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "終わりの進み具合を書けなくても止まる理由にしない",
+      "find": "  if (!saveRunning()) fatal = 'progress_save_failed';",
+      "replace": "  saveRunning();",
+      "expectedFailure": {
+        "testName": "証跡の保存の失敗は、置き場が戻っても成功の証跡に化けない（初回・終端・最後）（R28-004）",
+        "diagnosticMarker": "GXS_MARK.X54"
+      }
+    },
+    {
+      "id": "X55",
+      "file": "scripts/run-mutations.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "最後の1枚を書けなくても成功で終わる",
+      "find": "  if (!saveReceipt(summary)) process.exit(2);",
+      "replace": "  saveReceipt(summary);",
+      "expectedFailure": {
+        "testName": "証跡の保存の失敗は、置き場が戻っても成功の証跡に化けない（初回・終端・最後）（R28-004）",
+        "diagnosticMarker": "GXS_MARK.X55"
+      }
+    },
+    {
+      "id": "X56",
+      "file": "test/manifest.test.mjs",
+      "test": "test/manifest.test.mjs",
+      "desc": "ステップの先頭のキーを読まない（- if: false を見落とす）",
+      "find": "  const rows = [`        ${first ? first[1] : ''}`, ...lines.slice(1)];",
+      "replace": "  const rows = lines.slice(1);",
+      "expectedFailure": {
+        "testName": "CI の構造の読み手が、キーの順・名前だけの検証器・束の重なりを見逃さない（R28-005）",
+        "diagnosticMarker": "GXS_MARK.X56"
+      }
+    },
+    {
+      "id": "X57",
+      "file": "test/manifest.test.mjs",
+      "test": "test/manifest.test.mjs",
+      "desc": "検証器を run の中でなくステップ全体から探す（name にだけ残っても通す）",
+      "find": "    const step = jobs[j] && jobs[j].steps.find((st) => (st.keys.run || '').includes(needle));",
+      "replace": "    const step = jobs[j] && jobs[j].steps.find((st) => JSON.stringify(st.keys).includes(needle));",
+      "expectedFailure": {
+        "testName": "CI の構造の読み手が、キーの順・名前だけの検証器・束の重なりを見逃さない（R28-005）",
+        "diagnosticMarker": "GXS_MARK.X57"
+      }
+    },
+    {
+      "id": "X58",
+      "file": "test/manifest.test.mjs",
+      "test": "test/manifest.test.mjs",
+      "desc": "変異の束が 1〜6 を1回ずつかを見ない",
+      "find": "  if (JSON.stringify([...shards].sort()) !== JSON.stringify(['1', '2', '3', '4', '5', '6'])) {",
+      "replace": "  if (false) {",
+      "expectedFailure": {
+        "testName": "CI の構造の読み手が、キーの順・名前だけの検証器・束の重なりを見逃さない（R28-005）",
+        "diagnosticMarker": "GXS_MARK.X58"
+      }
+    },
+    {
+      "id": "X59",
+      "file": "scripts/verify-store-readiness.mjs",
+      "test": "test/cli.test.mjs",
+      "desc": "問題が無くても preflight を落とす（正しく確認済みでも通らない）",
+      "find": "if (result.problems.length) {",
+      "replace": "if (true) {",
+      "expectedFailure": {
+        "testName": "preflight の CLI は、確認待ち・正しく確認済み・証跡の欠けた確認済みを見分ける（R28-006）",
+        "diagnosticMarker": "GXS_MARK.X59"
+      }
+    },
+    {
+      "id": "X60",
+      "file": "scripts/zip-read.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "中身の CRC を確かめない",
+      "find": "    if (crc32(data) !== cCrc) throw new Error(`CRCが合わない: ${name}`);",
+      "replace": "    if (false) throw new Error(`CRCが合わない: ${name}`);",
+      "expectedFailure": {
+        "testName": "成功の対照は本物の ZIP を実際の読み手に通し、壊れた中身はそれぞれの理由で落ちる（R27-205）",
+        "diagnosticMarker": "GXS_MARK.X60"
+      }
+    },
+    {
+      "id": "X61",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "却下の記録の説明の中身を見ない",
+      "find": "    if (body.length < 8) gaps.push(`${id}（説明 ${body.length} 文字）`);",
+      "replace": "    if (false) gaps.push(`${id}（説明 ${body.length} 文字）`);",
+      "expectedFailure": {
+        "testName": "却下の記録の検査が、説明を消した・参照だけにした記録を拒む（R28-010 の対照）",
+        "diagnosticMarker": "GXS_MARK.X61"
+      }
+    },
+    {
+      "id": "X62",
+      "file": "test/extension.e2e.mjs",
+      "test": "test/extension.e2e.mjs",
+      "desc": "閉じないことを確かめる Esc で、入力を送れたかを見ない",
+      "find": "    assert.equal(sent, true, 'Esc の入力を送れなかった（閉じなかったことの証拠にならない）');",
+      "replace": "    /* 送れたかを見ない */",
+      "expectedFailure": {
+        "testName": "閉じないことを確かめる Esc は、入力を送れなかったら失敗する（R28-008 の対照）",
+        "diagnosticMarker": "GXS_MARK.X62"
+      }
+    },
+    {
+      "id": "X63",
+      "file": "test/extension.e2e.mjs",
+      "test": "test/extension.e2e.mjs",
+      "desc": "待ちで、真偽値でない応答を false に数える",
+      "find": "        if (r.result.value !== false) throw new Error(`SW評価の応答が真偽値でない: ${JSON.stringify(r.result)}`);\n",
+      "replace": "",
+      "expectedFailure": {
+        "testName": "閉じないことを確かめる Esc は、入力を送れなかったら失敗する（R28-008 の対照）",
+        "diagnosticMarker": "GXS_MARK.X63"
+      }
+    },
+    {
+      "id": "X64",
+      "file": "src/background.js",
+      "test": "test/share-flow.test.mjs",
+      "desc": "Esc が効かない窓を知らせたのに、画面へ「知らせていない」と返す（二重に出る）",
+      "find": "    return { opened: true, state: opened.state, escAvailable: false,\n             notified: how !== 'none' };",
+      "replace": "    return { opened: true, state: opened.state, escAvailable: false,\n             notified: false };",
+      "expectedFailure": {
+        "testName": "3つの入口×開いた結果5つで、利用者に見える案内が正本どおり1回か0回（R28-007）",
+        "diagnosticMarker": "GXS_MARK.X64"
+      }
+    },
+    {
+      "id": "X65",
+      "file": "src/background.js",
+      "test": "test/share-flow.test.mjs",
+      "desc": "画面へ届かなかったのに届いたことにする（バッジで補わない）",
+      "find": "    /* content script がいないページでは届かない。追加の権限は求めない */\n    return false;",
+      "replace": "    /* content script がいないページでは届かない。追加の権限は求めない */\n    return true;",
+      "expectedFailure": {
+        "testName": "画面へ案内を届けられないときはバッジで補い、バッジも出せないときは画面の部品が補う（R28-007）",
+        "diagnosticMarker": "GXS_MARK.X65"
+      }
+    },
+    {
+      "id": "X66",
+      "file": "src/content.js",
+      "test": "test/share-flow.test.mjs",
+      "desc": "service worker が知らせられなかったときに、画面の部品が補わない",
+      "find": "                 && res.escAvailable === false && res.notified !== true) {",
+      "replace": "                 && res.escAvailable === false && res.notified === 'never') {",
+      "expectedFailure": {
+        "testName": "画面へ案内を届けられないときはバッジで補い、バッジも出せないときは画面の部品が補う（R28-007）",
+        "diagnosticMarker": "GXS_MARK.X66"
       }
     }
   ]
