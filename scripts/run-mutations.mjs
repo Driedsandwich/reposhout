@@ -144,6 +144,14 @@ const receiptPath = parsed.out['--receipt'] || null;
  * 強制終了された証跡を見ても、どの変異の途中でどのファイルが変異したままか
  * 分からない（第26回監査 R26-003）。変異ごとに atomic に書き直す。
  */
+/*
+ * 相対パスが基準の**外**を指すか（第28回監査 R28-105）。前は `startsWith('..')` で見ていたので、
+ * 同じディレクトリの `..notes.md` のような通常の名前まで「外」と読み、出力先の保護を抜けられた。
+ * セグメントの境目で見る（`..` そのもの、または `..` の直後が区切り文字のときだけ外）。
+ */
+function isOutsideRel(rel) {
+  return rel === '..' || rel.startsWith(`..${sep}`) || rel.startsWith('../') || isAbsolute(rel);
+}
 let receiptPhase = 'none';
 let currentMutationId = null;
 let lastCompletedMutationId = null;
@@ -165,7 +173,7 @@ if (receiptPath) {
   const rootReal = (() => { try { return realpathSync(ROOT); } catch (e) { return ROOT; } })();
   const abs = real(resolve(receiptPath));
   const rel = relative(rootReal, abs);
-  const insideRepo = rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+  const insideRepo = rel !== '' && !isOutsideRel(rel);
   if (insideRepo) receiptRelInRepo = rel.split('\\').join('/');
   const specAbsForReceipt = real(resolve(ROOT, parsed.out['--spec'] || 'test/mutations.json'));
   const forbidden = [specAbsForReceipt, real(resolve(ROOT, 'scripts/run-mutations.mjs'))];
@@ -177,7 +185,7 @@ if (receiptPath) {
    */
   const gitDirs = [gitOut(['rev-parse', '--absolute-git-dir']), gitOut(['rev-parse', '--git-common-dir'])]
     .filter(Boolean).map((d) => { try { return realpathSync(resolve(rootReal, d)); } catch (e) { return resolve(rootReal, d); } });
-  const insideGitDir = gitDirs.some((d) => abs === d || !relative(d, abs).startsWith('..') && !isAbsolute(relative(d, abs)))
+  const insideGitDir = gitDirs.some((d) => abs === d || !isOutsideRel(relative(d, abs)))
     || rel === '.git' || rel.startsWith(`.git${sep}`) || rel.startsWith('.git/');
   if (tracked || insideGitDir || forbidden.includes(abs)) {
     console.error(`★ 証跡の出力先が入力を指している（${receiptPath}）。何も書かずに止まる`);
@@ -400,7 +408,7 @@ function validatePath(rel, label) {
     return `${label} の実体を解決できない: ${rel}`;
   }
   const inside = relative(REAL_ROOT, real);
-  if (inside === '' || inside.startsWith('..') || isAbsolute(inside)) {
+  if (inside === '' || isOutsideRel(inside)) {
     return `${label} がリポジトリの外を指している: ${rel}`;
   }
   return null;
@@ -493,6 +501,28 @@ const NOT_OK = /^(\s*)not ok \d+ - (.+?)\s*$/gm;
  * 「assertion として落ちたことになっていない」と読んだ＝CI が進めなくなった。
  * 診断は `---` で開き `...` で閉じる。**開きと同じ字下げの行だけ**をキーにする。
  */
+/*
+ * 目印は **assertion に明示したメッセージ**の中にあるときだけ数える（第28回監査 R28-106）。
+ * Node は、メッセージの無い assertion では本文を自動の見出し（`Expected values to be …`・
+ * `The expression evaluated to a falsy value:` など）で始め、メッセージがあってもその後ろに比べた値の
+ * 差分（`+ actual - expected` 以下）を付ける。Map・Set の要素は actual／expected の欄に出ず、
+ * この差分の中にだけ出る（Node 22 で実測）。差分や自動の見出しにある目印は、目印を持つ assertion が
+ * 落ちた証拠にならない。
+ */
+const GENERATED_HEADS = [/^Expected values to be /, /^Expected "actual" /, /^The expression evaluated to a falsy value/,
+  /^Values have same structure but are not reference-equal/, /^Values identical but not reference-equal/,
+  /^The input did not match the regular expression/, /^The input was expected to not match/];
+function explicitMessage(body) {
+  const text = String(body || '');
+  /*
+   * `Missing expected rejection: <メッセージ>`・`Got unwanted exception: <メッセージ>` は、明示のメッセージを
+   * 見出しの後ろに付ける（Node 22 で実測）。後者は投げた側の文（`Actual message:` 以下）を明示の部分に入れない。
+   */
+  if (/^Got unwanted (?:exception|rejection)/.test(text)) return text.split('\nActual message:')[0];
+  if (GENERATED_HEADS.some((re) => re.test(text.split('\n')[0]))) return '';
+  const legend = text.indexOf('\n+ actual - expected');
+  return legend >= 0 ? text.slice(0, legend) : text;
+}
 function failureDetails(output) {
   const lines = output.split('\n');
   const out = [];
@@ -1136,6 +1166,14 @@ for (const m of mutations) {
   if (String(hits[0].values || '').includes(marker)) {
     results.push({ ...withRun, outcome: 'runner_error', failureKind: 'marker_in_compared_value',
       error: `目印「${marker}」が比べた値（actual / expected）に出ている——目印を持つ assertion が落ちたとは言えない`,
+      expectedFailureKind: wantKind, actualFailureKind: gotKind,
+      expectedFailureMatched: false,
+      matchedBody: maskSecrets(String(hits[0].body || ''), 600) });
+    continue;
+  }
+  if (String(hits[0].body || '').includes(marker) && !explicitMessage(hits[0].body).includes(marker)) {
+    results.push({ ...withRun, outcome: 'runner_error', failureKind: 'marker_in_generated_message',
+      error: `目印「${marker}」が Node の自動の見出しか比べた値の差分にだけ出ている——目印を持つ assertion が落ちたとは言えない`,
       expectedFailureKind: wantKind, actualFailureKind: gotKind,
       expectedFailureMatched: false,
       matchedBody: maskSecrets(String(hits[0].body || ''), 600) });

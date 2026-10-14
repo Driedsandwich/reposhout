@@ -449,15 +449,35 @@ function ciStructureProblems(wf) {
   if (JSON.stringify([...shards].sort()) !== JSON.stringify(['1', '2', '3', '4', '5', '6'])) {
     out.push(`変異の束が 1〜6 を1回ずつになっていない: ${JSON.stringify(shards)}`);
   }
-  const mustRun = [['mutations', 'verify-mutation-receipt.mjs'], ['mutations', 'test:mutations'],
-    ['mutation-coverage', 'verify-mutation-coverage.mjs']];
-  for (const [j, needle] of mustRun) {
-    /* 検証器は **run の中**にあること（name にだけ残っていても走らない） */
-    const step = jobs[j] && jobs[j].steps.find((st) => (st.keys.run || '').includes(needle));
-    if (!step) { out.push(`${j} に ${needle} を走らせるステップが無い`); continue; }
-    if ('if' in step.keys) out.push(`${needle} のステップに if: がある（飛ばせる）`);
-    if ('continue-on-error' in step.keys) out.push(`${needle} のステップに continue-on-error がある`);
+  /*
+   * 必須の検証は**行頭で走るコマンド**として書く（第28回監査 R28-108）。第28回の便A の是正は run の中に
+   * 名前があるかを見ていたので、`echo node scripts/…`・`if false; then … fi`・`… || true` でも通った。
+   * 採る形を限る: 必須の手順の run は、決めたコマンドで始まる行を持ち、シェルの制御や失敗の握りつぶしを
+   * 持たない。手順の shell の付け替えも拒む。単体（Linux・Windows）・E2E も対象にする。
+   */
+  const MUST_RUN = [['test', 'npm run test:unit'], ['test', 'npm run test:e2e'], ['windows', 'npm run test:unit'],
+    ['mutations', 'npm run test:mutations'], ['mutations', 'node scripts/verify-mutation-receipt.mjs'],
+    ['mutation-coverage', 'node scripts/verify-mutation-coverage.mjs']];
+  const CONTROL = /\|\||&&|;|`|\$\(|(?:^|\s)(?:if|then|else|fi|exit|true|false|set|trap)(?:\s|$)/;
+  const runLines = (run) => String(run || '').replace(/\\\n\s*/g, ' ').split('\n').map((s) => s.trim())
+    .filter((s) => s && !/^[|>][-+]?$/.test(s));
+  for (const [j, cmd] of MUST_RUN) {
+    const steps = jobs[j] ? jobs[j].steps : [];
+    const step = steps.find((st) => runLines(st.keys.run).some((l) => l === cmd || l.startsWith(`${cmd} `)));
+    if (!step) { out.push(`${j} に「${cmd}」を行頭で走らせるステップが無い`); continue; }
+    if ('if' in step.keys) out.push(`${cmd} のステップに if: がある（飛ばせる）`);
+    if ('continue-on-error' in step.keys) out.push(`${cmd} のステップに continue-on-error がある`);
+    if ('shell' in step.keys) out.push(`${cmd} のステップの shell を付け替えている`);
+    const ctl = runLines(step.keys.run).filter((l) => CONTROL.test(l));
+    if (ctl.length) out.push(`${cmd} のステップの run にシェルの制御か失敗の握りつぶしがある: ${ctl[0]}`);
   }
+  /* ジョブの段の引用符つきのキー（"if": など）と、既定のシェルの付け替えは読めない形として拒む */
+  for (const j of Object.keys(jobs)) {
+    const odd = jobs[j].head.split('\n').filter((l) => /^ {4}["']/.test(l));
+    if (odd.length) out.push(`ジョブ ${j} に引用符つきのキーがある（読めない形）: ${odd[0].trim()}`);
+    if (/\n {4}defaults:/.test(`\n${jobs[j].head}`)) out.push(`ジョブ ${j} に defaults: がある（既定のシェルを変えうる）`);
+  }
+  if (/^defaults:/m.test(wf)) out.push('ワークフローに defaults: がある（既定のシェルを変えうる）');
   return out;
 }
 
@@ -505,6 +525,29 @@ test('CI の構造の読み手が、キーの順・名前だけの検証器・�
     'GXS_MARK.X58 変異の束の重なり（6 が抜けて 5 が2回）を見逃した');
   assert.ok(bad(wf.replace('      - name: 全部を1回ずつ覆えているか数え直す\n', '      - {name: 流れ形式}\n      - name: 全部を1回ずつ覆えているか数え直す\n'), '流れ形式').length > 0,
     '読めない形（流れ形式のステップ）を読み落としたまま合格にした');
+});
+
+test('CI の構造の読み手が、実行しない文字列・握りつぶし・引用符つきのキー・必須の試験の飛ばしを見逃さない（R28-108）', () => {
+  /* 第28回監査 R28-108。便A の是正の読み手は、下の5つでも問題 0 件を返した（監査で実測） */
+  const wf = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8').replace(/\r\n/g, '\n');
+  const COV = '          node scripts/verify-mutation-coverage.mjs \\\n';
+  const bad = (w, name) => { assert.notEqual(w, wf, `題材が当たっていない: ${name}`); return ciStructureProblems(w); };
+  assert.deepEqual(ciStructureProblems(wf), [], `いまの ci.yml を拒んだ: ${ciStructureProblems(wf).join(' / ')}`);
+  assert.ok(bad(wf.replace(COV, '          echo node scripts/verify-mutation-coverage.mjs \\\n'), 'echo').length > 0,
+    'GXS_MARK.X77 検証器を echo で表示するだけの run を、実行と見なした');
+  /* コマンドは行頭に残す（「行頭に無い」の検査が先に止めると、この検査を外しても落ちない） */
+  const ARGS = '            receipts/*/mutation-receipt.json --expected-commit "$GITHUB_SHA" --spec test/mutations.json\n';
+  assert.ok(bad(wf.replace(COV, `          if false; then\n${COV}`).replace(ARGS, `${ARGS}          fi\n`), 'if 包み').length > 0,
+    'GXS_MARK.X78 シェルの if で実行しない run を見逃した');
+  assert.ok(bad(wf.replace('        run: node scripts/verify-mutation-receipt.mjs mutation-receipt.json --expected-commit "$GITHUB_SHA" --spec test/mutations.json',
+    '        run: node scripts/verify-mutation-receipt.mjs mutation-receipt.json --expected-commit "$GITHUB_SHA" --spec test/mutations.json || true'), '|| true').length > 0,
+  '失敗を || true で握りつぶす run を見逃した');
+  assert.ok(bad(wf.replace('  mutation-coverage:\n    runs-on: ubuntu-latest\n', '  mutation-coverage:\n    "if": false\n    runs-on: ubuntu-latest\n'), 'ジョブの引用符つきの if').length > 0,
+    'GXS_MARK.X79 ジョブの段の引用符つきの "if": false を見逃した');
+  assert.ok(bad(wf.replace('      - name: 単体テスト・適合テスト・manifest検査\n', '      - name: 単体テスト・適合テスト・manifest検査\n        if: false\n'), '単体の飛ばし').length > 0,
+    'GXS_MARK.X80 Linux の単体試験のステップの if: false を見逃した');
+  assert.ok(bad(wf.replace('      - name: 単体テスト（Windows）\n', '      - name: 単体テスト（Windows）\n        shell: bash\n'), 'shell の付け替え').length > 0,
+    '必須の手順の shell の付け替えを見逃した');
 });
 
 test('CIが、変異の証跡を外から検証している（R25-003）', () => {

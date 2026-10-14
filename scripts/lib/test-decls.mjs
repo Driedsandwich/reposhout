@@ -12,6 +12,8 @@
  * 読み手をここ1つに集めて、ランナーからも検算からも同じものを使う。
  */
 
+import vm from 'node:vm';
+
 /** テンプレート文字列を読み飛ばす（`${ }` の中は普通の式として扱う） */
 function skipTemplate(src, i) {
   i++;                                   /* 開きの ` の次から */
@@ -184,5 +186,22 @@ export function testSpanText(src, want) {
    */
   const next = decls[idx + 1];
   if (next && end > next.start) return null;
-  return src.slice(decls[idx].start, end);
+  const span = src.slice(decls[idx].start, end);
+  /*
+   * ⚠️ 次の宣言が無いと、上の検査は働かない（第28回監査 R28-107。最後のテストの後ろの文まで範囲が延びた）。
+   * 範囲が**それ1つの呼び出しの式**として読めるかを、Node の構文解析器で確かめる（実行はしない）。
+   * 延びた範囲は文の並びを含むので、括弧で囲んだ式としては読めない。読めなければ範囲を決めない。
+   */
+  return parsesAsOneCall(span) ? span : null;
+}
+
+function parsesAsOneCall(span) {
+  /* import.meta はモジュールの外では書けないので、同じ長さの識別子へ置き換えてから読む */
+  const code = `(\n${span.replace(/\bimport\.meta\b/g, '__gxs_imeta')}\n)`;
+  try {
+    new vm.Script(code, { filename: 'test-span-check' });
+    return true;
+  } catch (e) {
+    return false;
+  }
 }

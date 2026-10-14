@@ -217,11 +217,12 @@ test('比べる値に目印が出る', () => {
   const dir = makeFixture([mut('U7', { test: 'test/inner.test.mjs',
     expectedFailure: { testName: '比べる値に目印が出る', diagnosticMarker: 'GXS_MARK.INNER' } })], files).dir;
   const r = runRunner(dir);
-  assert.equal(outcomeOf(r, 'U7'), 'runner_error', 'GXS_MARK.X27 比べた値に出た目印で検知にしている');
-  assert.equal(kindOf(r, 'U7'), 'marker_in_compared_value', `止まった理由が違う: ${kindOf(r, 'U7')}`);
+  assert.equal(outcomeOf(r, 'U7'), 'runner_error', '比べた値に出た目印で検知にしている');
+  /* ⚠️ 目印は「止まった理由」の側に置く（R28-106 の自動の差分の検査が先に止めても、この検査を外したことが分かるように） */
+  assert.equal(kindOf(r, 'U7'), 'marker_in_compared_value', `GXS_MARK.X27 止まった理由が違う（比べた値の検査が効いていない）: ${kindOf(r, 'U7')}`);
 });
 
-test('目印が入れ子の比べた値（オブジェクト・配列）に出ているだけでも、検知にしない（R28-002）', () => {
+test('目印が入れ子の比べた値（オブジェクト・配列・Map・Set）に出ているだけでも、検知にしない（R28-002・R28-106）', () => {
   /*
    * 第28回監査 R28-002。Node は入れ子の値を `actual:` の後ろを空にして次の行から出すので、
    * 第27回の読み方では比べた値に入らず、目印の照合が通っていた。オブジェクトと配列の両方を見る。
@@ -244,6 +245,22 @@ test('入れ子の比べる値に目印が出る（配列）', () => {
 test('目印のある assertion そのものが落ちる', () => {
   assert.equal(value, 1, 'GXS_MARK.NESTED_SELF');
 });
+test('Map の比べる値に目印が出る', () => {
+  const mark = 'GXS_MARK.NESTED_MAP';
+  assert.ok(true, mark);
+  assert.deepEqual(new Map([['v', value === 1 ? 'ok' : mark]]), new Map([['v', 'ok']]));
+});
+test('Set の比べる値に目印が出る', () => {
+  const mark = 'GXS_MARK.NESTED_SET';
+  assert.ok(true, mark);
+  assert.deepEqual(new Set([value === 1 ? 'ok' : mark]), new Set(['ok']));
+});
+test('メッセージつきの Map の比較で、目印を持つ assertion そのものが落ちる', () => {
+  assert.deepEqual(new Map([['v', value]]), new Map([['v', 1]]), 'GXS_MARK.MAPMSG_OWN');
+});
+test('期待した拒否が無いとき、明示のメッセージの目印で検知する', async () => {
+  await assert.rejects(async () => { if (value !== 1) return 'ok'; throw new Error('拒否'); }, /拒否/, 'GXS_MARK.REJMSG_OWN 期待した拒否が無い');
+});
 `
   };
   const dir = makeFixture([
@@ -252,7 +269,15 @@ test('目印のある assertion そのものが落ちる', () => {
     mut('U10', { test: 'test/nested.test.mjs',
       expectedFailure: { testName: '入れ子の比べる値に目印が出る（配列）', diagnosticMarker: 'GXS_MARK.NESTED_ARR' } }),
     mut('U11', { test: 'test/nested.test.mjs',
-      expectedFailure: { testName: '目印のある assertion そのものが落ちる', diagnosticMarker: 'GXS_MARK.NESTED_SELF' } })
+      expectedFailure: { testName: '目印のある assertion そのものが落ちる', diagnosticMarker: 'GXS_MARK.NESTED_SELF' } }),
+    mut('U13', { test: 'test/nested.test.mjs',
+      expectedFailure: { testName: 'Map の比べる値に目印が出る', diagnosticMarker: 'GXS_MARK.NESTED_MAP' } }),
+    mut('U14', { test: 'test/nested.test.mjs',
+      expectedFailure: { testName: 'Set の比べる値に目印が出る', diagnosticMarker: 'GXS_MARK.NESTED_SET' } }),
+    mut('U15', { test: 'test/nested.test.mjs',
+      expectedFailure: { testName: 'メッセージつきの Map の比較で、目印を持つ assertion そのものが落ちる', diagnosticMarker: 'GXS_MARK.MAPMSG_OWN' } }),
+    mut('U16', { test: 'test/nested.test.mjs',
+      expectedFailure: { testName: '期待した拒否が無いとき、明示のメッセージの目印で検知する', diagnosticMarker: 'GXS_MARK.REJMSG_OWN' } })
   ], files).dir;
   const r = runRunner(dir);
   assert.equal(kindOf(r, 'U9'), 'marker_in_compared_value',
@@ -261,6 +286,15 @@ test('目印のある assertion そのものが落ちる', () => {
     `配列の比べた値に出た目印で検知にしている: ${outcomeOf(r, 'U10')} / ${kindOf(r, 'U10')}`);
   /* 対照: 目印を持つ assertion 自身が落ちたなら検知する（何でも断る読み手になっていない） */
   assert.equal(outcomeOf(r, 'U11'), 'applied_and_killed', `目印のある assertion が落ちたのに検知にしない: ${kindOf(r, 'U11')}`);
+  /* 第28回監査 R28-106: Map・Set の要素は actual／expected の欄に出ず、自動の差分の中にだけ出る */
+  assert.equal(kindOf(r, 'U13'), 'marker_in_generated_message',
+    `GXS_MARK.X69 Map の比べた値の差分に出た目印で検知にしている: ${outcomeOf(r, 'U13')} / ${kindOf(r, 'U13')}`);
+  assert.equal(kindOf(r, 'U14'), 'marker_in_generated_message',
+    `Set の比べた値の差分に出た目印で検知にしている: ${outcomeOf(r, 'U14')} / ${kindOf(r, 'U14')}`);
+  /* 対照: メッセージに目印があれば、後ろに差分が付いていても検知する */
+  assert.equal(outcomeOf(r, 'U15'), 'applied_and_killed', `メッセージつきの assertion が落ちたのに検知にしない: ${kindOf(r, 'U15')}`);
+  /* 対照: 「Missing expected rejection: <メッセージ>」の形でも、明示のメッセージの目印は数える */
+  assert.equal(outcomeOf(r, 'U16'), 'applied_and_killed', `期待した拒否が無いときの明示のメッセージで検知にしない: ${kindOf(r, 'U16')}`);
 });
 
 test('目印がテストの呼び出しの外にあれば、測る前に断る（R27-104 の外側の題材）', () => {
@@ -312,10 +346,14 @@ test('正規表現の中の括弧で、テストの範囲が次のテストま�
    * 読み手が見分けられない形（`)` の後の正規表現）では、範囲が次の宣言を越える。
    * そのときは推測した範囲を使わず、決められない（null）で止める。
    */
+  /*
+   * ⚠️ 延びた範囲が**式としては読める**形（カンマでつないだ2つの呼び出し）にする。文の並びになる形だと、
+   * R28-107 の構文の確認が先に止め、この検査を外しても落ちない（X50 が CI で素通りした）。
+   */
   const misread = [
     "test('a', () => {",
     '  if (s) /\\(/.test(s);',
-    '});',
+    '}),',
     "test('b', () => {",
     '  if (s) /\\)/.test(s);',
     '});',
@@ -326,6 +364,28 @@ test('正規表現の中の括弧で、テストの範囲が次のテストま�
   /* 対照: ふつうの割り算は正規表現と読まない（範囲が途中で切れたり延びたりしない） */
   const div = "test('d', () => { const x = a.return / 2; const y = (b) / 3; assert.ok(x / y); });\nconst z = 1;";
   assert.equal(testSpanText(div, 'd'), div.split('\n')[0].replace(/;$/, ''), '割り算を正規表現と読んだ');
+});
+
+test('後ろにテストの宣言が無くても、範囲を外の文まで延ばさない（R28-107）', () => {
+  /*
+   * 第28回監査 R28-107。「次の宣言を越えたら止める」は、後ろに宣言が無い最後のテストでは働かず、
+   * 読み違えた範囲がモジュール直下の目印と後ろの文まで延びた（監査で実測）。
+   */
+  const src = [
+    "test('guard', () => {",
+    "  if (false) /\\(/.test('');",
+    '  assert.equal(value, 1, mark);',
+    '});',
+    "const mark = 'GXS_MARK.OUTSIDE';",
+    "if (false) /\\)/.test('');",
+    ''
+  ].join('\n');
+  const span = testSpanText(src, 'guard');
+  assert.ok(span === null || (!span.includes('OUTSIDE') && span.endsWith('})')),
+    `GXS_MARK.X70 最後のテストの範囲を外の文まで延ばした: ${JSON.stringify(span)}`);
+  /* 対照: import.meta や入れ子の t.test を含む正しい試験は、範囲を取れる（何でも断る読み手でない） */
+  const ok = "test('a', async (t) => { const u = new URL('x', import.meta.url); await t.test('b', () => {}); });\nconst z = 1;";
+  assert.equal(testSpanText(ok, 'a'), ok.split('\n')[0].replace(/;$/, ''), '正しい試験の範囲を取れない');
 });
 
 test('正規表現の中の括弧があっても、テストの外の目印を中と見なさない（R28-003・ランナーを通す）', () => {
@@ -800,6 +860,31 @@ test('証跡の出力先が git の管理先なら、1バイトも書かずに�
   /* 対照: ふつうの出力先なら走る */
   const ok = runRunner(fx.dir, { receipt: 'out-receipt.json' });
   assert.equal(ok.exitCode, 0, `対照が成立していない:\n${ok.stdout.slice(-300)}`);
+});
+
+test('証跡の出力先の内外を、名前の頭の .. で取り違えない（R28-105）', () => {
+  /*
+   * 第28回監査 R28-105。内外を `startsWith('..')` で見ていたので、同じディレクトリの `..notes.md`
+   *（追跡中の文書）や git の管理先の中の `..audit-state` を「外」と読み、保護を抜けて書き換えた。
+   */
+  const fx = makeFixture([mut('Q16')], { '..notes.md': '# 頭に .. の付いた大事なメモ\n' });
+  writeFileSync(join(fx.dir, '.git', '..audit-state'), 'GIT-ADMIN-STATE\n');
+  const run = (receipt) => {
+    try {
+      execFileSync(process.execPath, [join(fx.dir, 'scripts/run-mutations.mjs'),
+        '--spec', join(fx.dir, 'test/mutations.json'), '--allow-dirty', '--receipt', join(fx.dir, receipt)],
+      { cwd: fx.dir, encoding: 'utf8', stdio: 'pipe', timeout: 120000 });
+      return 0;
+    } catch (e) { return typeof e.status === 'number' ? e.status : -1; }
+  };
+  const notes = readFileSync(join(fx.dir, '..notes.md'), 'utf8');
+  assert.equal(run('..notes.md'), 2, 'GXS_MARK.X68 追跡中の ..notes.md を出力先にできた');
+  assert.equal(readFileSync(join(fx.dir, '..notes.md'), 'utf8'), notes, '..notes.md を書き換えた');
+  assert.equal(run('.git/..audit-state'), 2, 'git の管理先の中の ..audit-state を出力先にできた');
+  assert.equal(readFileSync(join(fx.dir, '.git', '..audit-state'), 'utf8'), 'GIT-ADMIN-STATE\n', '管理先の中を書き換えた');
+  /* 対照: 本当に外（親）を指す出力先は、外として扱われ書ける（この判定が何でも拒むわけではない） */
+  const ok = runRunner(fx.dir, { receipt: join('..', 'outside-receipt.json') });
+  assert.equal(ok.exitCode, 0, `外の出力先で走れない:\n${ok.stdout.slice(-300)}`);
 });
 
 const canLink = (kind) => {

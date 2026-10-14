@@ -15,6 +15,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { ROOT, loadShare, stripComments } from './helpers/load.mjs';
+import { ownerRecordProblems, dateIn } from '../scripts/store-readiness.mjs';
 
 const sha256 = (t) => createHash('sha256').update(t).digest('hex');
 
@@ -531,6 +532,34 @@ const DISCLOSURE_TABLES = [
   { file: 'store/STORE_DASHBOARD_CHANGES.md', answerColumn: 3 }
 ];
 
+/*
+ * 確認待ちの欄の行に書いた「本人の答え」が、正本の ownerConfirmation.chosen と一致するか（第28回監査 R28-104）。
+ * 前は「要確認」の印と確定値でないことだけを見ていたので、「本人の答え: Yes」と逆に写しても通った。
+ * 本人の答えが無いのに「本人の答え」と書いた形も拒む。問題を文で返す。
+ */
+function pendingRowProblems(row, cat) {
+  const chosen = cat.ownerConfirmation && cat.ownerConfirmation.chosen;
+  const said = [...String(row).matchAll(/本人の答え[:：]\s*(Yes|No)/g)].map((m) => m[1]);
+  if (chosen === null || chosen === undefined) {
+    return /本人の答え/.test(row) ? ['本人の答えが無いのに、行に「本人の答え」と書いてある'] : [];
+  }
+  if (said.length !== 1) return [`行の「本人の答え」が1つでない（${said.join(' / ') || '無い'}）`];
+  return said[0] === chosen ? [] : [`行は「本人の答え: ${said[0]}」・正本は ${chosen}`];
+}
+
+test('確認待ちの行の「本人の答え」の照合が、逆の写し・答えの無い写しを拒む（R28-104 の対照）', () => {
+  const no = { ownerConfirmation: { chosen: 'No' } };
+  const yes = { ownerConfirmation: { chosen: 'Yes' } };
+  const none = { ownerConfirmation: { chosen: null } };
+  assert.deepEqual(pendingRowProblems(' **要確認**（本人の答え: No・設問文の記録待ち） | 理由 ', no), [], 'No の一致を拒んだ');
+  assert.deepEqual(pendingRowProblems(' **要確認**（本人の答え: Yes・設問文の記録待ち） | 理由 ', yes), [], 'Yes の一致を拒んだ');
+  assert.ok(pendingRowProblems(' **要確認**（本人の答え: Yes・設問文の記録待ち） | 理由 ', no).length > 0,
+    'GXS_MARK.X75 本人の答えを逆に写した行を通した');
+  assert.ok(pendingRowProblems(' **要確認**（本人の答え: No） | 理由 ', none).length > 0, '本人の答えが無いのに答えを書いた行を通した');
+  assert.deepEqual(pendingRowProblems(' **要確認**（案: No） | 理由 ', none), [], '答えの無い確認待ちの行を拒んだ');
+  assert.ok(pendingRowProblems(' **要確認**（案: No） | 理由 ', no).length > 0, '本人の答えがあるのに行に書いていない形を通した');
+});
+
 test('ストア文書のデータ申告が、正本と1つ残らず一致する', () => {
   for (const { file, answerColumn } of DISCLOSURE_TABLES) {
     const got = answersFrom(file, answerColumn);
@@ -547,6 +576,8 @@ test('ストア文書のデータ申告が、正本と1つ残らず一致する'
           `${file}: 確認待ちの「${cat.label}」が確定値として書かれている`);
         assert.ok(new RegExp(`\\| ${cat.label} \\|[^\\n]*要確認`).test(read(file)),
           `${file}: 「${cat.label}」に要確認の印が無い`);
+        const row = (new RegExp(`\\| ${cat.label} \\|([^\\n]*)`).exec(read(file)) || [])[1] || '';
+        assert.deepEqual(pendingRowProblems(row, cat), [], `${file}: 「${cat.label}」の本人の答えの写しが正本と違う`);
         continue;
       }
       assert.ok(got.has(cat.label), `${file} に「${cat.label}」の行が無い`);
@@ -592,38 +623,10 @@ test('データ申告の欄が9つそろっている', () => {
 });
 
 /*
- * 本人の答えだけ先に記録した欄の形（本人の答え・2026-10-14）。問題を文で返す（空なら合格）。
- * 本人の答えは届いたが、ダッシュボードの設問文はまだ記録できない。そのあいだは pending のまま
- * 答えだけを持ち、設問文と確認日をこちらで埋めない。設問文の写真待ちのまま confirmed にもしない。
- * ⚠️ 検査はこの関数に置き、実ファイルと合成の反例の両方へ当てる（第28回の検収: 変異を実ファイルの
- * 「確認待ち」の文面へ当てると、本人の確認を正しく記録したときに当て先が消えて CI が赤になる）。
+ * 本人の確認の記録の整合は、提出ゲートと同じ関数で見る（第28回監査 R28-101。前はこの試験だけの関数で、
+ * 確認済みの側の整合を見ていなかった）。実ファイルの日付はいまの JST の日付で見る。
  */
-function ownerAnswerProblems(c) {
-  const realDay = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) &&
-    new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
-  const oc = c.ownerConfirmation || {};
-  const awaiting = oc.dashboardQuestionTextStatus === 'awaiting_owner_screenshot';
-  const out = [];
-  if (c.confirmationStatus === 'confirmed') {
-    if (awaiting) out.push('設問文の写真待ちのまま confirmed になっている');
-    return out;
-  }
-  if (oc.chosen === null || oc.chosen === undefined) {
-    for (const k of ['answeredOn', 'answerSource', 'dashboardQuestionTextStatus']) {
-      if (oc[k] !== null && oc[k] !== undefined) out.push(`答えが無いのに ${k} が埋まっている`);
-    }
-    return out;
-  }
-  if (!['Yes', 'No'].includes(oc.chosen)) out.push(`本人の答えが Yes / No でない: ${oc.chosen}`);
-  if (!(awaiting && oc.dashboardQuestionText === null && oc.confirmedOn === null)) {
-    out.push('確認待ちなのに設問文か確認日が埋まっている（設問文は本人の画面の写真から起こす）');
-  }
-  if (!realDay(oc.answeredOn)) out.push(`本人が答えた日が実在する日でない: ${oc.answeredOn}`);
-  if (!(typeof oc.answerSource === 'string' && oc.answerSource.trim() && typeof oc.reason === 'string' && oc.reason.trim())) {
-    out.push('答えの出所か理由が空');
-  }
-  return out;
-}
+const ownerAnswerProblems = (c) => ownerRecordProblems(c, dateIn('Asia/Tokyo'));
 
 test('本人の答えだけ先に記録した欄は、設問文の写真待ちと分かる形で確認待ちのまま持つ', () => {
   for (const c of DISCLOSURE.categories.filter((x) => x.requiresOwnerConfirmation)) {
@@ -644,10 +647,26 @@ test('本人の答えだけの欄の検査が、欠けた・作った形を拒�
     'GXS_MARK.X46 確認待ちのまま設問文をこちらで埋めた形を通した');
   assert.ok(ownerAnswerProblems(with_({ confirmedOn: '2026-10-14' })).length > 0, '確認待ちのまま確認日を埋めた形を通した');
   assert.ok(ownerAnswerProblems(with_({}, { confirmationStatus: 'confirmed', answer: 'No' })).length > 0,
-    '設問文の写真待ちのまま confirmed にした形を通した');
+    'GXS_MARK.X71 設問文の写真待ちのまま confirmed にした形を通した');
   assert.ok(ownerAnswerProblems(with_({ answeredOn: '2026-02-30' })).length > 0, '実在しない答えた日を通した');
   assert.ok(ownerAnswerProblems({ ...waiting, ownerConfirmation: { chosen: null, answeredOn: '2026-10-14' } }).length > 0,
     '答えが無いのに答えた日だけある形を通した');
+  /* 確認済みの側（第28回監査 R28-101）: 答えの記録を持つなら、状態の値・日付の前後・出所を見る */
+  const done = with_({ dashboardQuestionText: '（題材）写真から起こした設問文', confirmedOn: '2026-10-14',
+    dashboardQuestionTextStatus: 'transcribed_from_owner_screenshot' }, { confirmationStatus: 'confirmed', answer: 'No' });
+  assert.deepEqual(ownerAnswerProblems(done), [], `正しく確認した形を拒んだ: ${ownerAnswerProblems(done).join(' / ')}`);
+  const doneWith = (oc) => ({ ...done, ownerConfirmation: { ...done.ownerConfirmation, ...oc } });
+  assert.ok(ownerAnswerProblems(doneWith({ dashboardQuestionTextStatus: 'nonsense' })).length > 0,
+    '確認済みで設問文の状態が知らない値の形を通した');
+  /* 日付はどちらも過去にする（未来の検査が先に止めると、この検査を外しても落ちない） */
+  assert.ok(ownerAnswerProblems(doneWith({ answeredOn: '2026-10-12', confirmedOn: '2026-10-11' })).length > 0,
+    'GXS_MARK.X72 本人が答えた日が確認日より後の形を通した');
+  assert.ok(ownerAnswerProblems(doneWith({ answeredOn: '2099-01-01', confirmedOn: '2099-01-02' })).length > 0,
+    '本人が答えた日が未来の形を通した');
+  assert.ok(ownerAnswerProblems(doneWith({ answerSource: '' })).length > 0, '確認済みで答えの出所が空の形を通した');
+  /* 対照: 答えの記録を持たない確認済み（第27回までの形）は通す */
+  const plain = { ...done, ownerConfirmation: { dashboardQuestionText: '（題材）', confirmedOn: '2026-10-14', chosen: 'No', reason: '（題材）' } };
+  assert.deepEqual(ownerAnswerProblems(plain), [], `答えの記録の無い確認済みを拒んだ: ${ownerAnswerProblems(plain).join(' / ')}`);
 });
 
 /*
@@ -660,8 +679,9 @@ function fallbackPlanProblems(wi) {
   let body = null;
   try { body = read(plan); } catch (e) { /* 下で問題にする */ }
   if (body === null) return [`判断の正本が指す手順の文書が無い: ${plan}`];
+  /* 新しいページを収録一覧へ足すこと（第28回監査 R28-109。収録は明示した一覧だけ） */
   return ['x.com/intent/post', 'secure_query_transport', 'redirection_policy',
-    'WEB_INTENT_POLICY_DECISION.json', 'DATA_DISCLOSURE.json', 'SUBMISSION_CANDIDATE.json']
+    'WEB_INTENT_POLICY_DECISION.json', 'DATA_DISCLOSURE.json', 'SUBMISSION_CANDIDATE.json', 'scripts/package-files.mjs']
     .filter((must) => !body.includes(must)).map((must) => `${plan} に「${must}」が無い（作り替えで触る所を言っていない）`);
 }
 

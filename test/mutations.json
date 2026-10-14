@@ -863,7 +863,7 @@
     {
       "id": "N23",
       "file": "scripts/run-mutations.mjs",
-      "find": "  if (inside === '' || inside.startsWith('..') || isAbsolute(inside)) {\n",
+      "find": "  if (inside === '' || isOutsideRel(inside)) {\n",
       "replace": "  if (false) {\n",
       "test": "test/mutation-runner.test.mjs",
       "desc": "リポジトリの外を指す対象を許す",
@@ -2738,8 +2738,8 @@
       "file": "scripts/store-readiness.mjs",
       "test": "test/store-readiness.test.mjs",
       "desc": "本人の引き受けの記録の原文を、定数と照らさない",
-      "find": "s.officialText === WEB_INTENT_OFFICIAL_TEXT[need] && !blank(s.officialSource),",
-      "replace": "!blank(s.officialSource),",
+      "find": "            s.officialText === WEB_INTENT_OFFICIAL_TEXT[need] &&\n            sourceMatches(s.officialSource, WEB_INTENT_OFFICIAL_SOURCE[need]),",
+      "replace": "            sourceMatches(s.officialSource, WEB_INTENT_OFFICIAL_SOURCE[need]),",
       "expectedFailure": {
         "testName": "strict: 本人の引き受けで、原文・論点・決めた人と日・手順・版が欠ければ通らない",
         "diagnosticMarker": "GXS_MARK.X39"
@@ -2807,7 +2807,7 @@
     },
     {
       "id": "X45",
-      "file": "test/docs.test.mjs",
+      "file": "scripts/store-readiness.mjs",
       "test": "test/docs.test.mjs",
       "desc": "本人の答えが Yes / No かを見ない",
       "find": "  if (!['Yes', 'No'].includes(oc.chosen)) out.push(`本人の答えが Yes / No でない: ${oc.chosen}`);",
@@ -2819,11 +2819,11 @@
     },
     {
       "id": "X46",
-      "file": "test/docs.test.mjs",
+      "file": "scripts/store-readiness.mjs",
       "test": "test/docs.test.mjs",
       "desc": "確認待ちのまま設問文・確認日が埋まっていても通す",
-      "find": "  if (!(awaiting && oc.dashboardQuestionText === null && oc.confirmedOn === null)) {",
-      "replace": "  if (!awaiting) {",
+      "find": "  if (!(st === QUESTION_TEXT_STATUS.awaiting && oc.dashboardQuestionText === null && oc.confirmedOn === null)) {",
+      "replace": "  if (!(st === QUESTION_TEXT_STATUS.awaiting)) {",
       "expectedFailure": {
         "testName": "本人の答えだけの欄の検査が、欠けた・作った形を拒む（合成の反例）",
         "diagnosticMarker": "GXS_MARK.X46"
@@ -2849,7 +2849,7 @@
       "find": "if (/^(?:actual|expected):\\s*(?:[|>][-+]?)?\\s*$/.test(t)) { inValue = true; continue; }",
       "replace": "if (/^(?:actual|expected):\\s*[|>][-+]?\\s*$/.test(t)) { inValue = true; continue; }",
       "expectedFailure": {
-        "testName": "目印が入れ子の比べた値（オブジェクト・配列）に出ているだけでも、検知にしない（R28-002）",
+        "testName": "目印が入れ子の比べた値（オブジェクト・配列・Map・Set）に出ているだけでも、検知にしない（R28-002・R28-106）",
         "diagnosticMarker": "GXS_MARK.X48"
       }
     },
@@ -2954,8 +2954,8 @@
       "file": "test/manifest.test.mjs",
       "test": "test/manifest.test.mjs",
       "desc": "検証器を run の中でなくステップ全体から探す（name にだけ残っても通す）",
-      "find": "    const step = jobs[j] && jobs[j].steps.find((st) => (st.keys.run || '').includes(needle));",
-      "replace": "    const step = jobs[j] && jobs[j].steps.find((st) => JSON.stringify(st.keys).includes(needle));",
+      "find": "    const step = steps.find((st) => runLines(st.keys.run).some((l) => l === cmd || l.startsWith(`${cmd} `)));",
+      "replace": "    const step = steps.find((st) => JSON.stringify(st.keys).includes(cmd.split('/').pop()));",
       "expectedFailure": {
         "testName": "CI の構造の読み手が、キーの順・名前だけの検証器・束の重なりを見逃さない（R28-005）",
         "diagnosticMarker": "GXS_MARK.X57"
@@ -3079,6 +3079,162 @@
       "expectedFailure": {
         "testName": "ドットの多い名前の境界（11・12・25 回）で、公式の数え方と共有の可否を並べて記録する（R27-202）",
         "diagnosticMarker": "GXS_MARK.X67"
+      }
+    },
+    {
+      "id": "X68",
+      "file": "scripts/run-mutations.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "パスの内外を名前の頭の .. で判定する（..notes.md を外と読む）",
+      "find": "  return rel === '..' || rel.startsWith(`..${sep}`) || rel.startsWith('../') || isAbsolute(rel);",
+      "replace": "  return rel.startsWith('..') || isAbsolute(rel);",
+      "expectedFailure": {
+        "testName": "証跡の出力先の内外を、名前の頭の .. で取り違えない（R28-105）",
+        "diagnosticMarker": "GXS_MARK.X68"
+      }
+    },
+    {
+      "id": "X69",
+      "file": "scripts/run-mutations.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "Node の自動の見出しや比べた値の差分にだけ出た目印でも検知にする",
+      "find": "  if (String(hits[0].body || '').includes(marker) && !explicitMessage(hits[0].body).includes(marker)) {",
+      "replace": "  if (false) {",
+      "expectedFailure": {
+        "testName": "目印が入れ子の比べた値（オブジェクト・配列・Map・Set）に出ているだけでも、検知にしない（R28-002・R28-106）",
+        "diagnosticMarker": "GXS_MARK.X69"
+      }
+    },
+    {
+      "id": "X70",
+      "file": "scripts/lib/test-decls.mjs",
+      "test": "test/mutation-evidence.test.mjs",
+      "desc": "範囲が1つの呼び出しの式として読めるかを確かめない",
+      "find": "  return parsesAsOneCall(span) ? span : null;",
+      "replace": "  return span;",
+      "expectedFailure": {
+        "testName": "後ろにテストの宣言が無くても、範囲を外の文まで延ばさない（R28-107）",
+        "diagnosticMarker": "GXS_MARK.X70"
+      }
+    },
+    {
+      "id": "X71",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "確認済みで設問文の状態が知らない値でも通す",
+      "find": "    if (st !== QUESTION_TEXT_STATUS.transcribed) out.push(`確認済みなのに設問文の状態が ${JSON.stringify(st)}（${QUESTION_TEXT_STATUS.transcribed} でない）`);",
+      "replace": "    /* 状態の値を見ない */",
+      "expectedFailure": {
+        "testName": "本人の答えだけの欄の検査が、欠けた・作った形を拒む（合成の反例）",
+        "diagnosticMarker": "GXS_MARK.X71"
+      }
+    },
+    {
+      "id": "X72",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "本人が答えた日が確認日より後でも通す",
+      "find": "    if (dayOk('本人が答えた日', oc.answeredOn) && isRealDate(oc.confirmedOn || '') && oc.answeredOn > oc.confirmedOn) {",
+      "replace": "    if (dayOk('本人が答えた日', oc.answeredOn) && false) {",
+      "expectedFailure": {
+        "testName": "本人の答えだけの欄の検査が、欠けた・作った形を拒む（合成の反例）",
+        "diagnosticMarker": "GXS_MARK.X72"
+      }
+    },
+    {
+      "id": "X73",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "外部の確認に現在の本人の引き受けが残っても通す",
+      "find": "          wi.ownerRiskAcceptance === null || wi.ownerRiskAcceptance === undefined,",
+      "replace": "          true,",
+      "expectedFailure": {
+        "testName": "strict: 外部の確認に、現在の本人の引き受けが混ざれば通らない（R28-102）",
+        "diagnosticMarker": "GXS_MARK.X73"
+      }
+    },
+    {
+      "id": "X74",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "出典が論点ごとの公式のページかを見ない（空でなければ通す）",
+      "find": "  (got === url || (got.startsWith(url) && /^[（(#\\s]/.test(got.slice(url.length))));",
+      "replace": "  got.trim() !== '';",
+      "expectedFailure": {
+        "testName": "strict: 本人の引き受けの出典は、論点ごとの公式のページでなければ通らない（R28-103）",
+        "diagnosticMarker": "GXS_MARK.X74"
+      }
+    },
+    {
+      "id": "X76",
+      "file": "scripts/store-readiness.mjs",
+      "test": "test/store-readiness.test.mjs",
+      "desc": "本人の確認の記録の整合をゲートで見ない",
+      "find": "    if (mustConfirm) {\n      for (const p of ownerRecordProblems(c, today))",
+      "replace": "    if (false) {\n      for (const p of ownerRecordProblems(c, today))",
+      "expectedFailure": {
+        "testName": "strict: 本人の確認の記録の整合を、提出ゲートが見る（R28-101 の配線）",
+        "diagnosticMarker": "GXS_MARK.X76"
+      }
+    },
+    {
+      "id": "X75",
+      "file": "test/docs.test.mjs",
+      "test": "test/docs.test.mjs",
+      "desc": "確認待ちの行の本人の答えを正本と照らさない",
+      "find": "  return said[0] === chosen ? [] : [`行は「本人の答え: ${said[0]}」・正本は ${chosen}`];",
+      "replace": "  return [];",
+      "expectedFailure": {
+        "testName": "確認待ちの行の「本人の答え」の照合が、逆の写し・答えの無い写しを拒む（R28-104 の対照）",
+        "diagnosticMarker": "GXS_MARK.X75"
+      }
+    },
+    {
+      "id": "X77",
+      "file": "test/manifest.test.mjs",
+      "test": "test/manifest.test.mjs",
+      "desc": "run の行のどこかにコマンドの名前があれば実行と見なす（行頭で見ない）",
+      "find": "    const step = steps.find((st) => runLines(st.keys.run).some((l) => l === cmd || l.startsWith(`${cmd} `)));",
+      "replace": "    const step = steps.find((st) => runLines(st.keys.run).some((l) => l.includes(cmd)));",
+      "expectedFailure": {
+        "testName": "CI の構造の読み手が、実行しない文字列・握りつぶし・引用符つきのキー・必須の試験の飛ばしを見逃さない（R28-108）",
+        "diagnosticMarker": "GXS_MARK.X77"
+      }
+    },
+    {
+      "id": "X78",
+      "file": "test/manifest.test.mjs",
+      "test": "test/manifest.test.mjs",
+      "desc": "必須の手順の run のシェルの制御・握りつぶしを見ない",
+      "find": "    if (ctl.length) out.push(`${cmd} のステップの run にシェルの制御か失敗の握りつぶしがある: ${ctl[0]}`);",
+      "replace": "    /* 制御を見ない */",
+      "expectedFailure": {
+        "testName": "CI の構造の読み手が、実行しない文字列・握りつぶし・引用符つきのキー・必須の試験の飛ばしを見逃さない（R28-108）",
+        "diagnosticMarker": "GXS_MARK.X78"
+      }
+    },
+    {
+      "id": "X79",
+      "file": "test/manifest.test.mjs",
+      "test": "test/manifest.test.mjs",
+      "desc": "ジョブの段の引用符つきのキーを見ない",
+      "find": "    if (odd.length) out.push(`ジョブ ${j} に引用符つきのキーがある（読めない形）: ${odd[0].trim()}`);",
+      "replace": "    /* 引用符つきのキーを見ない */",
+      "expectedFailure": {
+        "testName": "CI の構造の読み手が、実行しない文字列・握りつぶし・引用符つきのキー・必須の試験の飛ばしを見逃さない（R28-108）",
+        "diagnosticMarker": "GXS_MARK.X79"
+      }
+    },
+    {
+      "id": "X80",
+      "file": "test/manifest.test.mjs",
+      "test": "test/manifest.test.mjs",
+      "desc": "Linux の単体試験を必須の手順から外す",
+      "find": "  const MUST_RUN = [['test', 'npm run test:unit'], ['test', 'npm run test:e2e'], ['windows', 'npm run test:unit'],",
+      "replace": "  const MUST_RUN = [['test', 'npm run test:e2e'], ['windows', 'npm run test:unit'],",
+      "expectedFailure": {
+        "testName": "CI の構造の読み手が、実行しない文字列・握りつぶし・引用符つきのキー・必須の試験の飛ばしを見逃さない（R28-108）",
+        "diagnosticMarker": "GXS_MARK.X80"
       }
     }
   ]
