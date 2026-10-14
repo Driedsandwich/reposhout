@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { ROOT } from './helpers/load.mjs';
 import { GUARD, WANT, makeFixture, mut, runRunner, of, outcomeOf, kindOf }
   from './helpers/mutation-fixture.mjs';
+import { testSpanText } from '../scripts/lib/test-decls.mjs';
 
 /* ============================================================
  * ⑤ 証拠として使える形か（第25回監査 R25-002 / R25-003）
@@ -280,6 +281,71 @@ const mark = 'GXS_MARK.OUTER';
   assert.equal(outcomeOf(r, 'U8'), 'runner_error', 'テストの外の目印で検知にしている');
   /* ⚠️ 走らせたあとの「本文に目印が無い」でも runner_error になるので、測る前に断ったかを理由で見る */
   assert.match(String(of(r, 'U8').error), /対象テストの外/, `GXS_MARK.X28 測る前に断っていない: ${of(r, 'U8').error}`);
+});
+
+test('正規表現の中の括弧で、テストの範囲が次のテストまで延びない（R28-003）', () => {
+  /*
+   * 第28回監査 R28-003。`return /\(/` の `/` を割り算と読み、正規表現の中の `(` を呼び出しの括弧として
+   * 数えたので、`guard` の範囲がモジュール直下の目印と次のテストまで延びた（監査で実測）。
+   */
+  const src = [
+    "test('guard', () => {",
+    '  function f() { return /\\(/; }',
+    '  assert.equal(value, 1, mark);',
+    '});',
+    "const mark = 'GXS_MARK.OUTSIDE';",
+    '',
+    "test('other', () => {",
+    '  function g() { return /\\)/; }',
+    '  assert.ok(true);',
+    '});',
+    ''
+  ].join('\n');
+  const want = src.slice(0, src.indexOf('});') + 2);   /* 呼び出しの閉じ括弧まで（`;` は含まない） */
+  assert.equal(testSpanText(src, 'guard'), want,
+    'GXS_MARK.X49 return の後の正規表現を割り算と読み、範囲がずれた');
+  /*
+   * 読み手が見分けられない形（`)` の後の正規表現）では、範囲が次の宣言を越える。
+   * そのときは推測した範囲を使わず、決められない（null）で止める。
+   */
+  const misread = [
+    "test('a', () => {",
+    '  if (s) /\\(/.test(s);',
+    '});',
+    "test('b', () => {",
+    '  if (s) /\\)/.test(s);',
+    '});',
+    ''
+  ].join('\n');
+  assert.equal(testSpanText(misread, 'a'), null,
+    'GXS_MARK.X50 範囲が次のテストの宣言を越えたのに、その範囲を使った');
+  /* 対照: ふつうの割り算は正規表現と読まない（範囲が途中で切れたり延びたりしない） */
+  const div = "test('d', () => { const x = a.return / 2; const y = (b) / 3; assert.ok(x / y); });\nconst z = 1;";
+  assert.equal(testSpanText(div, 'd'), div.split('\n')[0].replace(/;$/, ''), '割り算を正規表現と読んだ');
+});
+
+test('正規表現の中の括弧があっても、テストの外の目印を中と見なさない（R28-003・ランナーを通す）', () => {
+  const files = {
+    'test/regex.test.mjs': `
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { value } from '../mod.mjs';
+test('正規表現を含む検査', () => {
+  function f() { return /\\(/; }
+  assert.equal(value, 1, mark);
+});
+const mark = 'GXS_MARK.REGEXOUT';
+test('正規表現を含む別の検査', () => {
+  function g() { return /\\)/; }
+  assert.ok(true);
+});
+`
+  };
+  const dir = makeFixture([mut('U12', { test: 'test/regex.test.mjs',
+    expectedFailure: { testName: '正規表現を含む検査', diagnosticMarker: 'GXS_MARK.REGEXOUT' } })], files).dir;
+  const r = runRunner(dir);
+  assert.equal(outcomeOf(r, 'U12'), 'runner_error', `テストの外の目印で検知にしている: ${kindOf(r, 'U12')}`);
+  assert.match(String(of(r, 'U12').error), /対象テストの外/, `測る前に断っていない: ${of(r, 'U12').error}`);
 });
 
 test('目印は、そのテストの本文の中だけで探す（R25-001）', () => {

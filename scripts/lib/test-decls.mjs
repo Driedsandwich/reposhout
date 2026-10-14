@@ -66,6 +66,25 @@ function skipRegex(src, i) {
   return i;
 }
 
+/*
+ * `/` が正規表現の始まりか（割り算でないか）。（第28回監査 R28-003）
+ * 直前の意味のある文字だけで決めていたので、`return /\(/` の `/` を割り算と読み、
+ * 正規表現の中の `(` を呼び出しの括弧として数えた。演算子の後と、式を取る語
+ *（return・typeof など）の後は正規表現にする。`obj.return / 2` のようなプロパティは除く。
+ */
+const REGEX_AFTER_WORD = new Set(['return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete',
+  'void', 'throw', 'case', 'do', 'else', 'yield', 'await']);
+function slashStartsRegex(src, i, prev) {
+  if (/[(,=:[!&|?{};+\-*%<>~^\n]/.test(prev)) return true;
+  if (!/[A-Za-z0-9_$]/.test(prev)) return false;
+  let j = i - 1;
+  while (j >= 0 && /\s/.test(src[j])) j--;
+  let k = j;
+  while (k >= 0 && /[A-Za-z0-9_$]/.test(src[k])) k--;
+  if (k >= 0 && src[k] === '.') return false;
+  return REGEX_AFTER_WORD.has(src.slice(k + 1, j + 1));
+}
+
 const DECL_RE = /^(?:test|it)\s*\(\s*(['"`])/;
 
 /**
@@ -83,7 +102,7 @@ export function findTestDeclarations(src) {
     if (two === '/*') { const e = src.indexOf('*/', i + 2); i = e < 0 ? src.length : e + 2; continue; }
     if (c === "'" || c === '"') { i = skipQuoted(src, i, c); prev = c; continue; }
     if (c === '`') { i = skipTemplate(src, i); prev = c; continue; }
-    if (c === '/' && /[(,=:[!&|?{};+\n]/.test(prev)) { i = skipRegex(src, i); prev = '/'; continue; }
+    if (c === '/' && slashStartsRegex(src, i, prev)) { i = skipRegex(src, i); prev = '/'; continue; }
     /* `foo.test(` や `mytest(` を拾わないよう、直前が識別子の一部でないことを見る */
     if ((c === 't' || c === 'i') && !/[A-Za-z0-9_$.]/.test(prev)) {
       const m = DECL_RE.exec(src.slice(i, i + 32));
@@ -137,7 +156,7 @@ function callEnd(src, start) {
     if (two === '/*') { const e = src.indexOf('*/', i + 2); i = e < 0 ? src.length : e + 2; continue; }
     if (c === "'" || c === '"') { i = skipQuoted(src, i, c); prev = c; continue; }
     if (c === '`') { i = skipTemplate(src, i); prev = c; continue; }
-    if (c === '/' && /[(,=:[!&|?{};+\n]/.test(prev)) { i = skipRegex(src, i); prev = '/'; continue; }
+    if (c === '/' && slashStartsRegex(src, i, prev)) { i = skipRegex(src, i); prev = '/'; continue; }
     if (c === '(') depth++;
     else if (c === ')') { depth--; if (depth === 0) return i + 1; }
     if (!/\s/.test(c)) prev = c;
@@ -159,5 +178,11 @@ export function testSpanText(src, want) {
   if (idx < 0 || decls.filter((d) => d.name === want).length !== 1) return null;
   const end = callEnd(src, decls[idx].start);
   if (end < 0) return null;
+  /*
+   * ⚠️ 読み違えて閉じ括弧を見落とすと、範囲が次のテストまで延びる（第28回監査 R28-003）。
+   * 次の宣言を越えた範囲は推測なので使わない（null＝範囲を決められない、で止める）。
+   */
+  const next = decls[idx + 1];
+  if (next && end > next.start) return null;
   return src.slice(decls[idx].start, end);
 }
