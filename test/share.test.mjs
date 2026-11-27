@@ -348,6 +348,77 @@ test('パスに入れた資格情報のルートは、そもそも共有しな�
   }
 });
 
+/*
+ * 所有者名・リポジトリ名の位置に入った資格情報の形（2026-11 の外部点検）。
+ *
+ * 型で絞ったあとに残る自由度は所有者名とリポジトリ名だけで、そこを見ているのは
+ * 出口の検出器（2層目）だけ。上のパスの試験はどれも「共有できないルート」で
+ * 止まっていたので、検出器に形が無いことを測れていなかった。
+ * ここでは**共有できるルート**に置き、出口（投稿画面のURL）と URL だけの経路の
+ * 両方で止まることを見る。
+ */
+const KEY_TAIL_LOWER = 'abcdefghijklmnopqrstuvwx';
+const KEY_TAIL_MIXED = 'aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC2dF4h';
+const SHARE_ROUTES = (owner, repo) => [
+  `https://github.com/${owner}/${repo}`,
+  `https://github.com/${owner}/${repo}/issues/1`,
+  `https://github.com/${owner}/${repo}/pull/2`,
+  `https://github.com/${owner}/${repo}/commit/${'0123456789abcdef'.repeat(2)}01234567`
+];
+
+function assertRefusedAtExit(u, marker) {
+  const r = GXS.buildShareResult(u);
+  assert.equal(r.ok, false, `${marker} 資格情報の形の名前で共有してしまう: ${u.slice(0, 70)}`);
+  assert.equal(r.reason, 'credential_like', `断り方が違う: ${u.slice(0, 70)} → ${r.reason}`);
+  assert.equal(GXS.fallbackUrl(u), null, `URLだけの経路が共有してしまう: ${u.slice(0, 70)}`);
+}
+
+test('検出器に無かった業者の形を、所有者名とリポジトリ名の位置で止める', () => {
+  const repoShapes = [];
+  for (const tail of [KEY_TAIL_LOWER, KEY_TAIL_MIXED]) {
+    repoShapes.push(J('hf', '_', tail), J('rk', '_live_', tail), J('rk', '_test_', tail),
+                    J('whsec', '_', tail), J('sq0atp', '-', tail), J('sq0csp', '-', tail),
+                    J('ya29', '.', tail));
+  }
+  const urls = repoShapes.flatMap((seg) => SHARE_ROUTES('o', seg));
+  /* 所有者名の規則（英数字とハイフン・39文字まで）に収まる形は、所有者名の位置でも見る */
+  for (const seg of [J('sq0atp', '-', KEY_TAIL_LOWER), J('sq0csp', '-', KEY_TAIL_LOWER)]) {
+    urls.push(...SHARE_ROUTES(seg, 'r'));
+  }
+  for (const u of urls) assertRefusedAtExit(u, 'GXS_MARK.X81');
+});
+
+test('名前を知らない業者の鍵でも、大小文字と数字が細かく入れ替わる長い列は止める', () => {
+  /* 接頭辞の無い乱数の列と、知らない接頭辞の付いた列 */
+  const tail = 'Zx8Kq2Lm9Vb4Nc7Hd1Fs6Gt3Jw5Ry0Pe';
+  const urls = [tail, J('acme', '_', tail), J('acme', '-', tail), J('k', '.', tail)]
+    .flatMap((seg) => SHARE_ROUTES('o', seg));
+  urls.push(...SHARE_ROUTES(J('acme', '-', tail), 'r'));
+  for (const u of urls) assertRefusedAtExit(u, 'GXS_MARK.X82');
+});
+
+test('鍵の形に似た普通の名前は、今までどおり共有できる（上の2件の逆方向）', () => {
+  /*
+   * 実在する名前を含む。業者の接頭辞で始まる短い名前・区切りの多い長い名前・
+   * 単語をつないだ長い名前・コミットのSHA（小文字と数字だけ）は止めない。
+   */
+  const benign = ['hf_transfer', 'hf-hub', 'huggingface_hub', 'hf_xet', 'whsec', 'rk_live',
+                  'sq0atp', 'ya29', 'ya29.js', 'stripe-webhook-whsec-demo', 'hf_' + 'short_name',
+                  'TypeScriptReactComponentLibrary2024', 'awesome-machine-learning-resources',
+                  'Qwen2.5-VL-7B-Instruct', 'llama.cpp', 'stable-diffusion-webui', 'GPT4All',
+                  'PayloadsAllTheThings', 'FreeCodeCampChina', 'AutoGPT', 'ComfyUI',
+                  'my-repo_v2.0', 'a'.repeat(100)];
+  for (const name of benign) {
+    for (const u of SHARE_ROUTES('o', name)) {
+      const r = GXS.buildShareResult(u);
+      assert.ok(r.ok, `GXS_MARK.X83 普通の名前を拒否した: ${name} → ${r.reason}`);
+    }
+  }
+  for (const owner of ['huggingface', 'stripe', 'TheAlgorithms', 'microsoft', 'a1b2c3d4e5f6a7b8c9d0']) {
+    assert.ok(GXS.buildShareResult(`https://github.com/${owner}/r`).ok, `普通の所有者名を拒否した: ${owner}`);
+  }
+});
+
 test('普通の開発者向け表題を、誤って拒否しない（R15-001の逆方向）', () => {
   /*
    * 1.1.8 は次の4件を拒否していた。検出器を主たる境界にしていたため。
