@@ -380,22 +380,21 @@ test('検出器に無かった業者の形を、所有者名とリポジトリ�
                     J('whsec', '_', tail), J('sq0atp', '-', tail), J('sq0csp', '-', tail),
                     J('ya29', '.', tail));
   }
-  for (const seg of repoShapes) {
-    for (const u of SHARE_ROUTES('o', seg)) assertRefusedAtExit(u, 'GXS_MARK.X81');
-  }
+  const urls = repoShapes.flatMap((seg) => SHARE_ROUTES('o', seg));
   /* 所有者名の規則（英数字とハイフン・39文字まで）に収まる形は、所有者名の位置でも見る */
   for (const seg of [J('sq0atp', '-', KEY_TAIL_LOWER), J('sq0csp', '-', KEY_TAIL_LOWER)]) {
-    for (const u of SHARE_ROUTES(seg, 'r')) assertRefusedAtExit(u, 'GXS_MARK.X81');
+    urls.push(...SHARE_ROUTES(seg, 'r'));
   }
+  for (const u of urls) assertRefusedAtExit(u, 'GXS_MARK.X81');
 });
 
 test('名前を知らない業者の鍵でも、大小文字と数字が細かく入れ替わる長い列は止める', () => {
   /* 接頭辞の無い乱数の列と、知らない接頭辞の付いた列 */
   const tail = 'Zx8Kq2Lm9Vb4Nc7Hd1Fs6Gt3Jw5Ry0Pe';
-  for (const seg of [tail, J('acme', '_', tail), J('acme', '-', tail), J('k', '.', tail)]) {
-    for (const u of SHARE_ROUTES('o', seg)) assertRefusedAtExit(u, 'GXS_MARK.X82');
-  }
-  for (const u of SHARE_ROUTES(J('acme', '-', tail), 'r')) assertRefusedAtExit(u, 'GXS_MARK.X82');
+  const urls = [tail, J('acme', '_', tail), J('acme', '-', tail), J('k', '.', tail)]
+    .flatMap((seg) => SHARE_ROUTES('o', seg));
+  urls.push(...SHARE_ROUTES(J('acme', '-', tail), 'r'));
+  for (const u of urls) assertRefusedAtExit(u, 'GXS_MARK.X82');
 });
 
 test('鍵の形に似た普通の名前は、今までどおり共有できる（上の2件の逆方向）', () => {

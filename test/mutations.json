@@ -3236,6 +3236,42 @@
         "testName": "CI の構造の読み手が、実行しない文字列・握りつぶし・引用符つきのキー・必須の試験の飛ばしを見逃さない（R28-108）",
         "diagnosticMarker": "GXS_MARK.X80"
       }
+    },
+    {
+      "id": "X81",
+      "file": "src/share.js",
+      "test": "test/share.test.mjs",
+      "desc": "検出器から Hugging Face の形を外す",
+      "find": "    /hf_[A-Za-z0-9]{20,}/,                                 // Hugging Face\n",
+      "replace": "",
+      "expectedFailure": {
+        "testName": "検出器に無かった業者の形を、所有者名とリポジトリ名の位置で止める",
+        "diagnosticMarker": "GXS_MARK.X81"
+      }
+    },
+    {
+      "id": "X82",
+      "file": "src/share.js",
+      "test": "test/share.test.mjs",
+      "desc": "名前を知らない業者の鍵の判定を呼ばない",
+      "find": "    if (looksLikeRandomRun(text)) return true;\n",
+      "replace": "",
+      "expectedFailure": {
+        "testName": "名前を知らない業者の鍵でも、大小文字と数字が細かく入れ替わる長い列は止める",
+        "diagnosticMarker": "GXS_MARK.X82"
+      }
+    },
+    {
+      "id": "X83",
+      "file": "src/share.js",
+      "test": "test/share.test.mjs",
+      "desc": "入れ替わりの線を下げて普通の名前まで止める",
+      "find": "var RANDOM_RUN_MIN_SWITCH_RATIO = 0.4;",
+      "replace": "var RANDOM_RUN_MIN_SWITCH_RATIO = 0.15;",
+      "expectedFailure": {
+        "testName": "鍵の形に似た普通の名前は、今までどおり共有できる（上の2件の逆方向）",
+        "diagnosticMarker": "GXS_MARK.X83"
+      }
     }
   ]
 }
